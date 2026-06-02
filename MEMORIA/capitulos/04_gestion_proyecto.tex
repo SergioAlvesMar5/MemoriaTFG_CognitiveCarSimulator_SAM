@@ -1,0 +1,73 @@
+\chapter{Gestión del proyecto}
+
+\section{Metodología}
+
+El desarrollo se ha organizado mediante un enfoque iterativo e incremental. Las reuniones de seguimiento se celebraron de forma periódica, generalmente cada dos jueves, con participación de tutores, equipo técnico y personas vinculadas al proyecto original. En estas reuniones se revisaban avances, problemas, decisiones de arquitectura y siguientes objetivos. Esta dinámica se aproxima a una metodología ágil por sprints, aunque adaptada al contexto académico y a la disponibilidad del equipo.
+
+La planificación inicial contemplaba una progresión amplia: semáforos y señales, IA vehicular, stops y cedas, perfiles de conductor, peatones, bicicletas, animales, diversidad de assets y optimización. El desarrollo real concentró el esfuerzo en construir una base sólida de IA vehicular, debido a la dificultad técnica de lograr navegación autónoma estable en la ciudad.
+
+\section{Cronología de decisiones}
+
+\begin{longtable}{p{3cm}p{11cm}}
+\caption{Principales hitos y decisiones documentadas en reuniones.}\\
+\toprule
+\textbf{Fecha} & \textbf{Hito o decisión}\\
+\midrule
+27/11/2025 & Se revisa la integración de semáforos dinámicos y se fija como objetivo la IA vehicular. Se descarta una malla dinámica para reconocer caminos por los problemas previsibles de desarrollo.\\
+11/12/2025 & Se descarta el mapeo completo con splines como opción principal y se considera Path Finding de Unreal. Se decide que el modelo analice entorno y contexto, y que Unreal aplique físicamente la acción.\\
+17/12/2025 & Se revisan perfiles de conductor y se fijan provisionalmente dos salidas del modelo: rotación y velocidad, ambas en rango \([-1,1]\).\\
+08/01/2026 & Se descarta Path Finding para vehículos y se valida la idea de entrenamiento evolutivo por prueba-error. El objetivo prioritario pasa a ser aprender básicos de conducción.\\
+05/02/2026 & Se discuten problemas en curvas e intersecciones. Se acepta temporalmente el etiquetado dinámico de bordes y se plantea la posibilidad de coordinar más de un modelo.\\
+19/02/2026 & Se fija como prioridad una demo técnica en dos semanas que demuestre red neuronal, sensores y bordes funcionando por todo el mapa.\\
+05/03/2026 & La demostración se clasifica como fallida y no concluyente. Se acuerda analizar exhaustivamente la función de fitness y sesgar escenarios complejos para facilitar aprendizaje.\\
+19/03/2026 & La nueva demostración se considera aceptable: el modelo recorre casi la totalidad de la mayoría de la ciudad y cerca de un 50\% sobrevive más de 100 segundos. Se planifica reorganización en GitLab, build Windows y siguientes mejoras.\\
+\bottomrule
+\end{longtable}
+
+\section{Alcance}
+
+El alcance funcional completado se centra en IA vehicular autónoma. Incluye:
+
+\begin{itemize}[leftmargin=*]
+  \item controlador de IA capaz de aplicar dirección, aceleración y frenado sobre el vehículo físico;
+  \item sensores por raycasting y entradas normalizadas para la red neuronal;
+  \item entrenamiento evolutivo con población, mutación, elitismo y persistencia de modelos;
+  \item integración con semáforos, señales de stop y ceda el paso;
+  \item cálculo de fitness con componentes de avance, centrado, velocidad, cumplimiento normativo, penalizaciones y bonus;
+  \item exportación de métricas y análisis automatizado de resultados;
+  \item separación de puntos de aparición válidos para entrenamiento y test.
+\end{itemize}
+
+Quedan fuera del alcance final de esta primera memoria la implementación completa de peatones, bicicletas, animales y perfiles de conductor totalmente diferenciados. Estos elementos se mantienen como líneas futuras porque dependen de una base vehicular estable.
+
+\section{Gestión de riesgos}
+
+{\small
+\begin{longtable}{p{3cm}p{4cm}p{2.8cm}p{3.4cm}}
+\caption{Riesgos principales del proyecto.}\\
+\toprule
+\textbf{Riesgo} & \textbf{Impacto} & \textbf{Probabilidad} & \textbf{Mitigación}\\
+\midrule
+Rigidez de navegación determinista & Comportamiento poco realista y baja utilidad clínica & Alta & Pivotar a percepción local con sensores y red neuronal.\\
+Fitness mal calibrado & Aprendizaje de estrategias no deseadas & Alta & Instrumentar componentes, exportar CSV y analizar penalizaciones por familia de muerte.\\
+Coste computacional & Entrenamientos lentos y dependencia de GPU/CPU & Media & Poblaciones moderadas, análisis offline y propuesta futura de modo sin renderizado.\\
+Complejidad de intersecciones & Colisiones y violaciones normativas en cruces & Alta & Bordes dinámicos, zonas de cruce, validación de stops/cedas y separación train/test.\\
+Sobreajuste a spawns concretos & Buen rendimiento local pero mala generalización & Media & Normalización por punto de aparición y test con spawns diferenciados.\\
+Pérdida de conocimiento entrenado & Reinicio de aprendizaje entre sesiones & Media & Persistencia de modelos \texttt{SuperCarModel} y \texttt{SessionCarModel}.\\
+\bottomrule
+\end{longtable}
+}
+
+\section{Estimación de recursos y presupuesto}
+
+El trabajo se desarrolló en el marco de prácticas y TFG, por lo que no existe una contratación externa directa asociada. No obstante, desde el punto de vista de proyecto técnico, los recursos empleados son:
+
+\begin{itemize}[leftmargin=*]
+  \item equipo de desarrollo con capacidad para Unreal Engine 5;
+  \item licencia y entorno de Unreal Engine;
+  \item repositorio Git/GitLab;
+  \item herramientas Python de análisis;
+  \item tiempo de desarrollo, documentación, reuniones y experimentación.
+\end{itemize}
+
+La estimación económica debe cerrarse con los criterios del centro y del tutor antes de la entrega final. Como base para completar el presupuesto, se propone separar coste humano, coste hardware amortizado, coste software y coste de infraestructura. En este proyecto, el coste software directo es reducido al apoyarse en herramientas sin coste de licencia para el desarrollo académico, mientras que el coste principal corresponde a horas de ingeniería y experimentación.

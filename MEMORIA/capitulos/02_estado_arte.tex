@@ -1,0 +1,32 @@
+\chapter{Estado del arte}
+
+\section{Simuladores de conducción}
+
+Los simuladores de conducción permiten reproducir situaciones de tráfico en un entorno controlado, repetible y seguro. En el ámbito formativo se utilizan para entrenar maniobras, respuesta ante eventos inesperados y familiarización con normas de circulación. En el ámbito sanitario, su valor reside en que permiten observar capacidades cognitivas y motoras sin exponer al usuario a riesgos reales. La versión previa de \textit{CognitiveCarSimulator} ya se apoyaba en esta idea: un entorno urbano en Unreal Engine donde registrar tiempos de reacción, velocidades, colisiones y datos exportables para especialistas.
+
+Para que un simulador de rehabilitación resulte convincente, el entorno no puede limitarse a una vía vacía. El usuario debe compartir la escena con otros agentes que creen carga cognitiva: vehículos que se detienen, peatones que cruzan, ciclistas, señales y elementos dinámicos. La propuesta de \textit{CognitiveCarSimulatorReloaded} identifica precisamente esa necesidad al plantear IAs conductoras configurables, peatones, bicicletas y animales como ampliaciones progresivas del simulador.
+
+\section{Agentes autónomos en entornos urbanos}
+
+La navegación autónoma en videojuegos y simulación suele abordarse mediante técnicas deterministas, como grafos de rutas, splines o mallas de navegación. Estas técnicas son robustas cuando el objetivo es desplazar agentes por zonas transitables con trayectorias controladas, pero pueden producir comportamientos rígidos si se aplican directamente a vehículos físicos. Un coche no se desplaza como un personaje humano: tiene inercia, radio de giro, aceleración, frenada, fricción y restricciones de control continuas.
+
+En este proyecto se comprobó esa diferencia durante las primeras iteraciones. El uso de NavMesh y Path Finding fue estudiado para permitir recorridos por la ciudad, pero las reuniones de seguimiento y los informes técnicos documentan problemas de rigidez, dificultad en intersecciones y falta de naturalidad. Por ello se adoptó una estrategia más cercana a la percepción local: el agente no sigue una ruta global cerrada, sino que interpreta distancias, estado del tráfico y contexto normativo para producir acciones continuas.
+
+\section{Redes neuronales y neuroevolución}
+
+Las redes neuronales artificiales permiten aproximar funciones complejas a partir de entradas numéricas. En este TFG se emplean como política de control: reciben sensores, velocidad, contexto de señalización y estado de parada, y producen dirección y aceleración/frenado. La arquitectura elegida es deliberadamente ligera para poder ejecutarse en tiempo real sobre múltiples vehículos: 22 entradas, una capa oculta de 16 neuronas y dos salidas continuas con activación hiperbólica.
+
+El entrenamiento no se plantea como aprendizaje supervisado, ya que no se dispone de un conjunto amplio de trayectorias humanas etiquetadas dentro del simulador. En su lugar, se adopta un algoritmo evolutivo. Cada individuo de una población representa un conjunto de pesos de la red neuronal. La simulación evalúa el comportamiento mediante fitness; los mejores pesos se conservan, se mutan y se reutilizan en generaciones posteriores. Este enfoque resulta adecuado para explorar comportamientos en entornos donde la señal de aprendizaje procede de la interacción con el mundo simulado.
+
+\section{Retos específicos}
+
+Los principales retos identificados son:
+
+\begin{itemize}[leftmargin=*]
+  \item \textbf{Simulación física}: el control neuronal debe traducirse a entradas de un vehículo con físicas reales, evitando aceleraciones, frenadas o giros no plausibles.
+  \item \textbf{Intersecciones}: los cruces concentran la mayor complejidad, porque combinan decisión de trayectoria, detección de límites, prioridades y otros vehículos.
+  \item \textbf{Diseño de fitness}: una función de aptitud mal calibrada puede premiar estrategias no deseadas, como detenerse indefinidamente, avanzar demasiado despacio o compensar errores graves con comportamientos parciales.
+  \item \textbf{Generalización por puntos de aparición}: el modelo debe funcionar en diferentes zonas del mapa, no únicamente en los puntos de entrenamiento más sencillos.
+  \item \textbf{Coste computacional}: entrenar decenas de vehículos simultáneamente en Unreal Engine implica carga de CPU, GPU y física.
+  \item \textbf{Trazabilidad}: al tratarse de un sistema experimental, es imprescindible registrar métricas suficientes para explicar por qué una iteración mejora o empeora.
+\end{itemize}

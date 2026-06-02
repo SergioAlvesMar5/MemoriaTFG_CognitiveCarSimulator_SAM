@@ -1,0 +1,98 @@
+\chapter{Núcleo del trabajo}
+
+\section{Descripción general de la solución}
+
+La solución final se estructura como un sistema de agentes autónomos entrenados dentro del simulador. Cada vehículo dispone de un controlador de IA que percibe el entorno, ejecuta una red neuronal, aplica acciones al sistema físico y registra métricas de comportamiento. Por encima de los vehículos existe un gestor evolutivo que crea poblaciones, asigna pesos, evalúa resultados, selecciona los mejores individuos y guarda modelos.
+
+El sistema se completa con elementos de tráfico que comunican contexto a los controladores: semáforos, señales de stop, señales de ceda y zonas de cruce. Estos elementos no son meros objetos visuales, sino actores con lógica propia que activan zonas de detección, informan al vehículo de líneas de parada, controlan estados y aplican penalizaciones o bonus según el comportamiento observado.
+
+\section{Subsistemas}
+
+\subsection{Gestor evolutivo}
+
+\texttt{BP\_EvolutionManager} coordina entrenamiento y test. Sus responsabilidades principales son:
+
+\begin{itemize}[leftmargin=*]
+  \item cargar modelos guardados desde \texttt{SuperCarModel} o inicializar pesos si no existen;
+  \item refrescar los puntos de aparición válidos según el modo de entrenamiento o test;
+  \item generar poblaciones de vehículos;
+  \item asignar cerebros aleatorios, cargados o mutados;
+  \item detectar fin de generación cuando todos los vehículos han muerto o finalizado;
+  \item ordenar por fitness, normalizar por spawn y seleccionar el mejor individuo;
+  \item guardar pesos de sesión e histórico;
+  \item exportar resúmenes de entrenamiento y test.
+\end{itemize}
+
+Una decisión relevante es la normalización por punto de aparición. La ciudad contiene zonas de dificultad desigual; comparar directamente fitness de spawns distintos puede favorecer rutas sencillas. Por ello se mantiene el mejor fitness observado por spawn y se selecciona el mejor coche para pesos atendiendo a una relación normalizada respecto a ese punto.
+
+\subsection{Controlador de IA y red neuronal}
+
+\texttt{BP\_AiController} actúa como intermediario entre red neuronal y vehículo físico. En cada tick comprueba que el vehículo controlado existe y no está muerto, prepara las entradas de red, ejecuta la inferencia y aplica las salidas al componente de movimiento.
+
+Para evitar saltos bruscos, el controlador dispone de variables de suavizado como \texttt{MaxSteeringRate} y \texttt{MaxThrottleRate}. La versión documentada mantiene un seguimiento estable entre objetivo y entrada aplicada, con gap medio cero en los informes finales, lo que indica que la señal de control se está transmitiendo sin divergencias instrumentales.
+
+La inferencia se calcula manualmente sobre arrays de pesos:
+
+\[
+h_j = \tanh\left(\sum_i w^{IH}_{j,i} x_i\right)
+\]
+
+\[
+y_k = \tanh\left(\sum_j w^{HO}_{k,j} h_j\right)
+\]
+
+donde \(x_i\) son las entradas normalizadas, \(h_j\) las neuronas ocultas e \(y_k\) las dos salidas de control. El sistema incluye guardas para detectar cerebros inválidos: número incorrecto de entradas, pesos ausentes o dimensiones incoherentes. Si el error se repite, el coche se elimina con razón de muerte \texttt{INVALID\_BRAIN}.
+
+\subsection{Percepción mediante sensores}
+
+El controlador lanza once trazas en abanico sobre 180 grados. Cada sensor devuelve una distancia normalizada hasta el primer elemento relevante. Los bordes de intersección se tratan con lógica específica: solo deben considerarse obstáculos cuando no corresponden a la decisión de dirección o trigger actual. Esta solución evita que el vehículo interprete como barrera una zona por la que realmente debe circular al completar una maniobra.
+
+Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos.
+
+\subsection{Sistema de fitness}
+
+La función de fitness se ha convertido en uno de los elementos centrales del proyecto. Su objetivo no es solo premiar distancia o velocidad, sino guiar comportamientos compatibles con conducción urbana. La versión final documentada incluye:
+
+\begin{itemize}[leftmargin=*]
+  \item recompensa por avance, velocidad útil y centrado respecto a sensores laterales;
+  \item recompensa por mantener una relación coherente entre velocidad y distancia frontal;
+  \item penalización por exceso de velocidad ante obstáculos;
+  \item penalización por corregir en sentido contrario cuando el vehículo está descentrado;
+  \item penalización por marcha atrás, estancamiento, salida de calzada y colisiones;
+  \item penalización por violar semáforos, stops, cedas y zonas no navegables;
+  \item bonus por completar correctamente stops y cedas;
+  \item métricas acumuladas de frenado, aceleración, espera, steering y contexto de parada.
+\end{itemize}
+
+La instrumentación permite explicar por qué muere cada coche y qué componentes dominan su fitness. Esto fue decisivo tras la demostración fallida del 5 de marzo de 2026, cuando se acordó analizar el fitness con detalle para detectar cálculos o restricciones incorrectas.
+
+\subsection{Semáforos}
+
+El sistema de semáforos se compone de \texttt{BP\_IntersectionController} y \texttt{BP\_TrafficLight}. El controlador alterna fases norte-sur y este-oeste, incluyendo verde, ámbar y todo rojo. Cada semáforo mantiene materiales dinámicos para representar estado visual y una zona de sensor que detecta vehículos.
+
+Cuando un vehículo entra en la zona, el semáforo comunica estado, línea de parada y distancia. Si el semáforo está en rojo o ámbar restrictivo, el controlador activa contexto de parada. Al salir de la zona, se comprueba si el vehículo atravesó la línea a una velocidad legal. El sistema aprende umbrales de velocidad legal a partir de muestras previas, evitando depender siempre de un valor fijo.
+
+\subsection{Stop y ceda el paso}
+
+Las señales \texttt{BP\_Sign\_Stop} y \texttt{BP\_Sign\_Yield} amplían la interacción normativa. En stop se exige detención suficiente dentro de una ventana dinámica antes de la línea, espera mínima y comprobación de cruce libre. Si se cumple, se aplica bonus y se libera el vehículo; si no, se aplica penalización y muerte por \texttt{STOP\_VIOLATION}. En ceda se monitoriza velocidad, aproximación y disponibilidad de la zona de cruce, con penalización por \texttt{YIELD\_VIOLATION} y bonus al completar correctamente.
+
+La diferencia entre stop y ceda es metodológicamente importante. El stop requiere detención explícita; el ceda permite continuar si la velocidad y la prioridad son compatibles con la seguridad del cruce.
+
+\section{Pipeline experimental}
+
+Cada ejecución genera registros en CSV. El análisis posterior produce informes y gráficas. Este pipeline permite comparar sesiones, detectar regresiones y localizar spawns problemáticos. En las últimas sesiones se emplearon métricas como:
+
+\begin{itemize}[leftmargin=*]
+  \item \textit{BestFit} máximo y medio;
+  \item \textit{MeanFit} por generación;
+  \item tiempo medio de vida;
+  \item porcentaje de fitness medio negativo;
+  \item razones de muerte por familia;
+  \item fallos legales;
+  \item bonus de stop y ceda;
+  \item distribución por puntos de aparición;
+  \item correlaciones entre componentes y fitness final;
+  \item estabilidad de steering y throttle.
+\end{itemize}
+
+El resultado es un ciclo de desarrollo cerrado: implementar, entrenar, exportar, analizar, diagnosticar y volver a ajustar.

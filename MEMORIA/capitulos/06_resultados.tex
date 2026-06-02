@@ -1,0 +1,95 @@
+\chapter{Resultados}
+
+\section{Datos analizados}
+
+La evaluación más reciente disponible se compone de una sesión de entrenamiento \texttt{train\_2026-06-02\_12-00} y una sesión de test \texttt{test\_2026-06-02\_13-17}. Ambas fueron procesadas por el script de análisis, que validó la coherencia entre \texttt{Summary} y \texttt{Debug}, sin alertas fuertes de desalineación.
+
+La sesión de entrenamiento contiene 607 generaciones y 19424 registros de vehículos. La sesión de test contiene 5 generaciones y 260 registros, correspondientes a 52 puntos de aparición evaluados por generación.
+
+\section{Resumen cuantitativo}
+
+\begin{table}[H]
+\centering
+\caption{Comparación de resultados principales en las sesiones finales analizadas.}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Métrica} & \textbf{Entrenamiento} & \textbf{Test}\\
+\midrule
+Generaciones & 607 & 5\\
+Registros debug & 19424 & 260\\
+BestFit máximo & 117642.98 & 84046.79\\
+MeanFit medio & 17404.52 & 33600.03\\
+MeanFit mediano & 16445.88 & 34181.57\\
+Tiempo medio de vida & 41.01 s & 54.68 s\\
+MeanFit negativo & 0.0\% & 0.0\%\\
+Razón de muerte principal & TIMEFINISHED (21\%) & TIMEFINISHED (30\%)\\
+Fallo legal & 6.82\% & 1.92\%\\
+LAZY & 0.00\% & 0.00\%\\
+Tasa de acierto & -- & 30.00\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+El entrenamiento final mejora de forma clara respecto a sesiones anteriores en estabilidad de fitness medio. El análisis comparativo lo sitúa como la mejor sesión entre las nueve últimas en \textit{MeanFit} medio y en menor porcentaje de fitness negativo. La sesión previa del 1 de junio había alcanzado mayor \textit{BestFit} máximo, pero con peor fitness medio y más dispersión; por tanto, la sesión del 2 de junio resulta más equilibrada.
+
+\section{Evolución del entrenamiento}
+
+En entrenamiento, el mejor fitness se alcanza en la generación 205 con 117642.98. El fitness medio máximo se alcanza en la generación 173 con 34896.93. Aunque el informe detecta tendencia media negativa si se analiza la serie completa, también observa tendencia positiva reciente y ausencia de convergencia clara, lo que indica que el sistema todavía explora soluciones.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{../INFO/ANALISIS_DATOS/Analisis/train_2026-06-02_12-00/02_tendencia.png}
+\caption{Tendencia de fitness y tiempo medio en la sesión de entrenamiento del 2 de junio de 2026. Fuente: análisis generado a partir de CSV del proyecto.}
+\end{figure}
+
+Un resultado importante es la desaparición de muertes por estancamiento \texttt{LAZY}. En sesiones anteriores esta causa llegó a dominar parte del comportamiento, indicando agentes que aprendían a no moverse o a avanzar de forma insuficiente. En la sesión final, \texttt{LAZY} representa 0 de 19424 registros.
+
+\section{Evaluación de test}
+
+El test final muestra un mejor fitness de 84046.79 en la generación 5 y un fitness medio de 33600.03. La tasa de acierto promedio es del 30\%, con intervalo de confianza global aproximado del 24.75\% al 35.83\%. El valor debe interpretarse con cautela porque la muestra contiene cinco generaciones, pero la comparación con sesiones anteriores es positiva: el test final ocupa el primer puesto entre las nueve últimas sesiones tanto en \textit{BestFit} como en \textit{MeanFit}, y mejora 24.23 puntos porcentuales de acierto respecto al test inmediatamente anterior.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{../INFO/ANALISIS_DATOS/Analisis/test_2026-06-02_13-17/01_resumen.png}
+\caption{Resumen visual de la sesión de test final. Fuente: análisis generado a partir de CSV del proyecto.}
+\end{figure}
+
+\section{Razones de muerte}
+
+En test, las razones de muerte por familia son:
+
+\begin{itemize}[leftmargin=*]
+  \item colisiones: 177 registros, 68.08\%;
+  \item finalización por tiempo: 78 registros, 30.00\%;
+  \item violaciones normativas: 5 registros, 1.92\%.
+\end{itemize}
+
+Este resultado muestra que el principal problema restante ya no es la falta de movimiento ni la infracción sistemática de señales, sino la robustez geométrica en determinadas zonas del mapa. Las colisiones se concentran en bordes de intersección y volúmenes de navegación concretos, lo que apunta a mejorar etiquetado de bordes, sensores locales y escenarios de entrenamiento por spawn.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{../INFO/ANALISIS_DATOS/Analisis/test_2026-06-02_13-17/08_muertes_debug.png}
+\caption{Distribución de razones de muerte en la sesión de test final. Fuente: análisis generado a partir de CSV del proyecto.}
+\end{figure}
+
+\section{Comportamiento ante señalización}
+
+Los resultados muestran que, cuando el vehículo entra en contexto de stop o semáforo, frena de forma proporcionalmente superior a la conducción global. En test, la proporción de frenado en contexto de parada alcanza el 99.56\%, frente al 21.42\% global. Además, los fallos legales se reducen al 1.92\% de los registros, señal de que la integración de stop, ceda y semáforo funciona como mecanismo de control.
+
+Persisten, no obstante, candidatos a atasco en stop y ceda. En el test final se detectan 3 candidatos fuertes de atasco en stop sobre 78 \texttt{TIMEFINISHED} y 1 candidato de atasco en ceda. Estos casos no invalidan la solución, pero señalan zonas para depuración posterior.
+
+\section{Dificultad por puntos de aparición}
+
+El análisis por spawn revela diferencias importantes. En test, \texttt{BP\_SpawnPoint51} obtiene la mayor media de fitness, con 75303.3, mientras \texttt{BP\_SpawnPoint24} presenta la peor media, con -62.1 y 80\% de valores negativos. Otros puntos difíciles son \texttt{BP\_SpawnPoint10}, \texttt{BP\_SpawnPoint5}, \texttt{BP\_SpawnPoint39} y \texttt{BP\_SpawnPoint23}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../INFO/ANALISIS_DATOS/Analisis/test_2026-06-02_13-17/06_spawn_ranking.png}
+\caption{Ranking de puntos de aparición por dificultad en test. Fuente: análisis generado a partir de CSV del proyecto.}
+\end{figure}
+
+Esta dispersión confirma la necesidad de mantener evaluación por spawn y no limitarse a métricas globales. Un modelo puede mostrar buen rendimiento medio y, aun así, fallar de forma sistemática en zonas concretas de la ciudad.
+
+\section{Conclusión experimental}
+
+La evaluación confirma que la arquitectura propuesta es funcional y medible. El sistema aprende comportamientos útiles, evita el estancamiento, responde a contextos de parada y alcanza supervivencias significativas en múltiples puntos del mapa. Sin embargo, todavía no puede considerarse una IA de tráfico completamente finalizada: las colisiones en intersecciones y la variabilidad por spawn requieren más entrenamiento dirigido, mejoras de percepción y validación con escenarios más amplios.
