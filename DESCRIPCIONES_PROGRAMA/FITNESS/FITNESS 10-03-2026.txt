@@ -1,0 +1,56 @@
+ahora mismo el fitness sería asi:
+
+Es una función ubicada al final del tick del vehículo (siempre que esté vivo). Dentro de la función hay lo siguiente:
+
+
+Lo primero hay un Branch cuya condición es si getforwardspeed es mayor o igual que maxspeed(1400)*frontobstacledistance(1 lejos, 0 cerca), si es false sigue el flujo, si es true setea el fitness como fitness - ((Clamp(value=(forwardspeed/maxspeed),min=0.0,max=1.0))^2)*worlddeltaseconds*maxspeed*(1-frontobstacledistnace)) y sigue el flujo.
+
+luego está el Branch cuya condición es si (frontobstacledistance>=0.99 AND steering*horizontaldistdiff(que es distsensordcha-distsensorizda)<0.0 AND ABS(horizontaldistdiff) > 0.075) OR (forwardspeed < -5.0), si es true, hay otro Branch cuya condición es si (frontobstacledistance>=0.99 AND steering*horizontaldistdiff(que es distsensordcha-distsensorizda)<0.0 AND ABS(horizontaldistdiff) > 0.075) AND (forwardspeed < -5.0), si es true, setea fitness como fitness - (ABS(forwardspeed)+(maxvisiondistance(3000.0)*ABS(steering)*ABS(horizontaldistancediff))) y mata al coche, esta razón de muerte es REVERSING_WRONG.
+
+Si el Branch es false, pasa a otro Branch cuya condición es getforwardspeed < -5. Si es true, setea fitness como fitness - ABS(forwardspeed), y mata al coche, esta razón de muerte es REVERSE. Si el Branch es true, setea wrongcorrectiontimer como getworlddeltaseconds + wrongcorrectiontimer. Luego setea fitness como fitness - (maxvisiondistance(3000.0)*ABS(steering)*ABS(horizontaldistancediff)*worlddeltaseconds). luego hay un Branch que comprueba si wrongcorrectiontimer es > que 0.1. Si es true mata al coche, esta razón de muerte es CORRECTINGWRONG. Si el Branch es false, setea PrevHorizontalDistDiff como ABS(HorizontalDistDiff) y termina la función.
+
+
+
+
+
+
+En caso de que el Branch de (frontobstacledistance>=0.99 AND steering*horizontaldistdiff(que es distsensordcha-distsensorizda)<0.0 AND ABS(horizontaldistdiff) > 0.075) OR (forwardspeed < -5.0) salga false, se pasa al cálculo normal del fitness:
+
+
+
+LERP (A=1.0, B=(1 - (ABS(dist sensor dcha - dist sensor izda))), alpha=frontobstacledistance) x Get world delta seconds x get forward speed x front obstacle distance. ESTE VALOR ES A.
+
+
+MAX(0.0,(PrevHorizontalDistanceDiference- ABS(dist sensor dcha - dist sensor izda))). ESTE VALOR ES B.
+
+(1.0/MAX((dist sensor dcha + dist sensor izda),0.05)). ESTE VALOR ES C.
+
+(2.0 / (maxsteeringangle->D2R->SIN))). ESTE VALOR ES D.
+
+B x C x D = E
+
+
+((Clamp(value=(forwardspeed/maxspeed),min=0.0,max=1.0)^2)*maxspeed*frontobsacledistance^2*worlddeltaseconds). ESTE VALOR ES F
+
+
+(A + E + F). El resultado de esto, se le suma al fitness y setea el fitness.
+
+PrevHorizontaldistancediference se setea al final, cuyo valor es (dist sensor dcha - dist sensor izda) ABS
+
+
+
+Restricciones fuera de la función de fitness:
+
+
+Al final del beginplay de BP_VehicleAI2, hay un set Last Location (vector) que se setea como Get Actor Location, después de eso hay un Set Timer by Event, que tiene como opciones Time 1.0, y looping en True.
+
+El cable rojo del Set Timer by Event, está conectado a un Custom Event llamado Check Stuck, que es el evento que nos interesa.
+
+El flujo de este evento es: time alived ++ (timealived es un int que empieza en 1), Branch cuya condición es si time alived es mayor que 3. Si es true pasa a un Branch (llamemosle A) cuya condición es si Get Actor Location y Last Location en un Distance (Vector) es menor que un select float de a=(maxspeedx0.25) y b=(maxspeedx0.25xfrontobstacledistance) y picka=(frontobstacledistance mayor que 0.65). Si el Branch es false, setea Last Location como getactorlocation. Si el branch A es True, setea Fitness como Fitness - ((1- (1- (ABS(distsensordcha - distanciasensorizda)))) x max speed), y mata al coche "LAZY". Si el branch A es false, setea Last Location como Get Actor Location.
+
+
+
+Si el vehículo choca con un obstáculo correcto, es decir un muro, borde del carril o el borde correcto en una intersección (trigger correcto y dirección correcta), el fitness se setea como fitness - ((getforwardspeed^2/maxspeed)x(1-frontobstacledistnace)). Este tipo de muerte es la Razón de muerte "COLLISION_WITH_X"
+
+
+E = MAX(0.0, PrevHDistDiff - ABS(SensorDif)) × (MaxVisionDistance / MAX(DistRight + DistLeft, 1.0)) × (2/SIN(MaxSteeringAngle_rad))

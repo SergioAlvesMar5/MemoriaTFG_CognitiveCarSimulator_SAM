@@ -1,0 +1,190 @@
+BP_IntersectionController
+
+VariablesGlobles:
+
+Lights_NS array de BP_TrafficLight editable
+
+Lights_EW array de BP_TrafficLight editable
+
+Time_Green float 20.0 editable
+
+Time_Amber float 3.0 editable
+
+Time_AllRed float 3.0 editable
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+
+EventGraph:
+
+
+
+EventBeginPlay: lo primero hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego llama al customevent PhaseNSGreen.
+
+CustomsEvents: 
+
+- Phase_NS_Green: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=green), luego hay un delay cuya duration=Time_green. luego llama al customevent PhaseNSAmber.
+
+- Phase_NS_Amber: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=amber), luego hay un delay cuya duration=Time_amber. luego llama al customevent PhaseAllRed1.
+
+- Phase_AllRed_1: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego hay un delay cuya duration=Timeallred. luego llama al customevent PhaseEWGreen.
+ 
+- Phase_EW_Green: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=green), luego hay un delay cuya duration=Time_green. luego llama al customevent PhaseEWAmber.
+
+- Phase_EW_Amber: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=amber), luego hay un delay cuya duration=Time_amber. luego llama al customevent PhaseAllRed2.
+
+- Phase_AllRed_2: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego hay un delay cuya duration=Timeallred. luego llama al customevent PhaseNSGreen.
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BI_TrafficControl:
+
+
+functions: 
+
+- TrafficStop
+
+- TrafficGo
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_TrafficLight:
+
+StaticMesh:
+
+StopLinePosition arrow justo debajo del semáforo
+
+SensorZone boxcollision que cubre toda la zona de parada del semaforo
+
+
+
+variables globales:
+
+DMI_Roja MaterialIntanceDynamic
+
+DMI_Verde MaterialIntanceDynamic
+
+DMI_Amarilla MaterialIntanceDynamic 
+ 
+bIsRedLight boolean true 
+
+CurrentState E_TrafficLightState
+
+ColorState float 0.0
+
+-----------------------------------------------------------------------------------------
+
+EventGraph:
+
+
+- OnComponentBeginOverlap(SensorZone): llama a UpdateTrafficZone
+
+
+- OnComponentEndOverlap(SensorZone): casttobpvehicleai del otheractor. Del getaicontroller del cast se hace un casttobpaicontroller. luego hay un Branch, cuya condición es (TrafficLigthState del aicontroller == 0.0)AND(GetForwardspeeddelotheractor>5.0). Si el Branch es false, del cast se setea IsTrafficLightActive del aicontroller en false y TrafficLightState del aicontroller como 0.0. Si es True, setea Fitness del OtherActor como Fitness - (((Clamp(value=(forwardspeed/maxspeed),min=0.0,max=1.0))^2) x maxspeed x 3.0) y llama a la función KillCar del BP_VehicleAI cuya razón de muerte es "TRAFFIC_VIOLATION". 
+
+
+- UpdateTrafficZone: foreachloop de Getoverlappingactors(target=SensorZone, class=bpvehicleai), cuyo loop body es: casttobpaicontroller con el getaicontroller del arrayelement. Del cast se setea StopTargetLocation como GetWorldposition(StopLinePosition), se setea IsTrafficLightActive como true y se setea TrafficLightState como ColorState.
+
+
+- SetLightState:
+
+input:
+
+newstate E_TrafficLightState 
+
+flujo: 
+
+setea CurrentState como Newstate. luego hay un Switch on E_TrafficLightState: 
+
+- si es red: primero setscalarparametervalue(target=DMI_Roja, parametervalue=brillo, value=50.0), luego setscalarparametervalue(target=DMI_Amarilla, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Verde, parametervalue=brillo, value=0.0), luego setea ColorState como 0.0 y llama a UpdateTrafficZone.
+
+- si es green: primero setscalarparametervalue(target=DMI_Roja, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Amarilla, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Verde, parametervalue=brillo, value=50.0), luego setea ColorState como 1.0 y llama a UpdateTrafficZone.
+
+- si es amber: primero setscalarparametervalue(target=DMI_Roja, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Amarilla, parametervalue=brillo, value=50.0), luego setscalarparametervalue(target=DMI_Verde, parametervalue=brillo, value=0.0), luego setea ColorState como 0.5 y llama a UpdateTrafficZone.
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_Sign_Stop:
+
+DefaultSceenRoot:
+…
+SensorZone boxcollision que cubre toda la zona de parada del stop
+
+StopLine arrow justo al final del stop
+
+CrossingZone boxcollision que cubre la zona de intersección 
+
+
+
+EventGraph:
+
+
+- OnComponentBeginOverlap(SensorZone): casttoBpVehicleAi de otheractor. del cast se coge aicontroller y se hace un casttobpaicontroller. Del cast se setea StopTargetLocation como GetWorldposition(StopLine), se setea ForceStop como True, se setea StoppedCorrectly del casttoaicontroller como false y se llama a WaitforFullStop con el targetCar como el casttoBpVehicleAi.
+
+- OnComponentEndOverlap(SensorZone): casttobpvehicleai del otheractor. Del getaicontroller del cast se hace un casttobpaicontroller. luego un Branch cuya condición es StoppedCorrectly del casttoaicontroller. Si es True, del cast se setea forcestop como false. Si es false, setea Fitness como Fitness - (((Clamp(value=(forwardspeed/maxspeed),min=0.0,max=1.0))^2) x maxspeed x 2.0) y llama a la función KillCar del BP_VehicleAI cuya razón de muerte es "STOP_VIOLATION".
+
+- WaitForFullStop: 
+
+inputs: 
+
+TargetCar BP_VehicleAi
+
+lo primero un delay de 0.1s, luego hay un isvalid? de TargetCar, si es valid, hay un Branch cuya condition es VectorLength(getvelo)<5.0. Si es false llama a WaitForFullStop de nuevo con el mismo TargetCar, si es true, primero hace un delay de 3.0s, luego con el aicontorller de Targetcar se setea StoppedCorrectly como true y luego llama a CheckCrossingClear. 
+
+- CheckCrossingClear:
+
+inputs: 
+
+TargetCar BP_VehicleAi
+
+lo primero hay un Branch cuya condition es Length(GetOverlappingActorsCrossingZone(BP_VehicleAI)>0, si es true, hace un delay de 0.5s y vuelve a llamar con el mismo TargetCar a CheckCrossingClear. Si es false, hace un casttobpaicontroller con el getaicontroller del targetcar. Del cast se setea forcestop como false. 
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_Sign_Yield:
+
+DefaultSceenRoot:
+…
+SensorZone boxcollision que cubre toda la zona de parada del ceda
+
+YieldLine arrow justo al final del ceda
+
+CrossingZone boxcollision que cubre la zona de intersección 
+
+
+
+EventGraph:
+
+
+- OnComponentBeginOverlap(SensorZone): casttoBpVehicleAi de otheractor. del cast se coge aicontroller y se hace un casttobpaicontroller. Del cast se setea StopTargetLocation como GetWorldposition(YieldLine), se setea ForceStop como True, se setea StoppedCorrectly  del castdeaicontroller como false y se llama a MonitorSpeed con el targetCar como el casttoBpVehicleAi.
+
+- OnComponentEndOverlap(SensorZone): casttobpvehicleai del otheractor. Del getaicontroller del cast se hace un casttobpaicontroller. luego un Branch cuya condición es StoppedCorrectly del casttoaicontroller. Si es True, del cast se setea forcestop como false. Si es false, setea Fitness como Fitness - (((Clamp(value=(forwardspeed/maxspeed),min=0.0,max=1.0))^2) x maxspeed x 1.5) y llama a la función KillCar del BP_VehicleAI cuya razón de muerte es "YIELD_VIOLATION".
+
+- MonitorSpeed: 
+
+inputs: 
+
+TargetCar BP_VehicleAi
+
+lo primero un delay de 0.1s, luego hay un isvalid? de TargetCar, si es valid, hay un Branch cuya condition es VectorLength(getvelo)<250.0. Si es false llama a MonitorSpeed, si es true, con el aicontorller de Targetcar se setea StoppedCorrectly como true y llama a CheckCrossing.
+
+
+- CheckCrossing:
+
+inputs: 
+
+TargetCar BP_VehicleAi
+
+lo primero hay un Branch cuya condition es Length(GetOverlappingActorsCrossingZone(BP_VehicleAI)>0, si es true, hace un delay de 0.5s y vuelve a llamar con el mismo TargetCar a CheckCrossing. Si es false, hace un casttobpaicontroller con el getaicontroller del targetcar. Del cast se setea forcestop como false.
+

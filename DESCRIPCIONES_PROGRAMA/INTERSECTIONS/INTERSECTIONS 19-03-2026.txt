@@ -1,0 +1,37 @@
+BP_IntersectionController
+
+VariablesGlobles:
+
+Lights_NS array de BP_TrafficLight editable
+
+Lights_EW array de BP_TrafficLight editable
+
+Time_Green float 20.0 editable
+
+Time_Amber float 3.0 editable
+
+Time_AllRed float 3.0 editable
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+
+EventGraph:
+
+
+
+EventBeginPlay: lo primero hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego llama al customevent PhaseNSGreen.
+
+CustomsEvents: 
+
+- Phase_NS_Green: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=green), luego hay un delay cuya duration=Time_green. luego llama al customevent PhaseNSAmber.
+
+- Phase_NS_Amber: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=amber), luego hay un delay cuya duration=Time_amber. luego llama al customevent PhaseAllRed1.
+
+- Phase_AllRed_1: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego hay un delay cuya duration=Timeallred. luego llama al customevent PhaseEWGreen.
+ 
+- Phase_EW_Green: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=green), luego hay un delay cuya duration=Time_green. luego llama al customevent PhaseEWAmber.
+
+- Phase_EW_Amber: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=amber), luego hay un delay cuya duration=Time_amber. luego llama al customevent PhaseAllRed2.
+
+- Phase_AllRed_2: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego hay un delay cuya duration=Timeallred. luego llama al customevent PhaseNSGreen.

@@ -1,0 +1,5 @@
+Al final del beginplay de BP_VehicleAI2, hay un set Last Location (vector) que se setea como Get Actor Location, después de eso hay un Set Timer by Event, que tiene como opciones Time 1.0, y looping en True.
+
+El cable rojo del Set Timer by Event, está conectado a un Custom Event llamado Check Stuck, que es el evento que nos interesa.
+
+El flujo de este evento es: time alived ++ (timealived es un int que empieza en 1), Branch cuya condición es si time alived es mayor que 2. Si es true pasa a un Branch (llamemosle A) cuya condición es si Get Actor Location y Last Location en un Distance (Vector) es menor que un select float de a=400 y b=20 y picka=(frontobstacledistance mayor que 0.65). Si el Branch es false, setea Last Location como getactorlocation. Si el branch A es True, setea Fitness como Fitness - (((1- (1- (ABS(distsensordcha - distanciasensorizda)))) x max speed) + max speed), y mata al coche "LAZY". Si el branch A es false, setea Last Location como Get Actor Location.

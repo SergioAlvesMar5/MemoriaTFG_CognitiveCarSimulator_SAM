@@ -1,0 +1,227 @@
+BP_ControllerAI:
+
+
+variables globales:
+
+ForceStop boolean false
+
+StopTargetLocation vector 0 0 0 editable
+
+MyControlledCar BP_VehicleAI 
+
+MaxVisionDistance float 3000.0
+
+SensorCount integer 11
+
+NumHidden integer 12
+
+InputsForFrame array de floats
+
+MaxSpeed float 1000.0 editable
+
+Weights_IH array de floats editable
+
+Weights_HO array de floats editable
+
+TrafficLightState float 1.0
+
+bIsTrafficLightActive boolean false
+
+FrontObstacleDistance float 0.0
+
+Steering float 0.0
+
+DistSensorIzda float 0.0
+
+DistSensorDcha float 0.0
+
+TrainingMode boolean true
+
+Throttle float 0.0
+
+SimulationWithLoadedCar Boolean false
+
+IntersectionDecision Enum_DirectionIntent
+
+CurrentTrigger BP_IntersectionTrigger
+
+HorizontalDistDiff float 0.0
+
+RoadWidth float 0.0
+
+TemporalSensorValue float 0.0
+
+StoppedCorrectly boolean false editable
+
+SensorEntryDistance float 0.0
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+EventGraph:
+
+Eventtick: 
+lo primero un delay cuya duration=deltasecondsdeltick, luego hace un isvalid? de mycontrolledCar, si es válido, llama a la función PrepareNetworksInputs. Luego llama a ProcessAI, que mete como AllInputs el ReadyInputs de PrepareNetworksInputs. Luego, setea Steering y Throttle con las salidas de ProcessAI. Luego llama a Set Steering Input de vehiclemovementcontroller de mycontrolledcar con el steering. Luego, hay un Branch cuyas condition es si throttle>=0.0. Si es true, """pasa a otro Branch cuya condition es maxspeed<forwardspeed, que si es true, hace Set Brake Input y Set Throttle Input a 0.0; y que si es false,""" hace Set Brake Input a 0.0 y se setea Set Throttle Input como throttle. Si el Branch diese negativo, ósea false, se pasa el valor absoluto de throttle a Set Brake Input y se setea Set Throttle Input a 0.0.
+
+
+customsevents: 
+
+-BestCarColor: SetColorBlue con target mycontrolledcar
+
+-LoadedCarColor: SetColorGreen con target mycontrolledcar
+
+EventonPossess: casttoBp_vehicleAI cuyo object es el possessedpawn. Setea Mycontrolledcar con el cast.
+
+
+
+------------------------------------------------------------------------------------------------------------------
+
+
+InitializeRandomBrain:
+
+
+variables locales:
+
+numhidden, numinputs y numoutputs que son todos integer
+
+
+
+flujo:
+
+se setea numinputs con el numero de sensores (variable global en el controlador ahora mismo 11) + 2 (velocidad y el angular velocity) + 4 (IsTrafficLightActive, TrafficLightState, DistToStopLine, ForceStop) + 1 (bias). se setea el numhidden con el valor de la variable global num hidden (ahora mismo 12). se realiza un for loop cuyos indices son desde 0 hasta numhidden x numinputs -1, el body de este for loop es, añade un valor random float in range entre -0.5 y 0.5 al array de float Weights IH. Al completar este loop, se pasa a otro loop, cuyo index va desde 0 hasta numhidden x numoutputs -1. el loop body es, añade un valor random float in range entre -0.001 y 0.001 al array de floats Weights HO. Al terminar este loop, hay un get actor of class BP_EvolutionManager, en el cual seteamos los arrays de float BestWeightsInputHidden como Weights IH y BestWeightsHiddenOutput como Weights HO, esto se hace por si no hay archivo de guardado con un modelo de otras simulaciones.
+
+
+-------------------------------------------------------------------------------------------------------------------
+
+
+InitializeMutatedBrain:
+
+
+variables locales: 
+
+CurrentWeight_IH float
+
+CurrentWeight_HO float
+
+
+
+inputs:
+
+ParentWeightsIH array de floats
+
+ParentWeightsHO array de floats
+
+MutationRate float
+
+
+
+flujo: 
+
+se limpian los arrays de float de WeightsIH y WeightsOH. tras eso hay un for each loop que recorre el array ParentWeightsIH. en el loop body, hay un Branch, cuya condición es (random float de 0.0 a 1.0) < MutationRate. si es false, se setea CurrentWeightIH como el arrayelement del loop. Si el Branch es true, hay otro Branch cuya condición es si un random float entre 0.0 y 1 es menor que 0.01, si es true se setea CurrentWeightIH como el arrayelement del loop + un random float de -0.5 a 0.5. si es false, se setea CurrentWeightIH como el arrayelement del loop + un random float de -0.05 a 0.05. Todos los seteos, dan al mismo nodo Add array, de WeightsIH que añade CurrentWeightIH. 
+
+Tras completar este for each loop hay otro for each loop del array ParentWeightsHO. en el loop body, hay un Branch, cuya condición es (random float de 0.0 a 1.0) < MutationRate. si es false, se setea CurrentWeightHO como el arrayelement del loop. Si el Branch es true, hay otro Branch cuya condición es si un random float entre 0.0 y 1 es menor que 0.01, si es true se setea CurrentWeightHO como el arrayelement del loop + un random float de -0.5 a 0.5. Si es false, se setea CurrentWeightHO como el arrayelement del loop + un random float de -0.05 a 0.05. Todos los seteos, dan al mismo nodo Add array, de WeightsHO que añade CurrentWeightHO.
+
+
+-------------------------------------------------------------------------------------------------------------------
+
+
+LoadBrain:
+
+inputs: 
+
+LoadWeightsIH array floats
+
+LoadWeightsHO array floats
+
+flujo:
+
+setea el array WeightsIH como LoadWeightsIH y WeightsHO como LoadWeightsHO
+
+
+-------------------------------------------------------------------------------------------------------------------
+
+
+GetSensorsData:
+
+variables locales:
+
+TempReadings arraydefloats
+
+NumRayos Integer 0
+
+VisionAngle float 180.0
+
+
+flujo:
+
+primero setea numrayos como SensorCount. luego, hace un cleararray de TempReadings. luego hace un dentro de un bucle for loop que va desde 0 hasta truncate(num rayos-1), cuyo loop body es: 
+
+se setea temporalsensorvalue a 1.0, luego hay un is valid de controlled pawn. Si es valid, hay un multispheretracebychannel, con start=((Getactorlocation(GetControlledPawn))+(VectorUpx120.0)), end=(((MaxVisionDistance x (RotateVector(a=GetForwardVector(GetControlledPawn),X=0.0,Y=0.0,Z=(((VisionAngle/(NumRayos-1))xIndexdelloop)-(VisionAngle/2)))))+(Getactorlocation(GetControlledPawn)))+(VectorUpx120.0)), radio=40.0, tracechannel=sensorIA, actorstoignore=make array(getcotrolledpawn), ignoreself=true. 
+
+Tras eso, hay un for each loop with break del outhits array. Su loop body es el siguiente: primero un cast to bpintersectionborders. si cast failed, se setea temporal sensor value como un select float cuya A es (distance del breakhitresult dividido entre maxvision que es igual a 3000), B es 1.0 y pickA es el returnValue del MultiSphereTrace. Si el cast funciona, hay un Branch cuya condición es que la dirección en la intersección elegida y la del borde sea la misma, y que el trigger que pasamos antes de la intersección es el mismo que el trigger del intersection border. Si el Branch es false, está vacio. Si el Branch es true, setea temporal sensor value como distance del breakhitresult dividido entre maxvision que es igual a 3000. Tras el seteo, se uno el flujo con el break del for each loop. Al completar el for each loop se setea TempReadings con TemporalSensorValue. Cuando termina el bucle for loop, se setea TempReadings con el propio TempReadings y el returnNOde tiene un output llamado sensorreadings que se setea con TempReadings.
+
+
+-------------------------------------------------------------------------------------------------------------------
+
+
+PrepareNetworksInputs:
+
+variables locales:
+
+SensorsArray array de floats
+
+
+flujo:
+
+lo primero hay un cleararray de InputsforFrame. Luego, ace un add array InputsforFrame con el valor de la velocidad. Este valor se saca con el getforwardspeed de vehiclemovementcomponent dividido entre maxspeed (ahora mismo 1000). el resultado de esta división se mete en un nodo Clamp (float) de 0.0 a 1.0 que es el valor que añadimos al array. Lo siguiente en el flujo es un add array InputsforFrame con el valor de la velocidad angular. Este valor se saca del nodo getphysicsangularvelocityindegrees del mesh del vehiculo controlado, y devuelve solo el valor z. este valor z se mete en un map range clamped, de -90 a 90 y devuelve un valor de -1 a 1, que es el valor de la velocidad angular que añadimos al InputsforFrame. 
+
+después, hay un GetSensorsData cuyo output es SensorsReadings que setea la variable local SensorsArray. tras esto va un for each loop que recorre SensorsArray. En el loop body se añade a InputsforFrame el arrayelement del loop. 
+Al completarse dicho loop, se setea la variable FrontObstacle distance como un get del SensorsArray cuyo índice es SensorCount/2. Después, se setea DistSensorIzda como un get del SensorsArray cuyo índice es 0. Después se setea DistSensorDcha como un get del SensorsArray cuyo índice es SensorCount-1. 
+
+Luego, hay un addInputsforFrame, al que se le añade isTrafficLightActive(0.0=false, 1.0=true). Luego, hay un addInputsforFrame, al que se le añade TrafficLightState. Luego, hay un addInputsforFrame, al que se le añade SelectFloat(A=ClampFloat(value=(DistanceVector(getActorLocation(MyControlledCar), StopTargetLocation)/MAX(SensorEntryDistance, 1.0)), 0.0, 1.0), B=1.0, PickA=(IsTrafficLightActive OR ForceStop)). Luego, hay un addInputsforFrame, al que se le añade ForceStop(0.0=false, 1.0=true). 
+
+Después, hay un add InputsforFrame al que se le añade un valor de 1.0 (bias). Por ultimo en el flujo está el ReturnNode, que tiene como output ReadyInputs al que se le introduce InputsforFrame.
+
+
+------------------------------------------------------------------------------------------------------------------- 
+
+
+ProcessAI:
+
+Inputs:
+
+AllInputs array de floats
+
+
+VariablesLocales:
+
+HiddenLayerValues array de floats
+
+TempSum float
+
+NumHiddenLayers Integer
+
+FinalOutputs array de floats
+
+Inputs array de floats
+
+WItH array de floats
+
+WHtO array de floats
+
+
+flujo:
+
+setea numhiddenlayerslocal con la variable global NumHidden (12). después setea Inputs con el array de entrada de la función AllInputs. Luego, hace cleararrays de HiddenLayerValues y luego de FinalOutputs.
+
+Después, setea WItH ccon WeightsIH y setea WHtO con WeightsHO. Después hay un Branch, cuya condición es que WeightsIH tenga una length mayor que 0. si el Branch es true continua si es false está vacio.
+
+tras el true del Branch hay un for loop, cuyo índice va desde 0 hasta numhiddenlayers-1. El loop body es el siguiente, primero se setea TempSum a 0.0, luego, hay otro For Loop cuyo índice va desde 0 hasta Inputs length menos 1. En el loop body se setea TempSum. El valor de este temp sum se saca a partir del siguiente calculo: se coge el length de Inputs y se multiplica por el Index del primer loop (exterior), el resultado de esta multiplicación se suma con el index del bucle interno o actual. el resultado de esta suma, se utiliza como indice para un get del array WItH. La salida de este get, se multiplica por un get del array Inputs cuyo indice es el index del loop interno o actual. el resultado de esta multiplicacin de los dos gets se suma a TempSum. El resultado de esta suma es el que se utiliza para setear TempSum. 
+
+Tras completar el loop interno, se hace un add array HiddenLayerValues cuyo item añadido tanh de TempSum.
+
+Cuando se completa el bucle externo (el que iba desde 0 hasta numhiddenlayers-1) hay otro for loop, cuyo indice va desde 0 hasta 1. El loop body de este bucle es el siguiente, primero se setea TempSum 0.0, luego, hay un loop for cuyo indice va desde 0 hasta HiddenLayerValues length menos 1. En el loop body de este bucle interno se setea TempSum. El valor que setea TempSum es el siguiente, Se multiplica el index del for loop externo x numhiddenlayerslocal, el valor de esta multiplicación se suma a el index del bucle interno. El resultado de esta suma se usa de indice para un nodo Get del array WHtO. El resultado de este get se multiplica con el resultado de otro nodo get del array HiddenLayerValues cuyo indice es el index del bucle interno. el resultado de la multiplicacion de los get, se suma a TempSum. El resultado de esta suma es el valor que setea TempSum.
+
+Tras completar este bucle interno, se hace un add array FinalOutputs cuyo item añadido es un tanh de TempSum. 
+
+Tras completar el bucle externo (el que iba de 0 hasta 1) está el ReturnNode, que tiene como salidas Steering y Throttle. Steering se saca de un get FinalOutputs cuyo indice es 0, y Throttle se saca de un get FinalOutputs cuyo indice es 1.

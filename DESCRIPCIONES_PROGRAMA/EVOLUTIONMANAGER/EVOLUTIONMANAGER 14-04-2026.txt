@@ -1,0 +1,286 @@
+BP_EvolutionManager:
+
+
+Variables Globales:
+
+PopulationSize Integer 60 editable
+ 
+GenerationNumber Integer 1 editable
+
+CarsArray Array de BP_VehicleAI editable
+
+SpawnPointsList Array de TargetPoints editable
+
+IsSimulating Boolean false
+
+BestWeights_InputHidden array de float
+
+BestWeights_HiddenOutput array de float
+
+CarsAlive boolean false
+
+BestCar BP_VehicleAI
+
+BestFitness float -10000000.0
+
+IsTrainingMode boolean true editable
+
+Loaded_W_IH array de floats
+
+Loaded_W_HO array de floats
+
+LoadBrainSpawnPoint TargetPoint editable
+
+LoadedBestFitness float 0.0
+
+AiController BP_AiController
+
+AiVehicle BP_VehicleAI
+
+GenerationsWithoutImprovement Integer 0
+
+MutationRate float 0.0
+
+StartWithModelSaved boolean true editable
+
+SpawnBag array de integers 
+
+MeanFitness float
+
+MeanTime float 
+
+MultiTestingMode boolean true editable
+
+ResetSessionOnStart boolean true editable
+
+BestFitnessSpawn array de floats
+
+BestCarForWeights Bp_VehicleAI
+
+TestMinTime integer 60 editable
+
+TestMinFitness float 25000.0 editable
+
+TestUseFitness boolean False editable
+
+TrainTest7030Mode  boolean  false  editable
+
+TotalGenerations7030  integer  100  editable
+
+TrainGenerationsTarget  integer  0    
+
+IsInTrainPhase  boolean  true
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Event Graph:
+
+EventBeginPlay:
+
+lo primero hay un savestringtexttofile, filename=Fitness_Debug.csv, savetext=Generacion,CarID,Fitness_Final,Tiempo_Vivo,SpawnID,Razon_Muerte,Penalty_Muerte,Acum_PenaltyVelocidad,Acum_A,Media_B,Acum_C,Acum_D,Acum_E,Acum_F,Acum_WaitBonus,Acum_NetNormal,Acum_PenaltyCorrectingWrong,Acum_PenaltyTrafficViolation,Ticks_Normal,Ticks_Total,TrainingMode,Acum_ThrottlePos,Acum_BrakeInput,CoastTime,Acum_StopBrake,Acum_StopThrottle,Ticks_StopContext,Acum_CreepingPenalty,Acum_ReversePenalty,Acum_LazyPenalty y allowoverwritting true. Después hay un doesavegameexit de SuperCarModel, UserIndex=0, luego hay un Branch cuya condición es el returnvalue del doesavegameexit. Si el Branch es true, hay un loadgamefromslot, slotname SuperCarModel userindex0, luego hay un casttoBP_NNS, cuyo object es el returnvalue del loadgamefromslot, si el cast es valido, se setea Loaded W IH con W IH del cast, Loaded W HO con W HO del cast, se setea LoadedBestFitness con BestFitness del cast.
+Si el Branch es false, se hace un CreateSaveGameObject, de la clase BP_NNS, de ahí se setea W IH del return value con BestWeightsInputHidden y Loaded W IH con BestWeightsInputHidden, W HO del return value con BestWeightsHiddenOutput y Loaded W HO con BestWeightsHiddenOutput, se setea BestFitness del returnvalue con BestFitness y LoadedBestFitness con BestFitness.
+
+
+Tras ambos caminos, hay un Branch cuya condición es ResetSessiononStart. Si es false, sigue el flujo. Si es true, hay un Doessavegameexit de SessionCarModel. Luego hay un Branch cuya condición es el returnvalue del Doessavegameexit. Si el Branch es false vacío. Si es true hace un loadgamefromslot de SessionCarModel, del returnvalue saca un CastToBP_NNS, si el cast es válido, setea W IH del cast como Loaded W IH y setea W HO del cast como Loaded W HO. Luego setea LoadedBestFitness como -10000000.0.
+
+
+Tras ambos caminos, se llama a la función RefreshSpawnPointsList, luego hay un Branch cuya condition es TrainTest7030Mode, si es false sigue el flujo, si es true, setea isTrainingMode en true, setea IsInTrainPhase en true y setea TrainGenerationsTarget como Truncate((TotalGenerations7030*70)/100.0). Después, hay un savestringtexttofile, filename=Test_Summary.csv, savetext=Generación,MejorFitnessNorm,FitnessMedio,TiempoMedio,RazónMuerteMejorCoche,RazónMuerteMásPopular,MuertosPorRazónMásPopular,Exito,Fracaso,SuccessRate,FailRate,N, allowoverwritting=true.
+
+Tras ambos caminos, hay un Branch cuya condición es IsTrainingMode. Si es true, hay un savestringtexttofile, filename=Training_Summary.csv, savetext=Generación,MejorFitnessNorm,FitnessMedio,TiempoMedio,RazónMuerteMejorCoche,RazónMuerteMásPopular,MuertosPorRazónMásPopular,N, allowoverwritting true. Luego, hay un cleararray de BestFitnessSpawn. Luego hay un ForLoop desde 0 hasta Lengthspawnpointslist-1, cuyo loop body es un addarray de BestFitnessSpawn que añade 0.001. Al completarse el loop se llama a la función StartGeneration.
+
+Si el Branch es false, hay un Branch cuya condición es MultiTestingMode. Si es True, hay un savestringtexttofile, filename=Test_Summary.csv, savetext=Generación,MejorFitnessNorm,FitnessMedio,TiempoMedio,RazónMuerteMejorCoche,RazónMuerteMásPopular,MuertosPorRazónMásPopular,Exito,Fracaso,SuccessRate,FailRate,N, allowoverwritting true. Luego, llama a la función StartTesting. 
+Si el Branch es false, hay un spawnActorBPvehicleAi de class BPvehicleAi, spawntransform=Actortransform(loadbrainspawnpoint), collisionhandlingoverride=trytoadjustlocation,butalwaysspawn. Del returnvalue, se saca el GetAiController, que se usa para hacer un CastToBPAiController. Si el cast es válido, setea TrainingMode del cast en false. Luego, llama a la función LoadBrain cuyo target es el cast, LoadWeights IH se setea como Loaded W IH y LoadWeights HO se setea como Loaded W HO.
+
+
+
+EventTick:
+
+lo primero """hay un delay cuya duration=Deltaseconds del tick. Luego""" hay un setCarsalive en false. luego hay un Branch cuya condition es IsSimulating, si es false vacío, si es true, sigue el flujo. luego hay un Branch cuya condition es que lenght de carsarray sea > 0, si es false vacio, si es true sigue el flujo. luego hay un Branch cuya condición es IsTrainingMode, si es true, hay un foreachloopwithbreak de carsarray, cuyo loop body es un Branch cuya condición es NOT(isdead del target), si el Branch es false, vacio, si es true, setea CarsAlive como True y hace un break al bucle. Al completarse, hay un Branch cuya condición es cars alive, si es true vacio, si es false, setea issimulating en false, hace un ++ de generationnumber, un delay de 0.2 y llama a la función EndGeneration. Si el Branch de IsTrainingMode es false, hay un foreachloopwithbreak de carsarray, cuyo loop body es un Branch cuya condición es NOT(isdead del target), si el Branch es false, vacio, si es true, setea CarsAlive como True y hace un break al bucle. Al completarse, hay un Branch cuya condición es cars alive, si es true vacio, si es false, setea issimulating en false, hace un ++ de generationnumber, un delay de 0.2 y llama a la función EndTesting
+
+
+
+Custom Events:
+
+- StopSimulation: 
+
+lo primero hay un delay de 0.2s. luego hay un QuitGame (SpecificPlayer = GetPlayerController(0), QuitPreference = Quit, IgnorePlatformRestrictions = true).
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+StartGeneration
+
+
+lo primero se setea mutation rate como 0.05 """es un Branch cuya condición es GenerationWithoutimprovements > 200, si es false, setea mutationrate=0.05, si es true pasa a otro Branch cuya condición es GenerationWithoutimprovements > 500, si es false, setea mutationrate=0.2, si es true pasa a otro Branch cuya condición es GenerationWithoutimprovements > 1000, si es false, setea mutationrate=0.4, si es true setea mutationrate=0.6""". tras setear el valor de mutationrate, hay un cleararray de carsarray. luego hay un Branch cuya condición es si generation number>1, si es true llama a la función RefreshSpawnPointsList, si es false sigue el flujo.  
+
+Tras ambos caminos, hay un Branch cuya condición es (lengthspawnpointslist>0)AND(lengthspawnbag>0), si es false, vacio, si es true, hay un for loop desde 1 a populationsize, cuyo loop body es: un SpawnActorBPVehicleAI, class=bpvehicleai, SpawnTransformLocation=((breaktransform-location(getactortransform(getspawnpointlist(getspawnbag(indexdeloop-1)))))+((getrightvector(breaktransform-rotation(getactortransform(getspawnpointlist(getspawnbag(indexdeloop-1))))))x(randomfloatinrange -50 a 50))), SpawnTransformRotation=(MakeRotator, X=(BreakRotatorX(breaktransform-rotation(getactortransform(getspawnpointlist(getspawnbag(indexdeloop-1)))))),Y=(BreakRotatorY(breaktransform-rotation(getactortransform(getspawnpointlist(getspawnbag(indexdeloop-1)))))),Z=((BreakRotatorZ(breaktransform-rotation(getactortransform(getspawnpointlist(getspawnbag(indexdeloop-1))))))+randomfloat de -10 a 10)), SpawnTransformScale=1-1-1, collisionhandlingoverride=trytoadjustlocation,butalwaysspawn.
+
+Luego, hacemos un SpawnDefaultController cuyo target es el returnvalue del spawn. Luego hay un set Aivehicle con el returnvalue del spawn. Luego hay un set SpawnPoint cuyo target es el aivehicle, y se setea como getspawnpointlist(getspawnbag(indexdeloop-1)). Luego hay un set GenerationCount cuyo target es el aivehicle y se setea como GenerationNumber. Luego del returnvalue del spawnactor se saca getController con el que se hace un casttobpaicontroller. Si el cast es true, hay un set AiController como el cast. Luego, hay un Branch cuya condition es generationnumber>1. Si el Branch es false, hay otro Branch cuya condición es NOT(startwithmodelsaved). Si el Branch es true, llama a InitializeRandomBrain cuyo target es aicontroller. Si es false, setea SimulationwithLoadedCar cuyo target es aicontroller y lo setea en True. Luego, llama a la función LoadedCarColor cuyo target es el aicontroller. Luego llama a la función InitializeMutatedBrain cuyo target es aicontorller, ParentWeightsIH=LoadedWIH, ParentWeightsHO=LoadedWHO, mutationrate=0.0. 
+
+Si el Branch de generationnumber>1 es true, setea simulationwithloadedcar cuyo target es ai controller y lo setea false. Luego hay un Branch cuya condition es indexdeloop==1. Si es true, llama a la función LoadedCarColor cuyo target es AiController y llama a InitializeMutatedBrain cuyo target es aicontroller, ParentWeightsIH=LoadedWIH, ParentWeightsHO=LoadedWHO, mutationrate=0.0. Si el Branch es false, pasa a otro Branch, cuya condición es indexdeloop==2. Si es true, llama a la función BestCarColor cuyo target es AiController y llama a InitializeMutatedBrain cuyo target es aicontroller, ParentWeightsIH=BestWeightsInputHidden, ParentWeightsHO=BestWeightsHiddenOutput, mutationrate=0.0. Si el Branch es false, pasa a otro Branch, cuya condición es ((indexdeloop>=3)AND(indexdeloop<=22)), si es true, llama a InitializeMutatedBrain cuyo target es aicontroller, ParentWeightsIH=LoadedWIH, ParentWeightsHO=LoadedWHO, mutationrate=MutationRate. Si el Branch es false, pasa a otro Branch, cuya condición es ((indexdeloop>=23)AND(indexdeloop<=42)), si es true, llama a InitializeMutatedBrain cuyo target es aicontroller, ParentWeightsIH=BestWeightsInputHidden, ParentWeightsHO=BestWeightsHiddenOutput, mutationrate=MutationRate. Si el Branch es false, llama a InitializeRandomBrain cuyo target es aicontroller.
+
+Tras todas las llamadas a inicializar, hay un addarray de carsarray al que se añade AiVehicle, luego setea IsSimulating como True.
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+EndGeneration
+
+
+variables locales:
+
+CurrentBestFitness float -10000000.0
+
+BestCarRef BP_VehicleAi
+
+DebugMode boolean true
+
+FitnessArray array de floats
+
+
+
+lo primero, se llama a la función SortByFitness. Luego, se llama a la función NormalizeFitness. Luego, se llama a la función UpdateFitnessPerSpawn. Luego, se setea BestCarRef como BestCarForWeighs. Luego, se setea CurrentBestFitness como Fitnes cuyo target es BestCarForWeighs. Luego se llama a la función CalculateAndExport. Luego, hay un Branch cuya condición es CurrentBestFitness>BestFitness, si es false, hay un ++ de GenerationWithoutImprovement, y pasa a la lógica de destruir los coches y comprobar si iniciar nueva generación de train o pasar a test si fuese el caso.
+
+Si el Branch de CurrentBestFitness>BestFitness es true, setea BestCar como BestCarRef. Luego setea BestFitness como CurrentBestFitness. Luego hay un IsValid de BestCar, si es valid, hay un casttoBpaicontroller del getaicontroller de BestCar. Luego, se setea BestWeightsInputHidden como WeightsIH del cast. Luego, se setea BestWeightsHiddenOutput como WeightsHO del cast. Luego, hay un CreateSaveGameObject de class=BPNNS. Luego se setea W IH cuyo target es el returnvalue del createsavegameobject como BestWeightsInputHidden. Luego se setea W HO cuyo target es el returnvalue del createsavegameobject como BestWeightsHiddenOutput. Luego se setea BestFitness cuyo target es el returnvalue del createsavegameobject como BestFitness. Luego hay un SaveGametoSlot, slotname=SessionCarModel y userindex=0. 
+
+Luego hay un Branch cuya condición es BestFitness > LoadedBestFitness. Si es false, hay un ++ de GenerationWithoutImprovement, y pasa a la lógica de destruir los coches y comprobar si iniciar nueva generación de train o pasar a test si fuese el caso. Si es true, setea GenerationWithoutImprovement=0. Luego hay un CreateSaveGameObject de class=BPNNS. Luego se setea W IH cuyo target es el returnvalue del createsavegameobject como BestWeightsInputHidden. Luego se setea W HO cuyo target es el returnvalue del createsavegameobject como BestWeightsHiddenOutput. Luego se setea BestFitness cuyo target es el returnvalue del createsavegameobject como BestFitness. Luego hay un SaveGametoSlot, slotname=SuperCarModel y userindex=0. Luego, se setea LoadedBestFitnees como BestFitness, Loaded W IH como BestWeightsInputHidden y Loaded W HO como BestWeightsHiddenOutput. Luego hay un foreachloop de carsarray, cuyo loopbody es destroyactor cuyo target es arrayelement.
+
+Cuando se completa el bucle, pasa a un Branch cuya condition es (TrainTest7030Mode AND IsInTrainPhase AND (GenerationNumber>TrainGenerationsTarget)). Si es false, llama a StartGeneration. 
+
+Si el Branch es true, setea isTrainingMode en false, setea IsInTrainPhase en false, luego hay un Doessavegameexit de SessionCarModel. Luego hay un Branch cuya condición es el returnvalue del Doessavegameexit. Si el Branch es false vacío. Si es true hace un loadgamefromslot de SessionCarModel, del returnvalue saca un CastToBP_NNS, si el cast es válido, setea Loaded W IH como W IH del cast y setea Loaded W HO como W HO del cast. Luego, llama a la función StartTesting.
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+SortByFitness
+
+
+for loop desde 0 hasta lastindex(carsarray). el loop body es otro for loop desde 0 hasta lastindex(carsarray)-1. el loop body interno es un Branch, cuya condición es ((fitness del getcarsarray(indexdelloopinterno))<(fitness del getcarsarray(indexdelloopinterno+1))). Si el Branch es true, swapcarsarray cuyo firstindex=indexdelloopinterno y secondindex=(indexdelloopinterno+1)
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+NormalizeFitness
+
+variables locales:
+
+BestNormFitness float 0.0
+
+SpawnIndexLocal integer 0
+
+
+lo primero, setea BestNormFitness como -10000000.0. Luego, hace un set BestCarForWeights como GetCarsArray(0). 
+Luego, hay un ForEachLoop de carsarray, cuyo loop body es: setea SpawnIndexLocal como FindSpawnPointsList(Spawnpoint del arrayelement). Luego un Branch cuya condición es (SpawnIndexLocal>=0) AND(SpawnIndexLocal<LengthBestFitnessSpawn), si es false vacio, si es true, hay un Branch cuya condición es ((fitness del arrayelement)/(MAX((getBestfitnessSpawn(SpawnIndexLocal)),0.001)))>(BestNormFitness). Si el Branch es false, está vacío. Si es true, Setea BestNormFitness como ((fitness del arrayelement)/(MAX((getBestfitnessSpawn(SpawnIndexLocal)),0.001))) y setea BestCarForWeights como el arrayelement
+
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+UpdateFitnessPerSpawn
+
+
+lo primero hay un foreachloop de carsarray, cuyo loopbody es: setea SpawnIndexLocal como FindSpawnPointsList(Spawnpoint del arrayelement). Luego hay un Branch cuya condición es (SpawnIndexLocal>=0) AND(SpawnIndexLocal<LengthBestFitnessSpawn), si es true hay un SetArrayElem de BestFitnessSpawn, index=(SpawnIndexLocal), Item=MAX(fitness del arrayelement,GetBestFitnessSpawn(SpawnIndexLocal)), SizeToFit=false
+
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+CalculateAndExport
+
+
+variables locales:
+
+MaxNormFitness float -10000000.0
+
+SumaFitness float 0.0
+
+SumaTiempo integer 0
+
+ContadorMuertes Map de string integer 
+
+PopularDeath String 
+
+DeathCount Integer 0
+
+BestCarDeathReason String
+
+SuccessCount integer 0
+
+FailCount integer 0
+
+SuccessRate float 0.0
+
+FailRate float 0.0
+
+LocalCar BP_vehicleAI
+
+LocalCarDeathReason string
+
+LocalCarFitness float 0.0
+
+
+
+lo primero es un foreachloop de carsarray cuyo loop body es: Lo primero, setea LocalCar como el arrayelement. Luego setea LocalCarDeathReason como la deathreason del array element. Luego, setea local car fitness como el fitness del arrayelement. Luego un Branch cuya condición es el returnvalue de FindContadorMuertes(DeathReason del arrayelement). Si el Branch es true, hace un ++ al value de FindContadorMuertes(DeathReason del arrayelement) y luego hace un addmap al ContadorMuertes, cuya key es LocalCarDeathReason y el value es la salida del ++. Si el Branch es false, hace un addmap al ContadorMuertes, cuya key es LocalCarDeathReason y el value es 1. Ambos caminos llegan a un Set Suma tiempo, que lo setea como (SumaTiempo+(TimeAlived de LocalCar)). Luego hay un Set SumaFitness que lo setea como (SumaFitness+LocalCarFitness)). 
+
+Luego, hay un Branch cuya condición es (((LocalCarDeathReason===LAZY)OR(LocalCarDeathReason===REVERSE)OR(LocalCarDeathReason===CORRECTINGWRONG)OR(LocalCarDeathReason===REVERSING_WRONG)OR(LocalCarDeathReason==="TRAFFIC_VIOLATION")OR(LocalCarDeathReason==="STOP_VIOLATION")OR(LocalCarDeathReason==="YIELD_VIOLATION")OR(LocalCarDeathReasonStartsWith(prefix=COLLISION_WITH_,searchcase=ignorecase))) OR (TestUseFitnessAND(TestMinFitness>LocalCarFitness)) OR (TestMinTime>(Timealived del LocalCar))). Si el Branch es true, hace un ++ de FailCount. Si es false, hace un ++ de SuccessCount.
+
+Luego de ambos caminos, hay un Branch cuya condición es LocalCar==bestcarforweights, si es false vacío, si es true, setea MaxNormFitness como LocalCarFitness y setea BestCarDeathReason como la LocalCarDeathReason.
+
+Al completarse el loop, hay un keysmap de ContadorMuertes, cuya salida se usa para un ForEachLoop, cuyo loopbody es un Branch cuya condición es (value del FindContadorMuertes(Arrayelement))>DeathCount. Si el Branch es false vacío, si es true setea DeathCount como el value del FindContadorMuertes(Arrayelement) y setea PopularDeath como el arrayelement.
+
+Tras completarse el loop, se setea MeanFitness como SafeDivide(a=SumaFitness, b=LengthCarsarray). Luego, setea MeanTime como SafeDivide(a=SumaTiempo, b=LengthCarsarray). Luego setea SuccessRate como SafeDivide(a=(SuccessCountx100), b=LengthCarsarray). Luego setea FailRate como SafeDivide(a=(FailCountx100), b=LengthCarsarray).
+
+Tras eso hay un Branch cuya condición es IsTraining. Si es true hace un SaveStringTextToFile de Training_Summary.csv y si es false hace un SaveStringTextToFile de Test_Summary.csv. Ambos con allowoverwritting=false.
+
+Para ambos guarda el GenerationNumber - 1, MaxNormFitness, MeanFitness, MeanTime, BestCarDeathReason, PopularDeath, deathcount y LengthCarsarray.
+
+Además, para Test_Summary.csv guarda SuccessCount, FailCount, SuccessRate, FailRate.
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+StartTesting
+
+
+lo primero, hay un cleararray de carsarray. luego hay un Branch cuya condición es si generation number>1, si es true llama a la función RefreshSpawnPointsList, si es false sigue el flujo. 
+
+Tras ambos caminos, hay un Branch cuya condición es (lengthspawnpointslist>0)AND(lengthspawnbag>0), si es false, vacio, si es true, hay un for loop desde 1 a populationsize, cuyo loop body es: un SpawnActorBPVehicleAI, class=bpvehicleai, SpawnTransform=getactortransform(getspawnpointlist(getspawnbag(indexdeloop-1))), collisionhandlingoverride=trytoadjustlocation,butalwaysspawn.
+
+Luego, hacemos un SpawnDefaultController cuyo target es el returnvalue del spawn. Luego hay un set Aivehicle con el returnvalue del spawn. Luego hay un set SpawnPoint cuyo target es el aivehicle, y se setea como getspawnpointlist(getspawnbag(indexdeloop-1)). Luego hay un set GenerationCount cuyo target es el aivehicle y se setea como GenerationNumber. Luego del returnvalue del spawnactor se saca getController con el que se hace un casttobpaicontroller. Si el cast es true, hay un set AiController como el cast. Luego se setea TrainingMode cuyo target es aicontroller, y lo setea en false. Luego, se llama a la función de LoadedCarColor cuyo target es aicontroller. Luego, se llama a la función LoadBrain cuyo target es aicontroller, donde LoadWeights IH se setea como Loaded W IH y LoadWeights HO se setea como Loaded W HO. 
+
+Finalmente hay un addarray de carsarray al que se añade AiVehicle, luego setea IsSimulating como True.
+
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+EndTesting
+
+lo primero se llama a la función SortByFitness. Luego, se setea BestCarRef como GetCarsarray(0). Luego, se setea BestCarForWeights como GetCarsarray(0). Luego, se setea CurrentBestFitness como Fitness cuyo target es GetCarsarray(0). Luego se llama a la función CalculateAndExport.
+
+Tras eso, hay un foreachloop de carsarray, cuyo loopbody es destroyactor cuyo target es arrayelement.
+
+Cuando se completa el bucle, pasa a un Branch cuya condition es (TrainTest7030Mode AND NOT(IsInTrainPhase) AND (GenerationNumber>TotalGenerations7030)). Si es true, llama al customevent StopSimulation. Si es false, llama a StartTesting.
+
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+RefreshSpawnPointsList
+
+cleararray de spawnpointslist y de spawnbag. luego hay un GetAllActorsofClassBP_SpawnPoints, cuyo loop body es: isvalid del arrayelement. si es valido, hay un branch cuay condición es validforlist del arrayelement. Si es true hay un addarrayuniquespawnpointslist al que se añade el arrayelement. 
+Al completarse el loop, hay un Branch cuya condición es lenghtspawnpointslist>0, si es true, hay un forloop desde 0 hasta populationsize-1, cuyo loop body es: un addarray de spawnbag, al que se le mete un ((indexdelloop)%(lenght de spawnpointslist)). Al completarse el loop, hay un shufflearray de spawnbag.

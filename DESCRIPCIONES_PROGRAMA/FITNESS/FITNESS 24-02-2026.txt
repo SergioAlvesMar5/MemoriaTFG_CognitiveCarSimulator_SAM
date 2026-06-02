@@ -1,0 +1,39 @@
+actualmente funciona así:
+
+ahora mismo el fitness sería asi:
+
+Steering input ABS x (get forward speed x front obstacle distance (1 lejos, 0 tocando)) x front obstacle distance^2. ESTE VALOR ES A
+
+1 - ((dist sensor dcha - dist sensor izda) ABS). ESTE VALOR ES B
+
+
+A x B. ESTE VALOR ES C
+
+
+LERP (A=1.0, B=(1 - ((dist sensor dcha - dist sensor izda) ABS)), alpha=0.0) x Get world delta seconds x get forward speed x front obstacle distance. ESTE VALOR ES D.
+
+
+PrevHorizontalDistanceDiference-(dist sensor dcha - dist sensor izda) ABS x dist sensor dcha + dist sensor izda x (2.0 x (1 / (maxsteeringangle->D2R->SIN))). ESTE VALOR ES E.
+
+
+(D + E) - C. El resultado de esto, se le suma al fitness y setea el fitness.
+
+PrevHorizontaldistancediference se setea al final, cuyo valor es (dist sensor dcha - dist sensor izda) ABS
+
+
+
+Restricciones:
+
+Si getforwardspeed es menor que -5: Fitness - (Timealived x Maxspeed) setea fitness y mata al coche. Este tipo de muerte es la Razón de muerte "REVERSE"
+
+
+
+Al final del beginplay de BP_VehicleAI2, hay un set Last Location (vector) que se setea como Get Actor Location, después de eso hay un Set Timer by Event, que tiene como opciones Time 1.0, y looping en True.
+
+El cable rojo del Set Timer by Event, está conectado a un Custom Event llamado Check Stuck, que es el evento que nos interesa.
+
+El flujo de este evento es: time alived ++ (timealived es un int que empieza en 1), Branch cuya condición es si time alived es mayor que 4. Si es true pasa a un Branch (llamemosle A) cuya condición es si Get Actor Location y Last Location en un Distance (Vector) es menor que un select float de 400 o 20 si frontobstacledistance es mayor que 0.65. Si el Branch es false, pasa a otro branch (llamemosle B), cuya condición es si un distancevector de Get Actor Location y Last Location es menor que 50.0. Si el branch A es True, setea Fitness como Fitness - (timealived x maxspeed - distance vector de Get Actor Location y Last Location), y mata al coche. Si el branch A es false, setea Last Location como Get Actor Location. Si el branch B es true, setea Fitness como Fitness - (timealived x maxspeed - distance vector de Get Actor Location y Last Location), y mata al coche. Si el branch B es false, setea Last Location como Get Actor Location. Este tipo de muerte es la Razón de muerte "LAZY".
+
+
+
+Si el vehículo choca con un obstáculo correcto, es decir un muro, borde del carril o el borde correcto en una intersección (trigger correcto y dirección correcta), el fitness se setea como fitness - (getforwardspeed^2). Este tipo de muerte es la Razón de muerte "COLLISION_WITH_X"
