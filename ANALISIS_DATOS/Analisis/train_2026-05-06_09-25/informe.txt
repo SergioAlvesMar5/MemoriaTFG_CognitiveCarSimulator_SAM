@@ -1,0 +1,1245 @@
+
+============================================================================
+  CALIDAD DE ENTRADA (CSV)
+============================================================================
+
+-- Summary --
+  Ruta:            c:\Users\SergioULE\Documents\Unreal Projects\cognitive-car\Saved\Logs\Training_Summary.csv
+  Tamano:          77,687 bytes
+  Modificado:      2026-05-06 09:25:22
+  Filas datos:     1000
+  Filas cargadas:  1000
+  Filas descart.:  0
+  Filas vacias:    0
+  Filas cortas:    0
+  Campos mapeados: 8 -> best, best_death, eval_n, gen, mean, pop_count, pop_death, time
+  Campos faltan:   -
+  Cabeceras extra: -
+
+-- Debug --
+  Ruta:            c:\Users\SergioULE\Documents\Unreal Projects\cognitive-car\Saved\Logs\Fitness_Debug.csv
+  Tamano:          15,573,634 bytes
+  Modificado:      2026-05-06 09:25:22
+  Filas datos:     50996
+  Filas cargadas:  50996
+  Filas seleccionadas (modo): 50996
+  Filas descart.:  0
+  Filas vacias:    0
+  Filas cortas:    0
+  Campos mapeados: 42 -> a, b, brake_grace, brake_in, c, car, car_index, coast_t, d, death, e, f, fit, gen ... (+28)
+  Campos faltan:   -
+  Cabeceras extra: -
+
+-- Alcance del Debug por Fase --
+  Modo analizado:           train
+  Registros debug totales:  50996
+  Registros seleccionados:  50996
+  Split TRAIN/TEST/UNK:     50996 / 0 / 0
+
+-- Coherencia Summary vs Debug --
+  Estado:                  OK
+  Summary filas/gens:      1000 / 1000 (1..1000)
+  Debug filas/gens:        50996 / 1000 (1..1000)
+  Solape de generaciones:  1000
+  Cobertura gens Debug:    100.0%
+  Cobertura filas Debug:   100.0% (esperado~51000)
+  Sin alertas fuertes de desalineacion entre Summary y Debug.
+
+-- Deteccion automatica de fase --
+  Modo global detectado: train
+  Modo de este informe:  train
+  Motivo global:         Fitness_Debug contiene solo filas TRAIN.
+
+-- Normalizacion de Generaciones (1..N) --
+  Summary original: 1..1000 (1000 gens) -> analisis: 1..1000 [sin cambios]
+  Debug original:   1..1000 (1000 gens) -> analisis: 1..1000 [sin cambios]
+
+-- Insights Automaticos --
+  - Tendencia MeanFit positiva (+0.6986/gen normalizada).
+  - Tiempo medio de vida en aumento (+0.001s/gen).
+  - LAZY elevado (44.85%). Revisar reward de avance o criterios de estancamiento.
+  - La mayoria de LAZY ocurre fuera de stop/semaforo (<1% stop-context en 98.8%; StopTicks==0 en 96.2%). Revisar spawn cercano a control no detectado y ventana anti-LAZY inicial.
+  - Razon de muerte dominante: LAZY (44.8%).
+  - Fallo legal (stop+traffic+yield): 2.86% de coches.
+  - Cobertura de contexto stop/semaforo: 4.09% de ticks.
+  - Ventanas de validacion acumuladas: Yield=0.02s y Stop=0.21s por coche.
+  - Penalty de creeping acumulado: media 31.22 por coche.
+  - Penalty de marcha atras acumulado: media 0.00 por coche.
+  - Penalty de estancamiento (lazy) acumulado: media 58.96 por coche.
+  - Penalty por giro en parado acumulado: media 77.84 por coche.
+  - Acum_ThrottleDuringGraceTime medio: 0.00 por coche.
+  - Acum_BrakeDuringGraceTime medio: 0.01 por coche.
+  - Predomina el frenado durante ventana de gracia frente al throttle; revisar salida de resume-grace y umbral anti-LAZY.
+  - Hotspot Penalty_Lazy por spawn: BP_SpawnPoint42 (media 74.30, P90 149.82, LAZY 599/1000=59.9%).
+  - Hotspot Penalty_Lazy por muerte: LAZY (N=22870, media 130.48, P90 149.82).
+  - En contexto stop/semaforo se frena proporcionalmente mas que en global (68.94% vs 27.81%).
+  - Spawns con fallo legal alto (>=P75=4.53%): BP_SpawnPoint51:25.2%, BP_SpawnPoint50:22.8%, BP_SpawnPoint32:16.4%, BP_SpawnPoint6:16.2%, BP_SpawnPoint38:15.9%.
+  - Spawns con mayor exposicion stop-context (>=P75=0.60%): BP_SpawnPoint40:0.8%, BP_SpawnPoint41:0.6%.
+  - Posible atasco en ceda: 5/150 TIME_FINISHED (3.33%) con bajo fitness y alto stop-context (score>=3.20).
+  - Hotspot atasco-ceda por spawn: BP_SpawnPoint13 (Cand=3, TF=22, StopCtxP50=0.1%, FitMed=37292.9).
+  - Generacion mas afectada por atasco-ceda: G900 (Cand=1, TF=2, Cand/TF=50.0%).
+
+-- Resumen de Fases (Summary CSV) --
+  Training_Summary filas: 1000
+  Test_Summary filas:     0
+
+============================================================================
+  ANALISIS ENTRENAMIENTO - 1000 generaciones
+  Fecha: 06/05/2026 09:26
+============================================================================
+
+-- Estadisticas Generales --
+  Generaciones:     1 - 1000 (1000 total)
+  BestFit max:      95080.673911  (gen 890)
+  BestFit medio:    17038.472312
+  MeanFit max:      5211.799828  (gen 816)
+  MeanFit medio:    1554.724044
+  MeanFit min:      0.017000  (gen 812)
+  MeanFit P25/P50/P75: 1039.1395 / 1402.8444 / 1972.1895
+  MeanFit < 0:      0/1000 (0.0%)
+  TiempoMedio:      4.88s - 15.45s (media 8.49s)
+  PopDeaths medio:  22.9/51
+
+-- Comparacion primeras 50 vs ultimas 50 gens --
+                  |     BestFit |     MeanFit |  Tiempo |  PopC |  %Neg
+  ---------------------------------------------------------------------
+         Primeras |  12475.8951 |   1021.8265 |   7.06s |  22.9 |    0%
+          Ultimas |  20120.6002 |   2222.7228 |   9.60s |  21.4 |    0%
+  >> MeanFit: MEJORA 117.5% (de 1021.8265 a 2222.7228)
+  >> TiempoMedio: MEJORA 35.9% (de 7.06s a 9.60s)
+
+-- Razones de Muerte (Mejor Coche) --
+  STOP_VIOLATION                          :  221 (22.1%)
+  LAZY                                    :  120 (12.0%)
+  COLLISION_WITH_NavModifierVolume141     :   95 (9.5%)
+  COLLISION_WITH_NavModifierVolume53      :   84 (8.4%)
+  TIMEFINISHED                            :   65 (6.5%)
+  COLLISION_WITH_BP_IntersectionBorder147 :   45 (4.5%)
+  COLLISION_WITH_BP_IntersectionBorder86  :   28 (2.8%)
+  COLLISION_WITH_BP_IntersectionBorder36  :   28 (2.8%)
+  COLLISION_WITH_BP_IntersectionBorder107 :   26 (2.6%)
+  COLLISION_WITH_NavModifierVolume2       :   16 (1.6%)
+  COLLISION_WITH_NavModifierVolume20      :   13 (1.3%)
+  COLLISION_WITH_NavModifierVolume8       :   12 (1.2%)
+  COLLISION_WITH_NavModifierVolume61      :   12 (1.2%)
+  COLLISION_WITH_BP_IntersectionBorder116 :   12 (1.2%)
+  COLLISION_WITH_BP_IntersectionBorder150 :   11 (1.1%)
+  COLLISION_WITH_NavModifierVolume21      :   11 (1.1%)
+  COLLISION_WITH_NavModifierVolume13      :   10 (1.0%)
+  COLLISION_WITH_NavModifierVolume12      :   10 (1.0%)
+  COLLISION_WITH_NavModifierVolume16      :    8 (0.8%)
+  COLLISION_WITH_NavModifierVolume18      :    8 (0.8%)
+  COLLISION_WITH_NavModifierVolume3       :    7 (0.7%)
+  COLLISION_WITH_NavModifierVolume43      :    7 (0.7%)
+  COLLISION_WITH_NavModifierVolume22      :    6 (0.6%)
+  YIELD_VIOLATION                         :    6 (0.6%)
+  COLLISION_WITH_NavModifierVolume54      :    6 (0.6%)
+  COLLISION_WITH_NavModifierVolume11      :    5 (0.5%)
+  COLLISION_WITH_BP_IntersectionBorder92  :    5 (0.5%)
+  COLLISION_WITH_BP_IntersectionBorder131 :    5 (0.5%)
+  COLLISION_WITH_BP_IntersectionBorder202 :    5 (0.5%)
+  COLLISION_WITH_BP_IntersectionBorder108 :    4 (0.4%)
+  COLLISION_WITH_NavModifierVolume58      :    4 (0.4%)
+  COLLISION_WITH_BP_IntersectionBorder67  :    4 (0.4%)
+  COLLISION_WITH_NavModifierVolume        :    4 (0.4%)
+  COLLISION_WITH_BP_IntersectionBorder114 :    4 (0.4%)
+  COLLISION_WITH_BP_IntersectionBorder72  :    4 (0.4%)
+  COLLISION_WITH_BP_IntersectionBorder101 :    4 (0.4%)
+  COLLISION_WITH_NavModifierVolume35      :    3 (0.3%)
+  COLLISION_WITH_NavModifierVolume60      :    3 (0.3%)
+  COLLISION_WITH_NavModifierVolume32      :    3 (0.3%)
+  COLLISION_WITH_NavModifierVolume19      :    3 (0.3%)
+  COLLISION_WITH_BP_IntersectionBorder213 :    3 (0.3%)
+  COLLISION_WITH_BP_IntersectionBorder220 :    3 (0.3%)
+  COLLISION_WITH_BP_IntersectionBorder46  :    3 (0.3%)
+  COLLISION_WITH_NavModifierVolume140     :    3 (0.3%)
+  COLLISION_WITH_NavModifierVolume48      :    3 (0.3%)
+  COLLISION_WITH_BP_IntersectionBorder230 :    3 (0.3%)
+  COLLISION_WITH_NavModifierVolume41      :    3 (0.3%)
+  COLLISION_WITH_NavModifierVolume27      :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume5       :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume49      :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume52      :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume142     :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume30      :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume17      :    2 (0.2%)
+  COLLISION_WITH_BP_IntersectionBorder200 :    2 (0.2%)
+  COLLISION_WITH_BP_IntersectionBorder221 :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume38      :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume33      :    2 (0.2%)
+  COLLISION_WITH_BP_IntersectionBorder117 :    2 (0.2%)
+  COLLISION_WITH_BP_IntersectionBorder3   :    2 (0.2%)
+  COLLISION_WITH_NavModifierVolume46      :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume7       :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume47      :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume4       :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder20  :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder178 :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder229 :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder96  :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder94  :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder148 :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume62      :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder50  :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume55      :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder97  :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder127 :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume15      :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder75  :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder156 :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder103 :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume137     :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder208 :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume9       :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder203 :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume26      :    1 (0.1%)
+  COLLISION_WITH_NavModifierVolume36      :    1 (0.1%)
+  COLLISION_WITH_BP_IntersectionBorder6   :    1 (0.1%)
+
+-- Razon de Muerte Mas Popular (Poblacion) --
+  LAZY                                    :  999 gens (media 22.9/51)
+  COLLISION_WITH_NavModifierVolume13      :    1 gens (media 3.0/51)
+
+-- Bloques de 200 generaciones --
+          Gens |    BestFit |    MeanFit |   Time |  PopC |  Neg%
+  ---------------------------------------------------------------
+      1-  200 | 16484.8387 |  1257.9034 |  7.82s |  24.0 |    0%
+    201-  400 | 17025.9467 |  1521.0071 |  8.50s |  23.4 |    0%
+    401-  600 | 14845.3338 |  1558.7874 |  8.56s |  23.1 |    0%
+    601-  800 | 17242.2357 |  1536.8283 |  8.60s |  22.6 |    0%
+    801- 1000 | 19594.0066 |  1899.0940 |  8.97s |  21.4 |    0%
+
+-- Tendencia MeanFit (bloques de 50) --
+      1-   50: MeanFit= 1021.8265 | t=7.06s ############################################################
+     51-  100: MeanFit= 1082.9351 | t=7.38s ############################################################
+    101-  150: MeanFit= 1406.7013 | t=8.53s ############################################################
+    151-  200: MeanFit= 1520.1509 | t=8.29s ############################################################
+    201-  250: MeanFit= 1542.9187 | t=8.67s ############################################################
+    251-  300: MeanFit= 1375.7751 | t=8.24s ############################################################
+    301-  350: MeanFit= 1660.6959 | t=8.77s ############################################################
+    351-  400: MeanFit= 1504.6386 | t=8.32s ############################################################
+    401-  450: MeanFit= 1477.2516 | t=8.39s ############################################################
+    451-  500: MeanFit= 1527.3073 | t=8.62s ############################################################
+    501-  550: MeanFit= 1695.7668 | t=8.76s ############################################################
+    551-  600: MeanFit= 1534.8238 | t=8.48s ############################################################
+    601-  650: MeanFit= 1484.2717 | t=8.45s ############################################################
+    651-  700: MeanFit= 1520.5823 | t=8.64s ############################################################
+    701-  750: MeanFit= 1643.2448 | t=8.74s ############################################################
+    751-  800: MeanFit= 1499.2144 | t=8.59s ############################################################
+    801-  850: MeanFit= 1693.5629 | t=8.58s ############################################################
+    851-  900: MeanFit= 1635.2012 | t=8.43s ############################################################
+    901-  950: MeanFit= 2044.8892 | t=9.29s ############################################################
+    951- 1000: MeanFit= 2222.7228 | t=9.60s ############################################################
+
+-- Top 10 (BestFit) --
+  Gen   890: Best=95080.6739  Mean=3839.2787  t=11.02s  TIMEFINISHED
+  Gen   816: Best=89019.6163  Mean=5211.7998  t=14.16s  TIMEFINISHED
+  Gen   937: Best=88360.9101  Mean=3051.6468  t=10.69s  TIMEFINISHED
+  Gen   130: Best=85923.2420  Mean=2672.1805  t=9.96s  TIMEFINISHED
+  Gen   914: Best=85686.6989  Mean=4440.5202  t=13.22s  TIMEFINISHED
+  Gen   745: Best=83389.7515  Mean=4559.0511  t=13.08s  TIMEFINISHED
+  Gen   384: Best=82666.9652  Mean=2603.1040  t=8.84s  TIMEFINISHED
+  Gen   928: Best=81113.1224  Mean=2607.6143  t=8.25s  COLLISION_WITH_BP_IntersectionBorder6
+  Gen   134: Best=81038.9680  Mean=3738.9838  t=14.04s  TIMEFINISHED
+  Gen   836: Best=80444.6185  Mean=3526.2793  t=11.84s  TIMEFINISHED
+
+-- Top 10 (MeanFit) --
+  Gen   816: Mean=5211.7998  Best=89019.6163  t=14.16s
+  Gen   745: Mean=4559.0511  Best=83389.7515  t=13.08s
+  Gen   914: Mean=4440.5202  Best=85686.6989  t=13.22s
+  Gen   545: Mean=4271.7466  Best=10945.1951  t=15.45s
+  Gen   891: Mean=4243.8441  Best=25704.8003  t=13.04s
+  Gen   957: Mean=4226.0604  Best=20817.6242  t=12.82s
+  Gen   893: Mean=3999.7219  Best=22747.9940  t=13.08s
+  Gen   996: Mean=3883.0881  Best=36520.9146  t=12.47s
+  Gen   817: Mean=3859.5528  Best=24373.5772  t=12.16s
+  Gen   890: Mean=3839.2787  Best=95080.6739  t=11.02s
+
+============================================================================
+  ANALISIS DE CONVERGENCIA Y ESTABILIDAD
+============================================================================
+
+-- Mejora General --
+  Fitness máximo alcanzado:  95080.673911
+  Generación del máximo:     Gen 890
+  Fitness inicial:           -1884.476662
+  Mejora total:              96965.150573 (5145.47%)
+
+-- Estado de Convergencia --
+  Generaciones en plateau:   0 (0.0%)
+  Varianza promedio:         15504.833004
+  Tendencia reciente (últ 10): 1067.67868338
+  CV (Best):                 1.0123
+  CV (Mean):                 0.4754
+
+-- Diagnóstico --
+  [*] Sin convergencia clara (todavía explorando)
+  [OK] MEJORANDO: Tendencia positiva reciente
+
+============================================================================
+  ANALISIS PREDICTIVO
+============================================================================
+
+-- Regresión Lineal (últimas 20 gens) --
+  Pendiente (slope):         1292.40644700
+  Correlación:               0.4036
+  Ajuste del modelo:         Moderado
+
+-- Predicciones (próximas 10 generaciones) --
+  Gen  1001: fitness predicho ~= 1277260.5174
+  Gen  1002: fitness predicho ~= 1278552.9238
+  Gen  1003: fitness predicho ~= 1279845.3303
+  ... (7 más predicciones disponibles)
+
+-- Proyección --
+  Estimado alcanzar +10% en ~= 40 generaciones
+
+-- Diagnostico de Tendencia y Volatilidad --
+  BestFit std/cv:   17248.1720 / 101.23%
+  MeanFit std/cv:   739.0796 / 47.54%
+  Tiempo std/cv:    1.6316 / 19.21%
+  Pendiente BestFit: +3.572353/gen (+357.2353/100gens)
+  Pendiente MeanFit: +0.698607/gen (+69.8607/100gens)
+  Pendiente Tiempo:  +0.001314/gen (+0.1314/100gens)
+  Racha sin nuevo BestFit: 685 gens
+  Racha MeanFit negativo:  0 gens
+  Racha MeanFit no-neg:    1000 gens
+
+-- Saltos Mas Grandes Entre Gens (por |delta MeanFit|) --
+      GenA->GenB |       dMean |       dBest |     dTime
+  ------------------------------------------------------
+    544->545   |  +3413.3560 |   +859.3134 |   +7.647s
+    914->915   |  -3395.8761 | -77755.7893 |   -5.745s
+    562->563   |  -3288.9516 | -60369.5163 |   -6.118s
+    561->562   |  +3255.6870 | +58263.6101 |   +6.627s
+    815->816   |  +3017.0927 | +45886.2642 |   +4.922s
+    235->236   |  -2926.4708 | -71187.7050 |   -5.784s
+    906->907   |  -2779.8236 | -22511.5749 |   -4.392s
+    605->606   |  -2686.9720 |  +2071.7616 |   -5.059s
+    902->903   |  +2641.9603 | +32048.2391 |   +5.000s
+    301->302   |  -2627.4389 |  -3258.6898 |   -7.431s
+    956->957   |  +2614.8849 | +12266.3870 |   +4.627s
+     59->60    |  +2519.5862 | +73747.2056 |   +3.745s
+    889->890   |  +2495.9401 | +72555.0476 |   +2.412s
+    134->135   |  -2494.8716 | -78774.9535 |   -5.745s
+    943->944   |  +2493.4726 |  -2754.7998 |   +3.725s
+
+-- Bottom 15 Generaciones por MeanFit --
+  Gen   812: Mean=    0.0170 Best= 7329.4894 t=  7.22s BestDeath=STOP_VIOLATION PopDeath=LAZY
+  Gen   873: Mean=  123.0314 Best= 3485.8200 t=  6.41s BestDeath=COLLISION_WITH_BP_IntersectionBorder147 PopDeath=LAZY
+  Gen    29: Mean=  142.3809 Best= 2552.1316 t=  5.65s BestDeath=COLLISION_WITH_NavModifierVolume5 PopDeath=LAZY
+  Gen    59: Mean=  147.7188 Best= 6409.9890 t=  5.27s BestDeath=COLLISION_WITH_NavModifierVolume142 PopDeath=LAZY
+  Gen   101: Mean=  232.9949 Best=  676.2948 t=  4.88s BestDeath=LAZY PopDeath=LAZY
+  Gen   129: Mean=  247.8742 Best= 2687.0241 t=  5.39s BestDeath=COLLISION_WITH_NavModifierVolume2 PopDeath=LAZY
+  Gen    19: Mean=  261.1744 Best= 2327.7589 t=  5.47s BestDeath=COLLISION_WITH_NavModifierVolume27 PopDeath=LAZY
+  Gen     9: Mean=  284.4320 Best= 2755.8391 t=  5.37s BestDeath=COLLISION_WITH_NavModifierVolume8 PopDeath=LAZY
+  Gen    58: Mean=  294.6521 Best= 2924.1092 t=  6.61s BestDeath=COLLISION_WITH_BP_IntersectionBorder147 PopDeath=LAZY
+  Gen   809: Mean=  334.8520 Best= 5852.1315 t=  6.31s BestDeath=LAZY PopDeath=LAZY
+  Gen   858: Mean=  335.0851 Best= 3461.3014 t=  5.57s BestDeath=COLLISION_WITH_BP_IntersectionBorder86 PopDeath=LAZY
+  Gen    15: Mean=  372.9071 Best= 3418.4088 t=  5.45s BestDeath=COLLISION_WITH_NavModifierVolume18 PopDeath=LAZY
+  Gen   124: Mean=  378.6381 Best= 5648.2071 t=  6.57s BestDeath=COLLISION_WITH_BP_IntersectionBorder213 PopDeath=LAZY
+  Gen    76: Mean=  397.4425 Best= 5141.0078 t=  6.71s BestDeath=STOP_VIOLATION PopDeath=LAZY
+  Gen   293: Mean=  412.4676 Best= 4684.6191 t=  5.67s BestDeath=COLLISION_WITH_NavModifierVolume11 PopDeath=LAZY
+
+-- Top 15 Generaciones por MeanFit --
+  Gen   816: Mean= 5211.7998 Best=89019.6163 t= 14.16s BestDeath=TIMEFINISHED PopDeath=LAZY
+  Gen   745: Mean= 4559.0511 Best=83389.7515 t= 13.08s BestDeath=TIMEFINISHED PopDeath=LAZY
+  Gen   914: Mean= 4440.5202 Best=85686.6989 t= 13.22s BestDeath=TIMEFINISHED PopDeath=LAZY
+  Gen   545: Mean= 4271.7466 Best=10945.1951 t= 15.45s BestDeath=STOP_VIOLATION PopDeath=LAZY
+  Gen   891: Mean= 4243.8441 Best=25704.8003 t= 13.04s BestDeath=YIELD_VIOLATION PopDeath=LAZY
+  Gen   957: Mean= 4226.0604 Best=20817.6242 t= 12.82s BestDeath=STOP_VIOLATION PopDeath=LAZY
+  Gen   893: Mean= 3999.7219 Best=22747.9940 t= 13.08s BestDeath=COLLISION_WITH_NavModifierVolume53 PopDeath=LAZY
+  Gen   996: Mean= 3883.0881 Best=36520.9146 t= 12.47s BestDeath=TIMEFINISHED PopDeath=LAZY
+  Gen   817: Mean= 3859.5528 Best=24373.5772 t= 12.16s BestDeath=COLLISION_WITH_NavModifierVolume141 PopDeath=LAZY
+  Gen   890: Mean= 3839.2787 Best=95080.6739 t= 11.02s BestDeath=TIMEFINISHED PopDeath=LAZY
+  Gen   562: Mean= 3823.8403 Best=64889.0040 t= 13.29s BestDeath=TIMEFINISHED PopDeath=LAZY
+  Gen   134: Mean= 3738.9838 Best=81038.9680 t= 14.04s BestDeath=TIMEFINISHED PopDeath=LAZY
+  Gen   906: Mean= 3724.5131 Best=32518.3231 t= 10.49s BestDeath=COLLISION_WITH_NavModifierVolume27 PopDeath=LAZY
+  Gen   301: Mean= 3714.6990 Best=17393.9624 t= 14.37s BestDeath=COLLISION_WITH_NavModifierVolume141 PopDeath=LAZY
+  Gen   235: Mean= 3713.8322 Best=75582.5345 t= 12.75s BestDeath=TIMEFINISHED PopDeath=LAZY
+
+============================================================================
+  ANALISIS DETALLADO (Fitness_Debug) - 50996 registros, 1000 gens
+============================================================================
+
+-- Fitness por Spawn (51 spawns) --
+            Spawn |     N |      Media |    Mediana |        Max |        P75 |  %Neg |  tMed
+  -------------------------------------------------------------------------------------------
+    BP_SpawnPoint |  1000 |     1361.5 |        6.9 |    13945.7 |     1113.9 |   50% |  7.5s
+  BP_SpawnPoint10 |   999 |     2073.7 |      -59.7 |    31736.5 |      595.5 |   53% |  8.5s
+  BP_SpawnPoint11 |  1000 |     1797.1 |       60.6 |    88360.9 |     1324.6 |   46% |  8.7s
+  BP_SpawnPoint12 |   999 |      745.3 |     -124.2 |    58480.6 |      492.8 |   56% |  7.8s
+  BP_SpawnPoint13 |  1000 |     3916.3 |       46.8 |    95080.7 |     1638.1 |   47% | 14.0s
+  BP_SpawnPoint14 |  1000 |     4349.9 |       65.3 |    89019.6 |     1244.0 |   45% | 12.8s
+  BP_SpawnPoint15 |  1000 |     3436.9 |      -38.4 |    85686.7 |      674.7 |   52% | 11.9s
+  BP_SpawnPoint16 |  1000 |     5270.4 |       80.1 |    82667.0 |     2037.9 |   46% | 13.2s
+  BP_SpawnPoint17 |  1000 |     2991.9 |      109.9 |    75238.9 |     1736.1 |   44% | 10.6s
+  BP_SpawnPoint18 |  1000 |     2083.7 |       46.7 |    70097.3 |      974.8 |   48% |  9.5s
+  BP_SpawnPoint19 |  1000 |     3929.9 |      112.2 |    68291.3 |     2090.3 |   44% | 12.5s
+   BP_SpawnPoint2 |  1000 |     1084.1 |      -15.3 |    12503.6 |     1060.6 |   51% |  7.3s
+  BP_SpawnPoint20 |  1000 |     2691.4 |       12.7 |    70409.1 |     1197.7 |   49% | 10.3s
+  BP_SpawnPoint21 |  1000 |     3343.1 |       67.8 |    75673.8 |     2493.7 |   46% | 10.6s
+  BP_SpawnPoint22 |  1000 |     1097.9 |      -18.1 |    26505.4 |      792.3 |   51% |  7.7s
+  BP_SpawnPoint23 |  1000 |     1009.5 |       33.6 |    31295.5 |     1260.8 |   48% |  7.3s
+  BP_SpawnPoint24 |  1000 |     1199.8 |      -72.8 |    49135.3 |      392.2 |   54% |  7.5s
+  BP_SpawnPoint25 |  1000 |     2072.7 |      111.1 |    72708.0 |     1869.1 |   44% |  8.6s
+  BP_SpawnPoint26 |  1000 |     1045.1 |      -24.2 |    74964.3 |      759.6 |   51% |  7.9s
+  BP_SpawnPoint27 |  1000 |     1315.5 |       -1.9 |    45295.1 |      646.2 |   50% |  7.7s
+  BP_SpawnPoint28 |  1000 |      924.2 |        2.7 |    20262.8 |      967.0 |   50% |  7.3s
+  BP_SpawnPoint29 |  1000 |      631.5 |      -12.8 |    39222.5 |      554.7 |   50% |  7.2s
+   BP_SpawnPoint3 |  1000 |       53.8 |     -150.3 |     3778.2 |      163.6 |   67% |  5.8s
+  BP_SpawnPoint30 |  1000 |     2927.7 |       57.8 |    24992.7 |      991.0 |   47% |  9.5s
+  BP_SpawnPoint31 |  1000 |     1651.0 |       53.1 |    14639.5 |     1739.4 |   47% |  8.5s
+  BP_SpawnPoint32 |  1000 |      523.7 |       32.2 |    36520.9 |      651.7 |   48% |  7.4s
+  BP_SpawnPoint33 |  1000 |      771.2 |       -9.0 |    32518.3 |      752.9 |   51% |  6.7s
+  BP_SpawnPoint34 |  1000 |     1039.0 |       37.8 |    15061.1 |      879.9 |   47% |  7.5s
+  BP_SpawnPoint35 |  1000 |     1050.8 |       60.8 |    10702.2 |      990.3 |   46% |  6.8s
+  BP_SpawnPoint36 |  1000 |     1104.7 |       17.9 |     8551.2 |     1677.8 |   49% |  8.7s
+  BP_SpawnPoint37 |  1000 |     1223.4 |       29.1 |    14351.2 |      846.9 |   48% |  7.6s
+  BP_SpawnPoint38 |  1000 |      814.6 |       81.8 |     6171.8 |     1421.2 |   46% |  7.7s
+  BP_SpawnPoint39 |  1000 |      733.1 |        5.2 |     5034.7 |     1093.9 |   50% |  6.8s
+   BP_SpawnPoint4 |  1000 |     2088.3 |      -51.6 |    64949.0 |      703.8 |   52% |  9.8s
+  BP_SpawnPoint40 |  1000 |     1126.8 |      -26.6 |    13719.5 |      722.4 |   52% |  7.6s
+  BP_SpawnPoint41 |  1000 |      573.7 |     -100.5 |    12686.3 |      361.5 |   57% |  6.3s
+  BP_SpawnPoint42 |  1000 |      292.7 |      -71.6 |    24159.8 |      519.7 |   54% |  9.6s
+  BP_SpawnPoint43 |  1000 |     1575.2 |       23.0 |    22591.2 |     1660.5 |   48% |  8.0s
+  BP_SpawnPoint44 |  1000 |      383.4 |      -88.7 |    18056.6 |      492.4 |   56% |  7.1s
+  BP_SpawnPoint45 |  1000 |     1216.4 |       40.6 |    23932.1 |     1050.5 |   48% |  7.9s
+  BP_SpawnPoint46 |  1000 |     1335.2 |       20.1 |    20616.4 |      814.2 |   49% |  9.0s
+  BP_SpawnPoint48 |   999 |     1800.7 |       -8.3 |    55423.0 |      900.6 |   51% |  9.5s
+  BP_SpawnPoint49 |  1000 |      784.1 |      -39.7 |    12199.3 |      639.3 |   51% |  7.0s
+   BP_SpawnPoint5 |  1000 |      254.7 |     -145.9 |    53993.9 |      624.5 |   57% |  6.4s
+  BP_SpawnPoint50 |  1000 |     -221.9 |     -150.3 |     2318.0 |      158.1 |   64% |  6.6s
+  BP_SpawnPoint51 |  1000 |     1973.7 |       63.6 |    10999.5 |     4623.9 |   48% | 10.3s
+  BP_SpawnPoint52 |  1000 |      -37.8 |      -81.0 |    14954.9 |      145.8 |   65% |  5.8s
+   BP_SpawnPoint6 |   999 |      765.3 |       -4.6 |     6523.8 |     1416.4 |   50% |  7.7s
+   BP_SpawnPoint7 |  1000 |     1584.0 |       -6.9 |    21599.0 |      854.8 |   51% |  8.1s
+   BP_SpawnPoint8 |  1000 |     2052.7 |       43.6 |    52404.3 |     1125.1 |   48% |  8.6s
+   BP_SpawnPoint9 |  1000 |     1984.8 |       47.6 |    31357.1 |     1657.5 |   48% |  8.4s
+
+-- Ranking de Spawns (mas dificil a mas facil, por fitness medio) --
+   1. BP_SpawnPoint50: media=    -221.9  mediana=    -150.3  %neg=64%  t=6.6s
+   2. BP_SpawnPoint52: media=     -37.8  mediana=     -81.0  %neg=65%  t=5.8s
+   3. BP_SpawnPoint3: media=      53.8  mediana=    -150.3  %neg=67%  t=5.8s
+   4. BP_SpawnPoint5: media=     254.7  mediana=    -145.9  %neg=57%  t=6.4s
+   5. BP_SpawnPoint42: media=     292.7  mediana=     -71.6  %neg=54%  t=9.6s
+   6. BP_SpawnPoint44: media=     383.4  mediana=     -88.7  %neg=56%  t=7.1s
+   7. BP_SpawnPoint32: media=     523.7  mediana=      32.2  %neg=48%  t=7.4s
+   8. BP_SpawnPoint41: media=     573.7  mediana=    -100.5  %neg=57%  t=6.3s
+   9. BP_SpawnPoint29: media=     631.5  mediana=     -12.8  %neg=50%  t=7.2s
+  10. BP_SpawnPoint39: media=     733.1  mediana=       5.2  %neg=50%  t=6.8s
+  11. BP_SpawnPoint12: media=     745.3  mediana=    -124.2  %neg=56%  t=7.8s
+  12. BP_SpawnPoint6: media=     765.3  mediana=      -4.6  %neg=50%  t=7.7s
+  13. BP_SpawnPoint33: media=     771.2  mediana=      -9.0  %neg=51%  t=6.7s
+  14. BP_SpawnPoint49: media=     784.1  mediana=     -39.7  %neg=51%  t=7.0s
+  15. BP_SpawnPoint38: media=     814.6  mediana=      81.8  %neg=46%  t=7.7s
+  16. BP_SpawnPoint28: media=     924.2  mediana=       2.7  %neg=50%  t=7.3s
+  17. BP_SpawnPoint23: media=    1009.5  mediana=      33.6  %neg=48%  t=7.3s
+  18. BP_SpawnPoint34: media=    1039.0  mediana=      37.8  %neg=47%  t=7.5s
+  19. BP_SpawnPoint26: media=    1045.1  mediana=     -24.2  %neg=51%  t=7.9s
+  20. BP_SpawnPoint35: media=    1050.8  mediana=      60.8  %neg=46%  t=6.8s
+  21. BP_SpawnPoint2: media=    1084.1  mediana=     -15.3  %neg=51%  t=7.3s
+  22. BP_SpawnPoint22: media=    1097.9  mediana=     -18.1  %neg=51%  t=7.7s
+  23. BP_SpawnPoint36: media=    1104.7  mediana=      17.9  %neg=49%  t=8.7s
+  24. BP_SpawnPoint40: media=    1126.8  mediana=     -26.6  %neg=52%  t=7.6s
+  25. BP_SpawnPoint24: media=    1199.8  mediana=     -72.8  %neg=54%  t=7.5s
+  26. BP_SpawnPoint45: media=    1216.4  mediana=      40.6  %neg=48%  t=7.9s
+  27. BP_SpawnPoint37: media=    1223.4  mediana=      29.1  %neg=48%  t=7.6s
+  28. BP_SpawnPoint27: media=    1315.5  mediana=      -1.9  %neg=50%  t=7.7s
+  29. BP_SpawnPoint46: media=    1335.2  mediana=      20.1  %neg=49%  t=9.0s
+  30. BP_SpawnPoint: media=    1361.5  mediana=       6.9  %neg=50%  t=7.5s
+  31. BP_SpawnPoint43: media=    1575.2  mediana=      23.0  %neg=48%  t=8.0s
+  32. BP_SpawnPoint7: media=    1584.0  mediana=      -6.9  %neg=51%  t=8.1s
+  33. BP_SpawnPoint31: media=    1651.0  mediana=      53.1  %neg=47%  t=8.5s
+  34. BP_SpawnPoint11: media=    1797.1  mediana=      60.6  %neg=46%  t=8.7s
+  35. BP_SpawnPoint48: media=    1800.7  mediana=      -8.3  %neg=51%  t=9.5s
+  36. BP_SpawnPoint51: media=    1973.7  mediana=      63.6  %neg=48%  t=10.3s
+  37. BP_SpawnPoint9: media=    1984.8  mediana=      47.6  %neg=48%  t=8.4s
+  38. BP_SpawnPoint8: media=    2052.7  mediana=      43.6  %neg=48%  t=8.6s
+  39. BP_SpawnPoint25: media=    2072.7  mediana=     111.1  %neg=44%  t=8.6s
+  40. BP_SpawnPoint10: media=    2073.7  mediana=     -59.7  %neg=53%  t=8.5s
+  41. BP_SpawnPoint18: media=    2083.7  mediana=      46.7  %neg=48%  t=9.5s
+  42. BP_SpawnPoint4: media=    2088.3  mediana=     -51.6  %neg=52%  t=9.8s
+  43. BP_SpawnPoint20: media=    2691.4  mediana=      12.7  %neg=49%  t=10.3s
+  44. BP_SpawnPoint30: media=    2927.7  mediana=      57.8  %neg=47%  t=9.5s
+  45. BP_SpawnPoint17: media=    2991.9  mediana=     109.9  %neg=44%  t=10.6s
+  46. BP_SpawnPoint21: media=    3343.1  mediana=      67.8  %neg=46%  t=10.6s
+  47. BP_SpawnPoint15: media=    3436.9  mediana=     -38.4  %neg=52%  t=11.9s
+  48. BP_SpawnPoint13: media=    3916.3  mediana=      46.8  %neg=47%  t=14.0s
+  49. BP_SpawnPoint19: media=    3929.9  mediana=     112.2  %neg=44%  t=12.5s
+  50. BP_SpawnPoint14: media=    4349.9  mediana=      65.3  %neg=45%  t=12.8s
+  51. BP_SpawnPoint16: media=    5270.4  mediana=      80.1  %neg=46%  t=13.2s
+
+-- Razones de Muerte (todos los coches, 50996 reg) --
+  LAZY                                         : 22870 ( 44.8%) fit=     287.9 t=6.8s
+  COLLISION_WITH_NavModifierVolume8            :  1400 (  2.7%) fit=    2718.1 t=8.8s
+  STOP_VIOLATION                               :  1369 (  2.7%) fit=    5156.1 t=22.4s
+  COLLISION_WITH_NavModifierVolume14           :   859 (  1.7%) fit=     795.1 t=5.6s
+  COLLISION_WITH_NavModifierVolume13           :   821 (  1.6%) fit=    1157.9 t=6.4s
+  COLLISION_WITH_NavModifierVolume2            :   768 (  1.5%) fit=    2656.5 t=8.5s
+  COLLISION_WITH_NavModifierVolume5            :   694 (  1.4%) fit=    1441.8 t=6.7s
+  COLLISION_WITH_NavModifierVolume21           :   692 (  1.4%) fit=    1894.3 t=7.5s
+  COLLISION_WITH_NavModifierVolume10           :   673 (  1.3%) fit=     420.1 t=4.8s
+  COLLISION_WITH_NavModifierVolume50           :   647 (  1.3%) fit=     918.2 t=6.2s
+  COLLISION_WITH_NavModifierVolume22           :   626 (  1.2%) fit=    1113.7 t=6.1s
+  COLLISION_WITH_NavModifierVolume12           :   575 (  1.1%) fit=     878.3 t=5.2s
+  COLLISION_WITH_NavModifierVolume18           :   544 (  1.1%) fit=    1234.2 t=6.7s
+  COLLISION_WITH_NavModifierVolume20           :   499 (  1.0%) fit=    1748.0 t=7.2s
+  COLLISION_WITH_NavModifierVolume54           :   492 (  1.0%) fit=    1554.6 t=7.6s
+  COLLISION_WITH_NavModifierVolume53           :   490 (  1.0%) fit=   11408.8 t=25.5s
+  COLLISION_WITH_NavModifierVolume7            :   478 (  0.9%) fit=    2215.9 t=8.1s
+  COLLISION_WITH_NavModifierVolume43           :   460 (  0.9%) fit=     872.7 t=6.5s
+  COLLISION_WITH_NavModifierVolume62           :   454 (  0.9%) fit=    1012.3 t=6.5s
+  COLLISION_WITH_NavModifierVolume17           :   439 (  0.9%) fit=    1296.9 t=5.8s
+  COLLISION_WITH_NavModifierVolume141          :   428 (  0.8%) fit=   11641.7 t=23.6s
+  COLLISION_WITH_NavModifierVolume33           :   413 (  0.8%) fit=    1325.9 t=7.3s
+  COLLISION_WITH_NavModifierVolume32           :   410 (  0.8%) fit=     855.8 t=6.3s
+  COLLISION_WITH_NavModifierVolume61           :   409 (  0.8%) fit=     990.5 t=6.3s
+  COLLISION_WITH_NavModifierVolume23           :   404 (  0.8%) fit=     882.5 t=6.2s
+  COLLISION_WITH_NavModifierVolume25           :   392 (  0.8%) fit=     786.1 t=5.9s
+  COLLISION_WITH_NavModifierVolume46           :   381 (  0.7%) fit=    4533.9 t=13.4s
+  COLLISION_WITH_NavModifierVolume30           :   363 (  0.7%) fit=     791.4 t=5.3s
+  COLLISION_WITH_NavModifierVolume15           :   349 (  0.7%) fit=     670.1 t=6.7s
+  COLLISION_WITH_NavModifierVolume3            :   345 (  0.7%) fit=     806.7 t=5.2s
+  COLLISION_WITH_NavModifierVolume28           :   343 (  0.7%) fit=     199.2 t=4.7s
+  COLLISION_WITH_NavModifierVolume34           :   340 (  0.7%) fit=     175.9 t=5.5s
+  COLLISION_WITH_NavModifierVolume24           :   338 (  0.7%) fit=     568.6 t=4.6s
+  COLLISION_WITH_NavModifierVolume9            :   324 (  0.6%) fit=     357.6 t=4.6s
+  COLLISION_WITH_NavModifierVolume19           :   324 (  0.6%) fit=    1426.6 t=6.6s
+  COLLISION_WITH_BP_IntersectionBorder116      :   320 (  0.6%) fit=     788.0 t=8.8s
+  COLLISION_WITH_NavModifierVolume16           :   299 (  0.6%) fit=     806.5 t=5.7s
+  COLLISION_WITH_NavModifierVolume57           :   284 (  0.6%) fit=     265.8 t=4.5s
+  COLLISION_WITH_NavModifierVolume6            :   271 (  0.5%) fit=      57.4 t=4.6s
+  COLLISION_WITH_NavModifierVolume38           :   264 (  0.5%) fit=     394.9 t=7.6s
+  COLLISION_WITH_NavModifierVolume49           :   256 (  0.5%) fit=    1720.6 t=8.8s
+  COLLISION_WITH_NavModifierVolume26           :   220 (  0.4%) fit=    1058.3 t=5.5s
+  COLLISION_WITH_NavModifierVolume36           :   219 (  0.4%) fit=     513.1 t=5.1s
+  COLLISION_WITH_NavModifierVolume27           :   216 (  0.4%) fit=    1006.7 t=5.9s
+  COLLISION_WITH_NavModifierVolume11           :   208 (  0.4%) fit=    2066.4 t=7.4s
+  COLLISION_WITH_BP_IntersectionBorder50       :   205 (  0.4%) fit=    6260.1 t=15.3s
+  COLLISION_WITH_NavModifierVolume142          :   205 (  0.4%) fit=    9671.2 t=14.1s
+  COLLISION_WITH_NavModifierVolume41           :   204 (  0.4%) fit=     813.3 t=5.4s
+  COLLISION_WITH_NavModifierVolume44           :   201 (  0.4%) fit=     153.7 t=4.5s
+  COLLISION_WITH_NavModifierVolume56           :   201 (  0.4%) fit=     487.2 t=5.5s
+  COLLISION_WITH_NavModifierVolume45           :   198 (  0.4%) fit=     753.1 t=6.5s
+  COLLISION_WITH_NavModifierVolume47           :   195 (  0.4%) fit=     854.3 t=6.1s
+  COLLISION_WITH_NavModifierVolume35           :   183 (  0.4%) fit=     477.6 t=5.3s
+  COLLISION_WITH_NavModifierVolume29           :   178 (  0.3%) fit=     451.8 t=4.7s
+  COLLISION_WITH_NavModifierVolume51           :   172 (  0.3%) fit=    1037.7 t=6.2s
+  COLLISION_WITH_NavModifierVolume4            :   169 (  0.3%) fit=     774.0 t=6.6s
+  COLLISION_WITH_NavModifierVolume55           :   167 (  0.3%) fit=     240.0 t=4.7s
+  COLLISION_WITH_NavModifierVolume40           :   166 (  0.3%) fit=     314.8 t=4.7s
+  COLLISION_WITH_BP_IntersectionBorder147      :   163 (  0.3%) fit=    5027.8 t=16.6s
+  COLLISION_WITH_BP_IntersectionBorder67       :   157 (  0.3%) fit=    7408.6 t=19.7s
+  TIMEFINISHED                                 :   150 (  0.3%) fit=   49782.3 t=120.0s
+  COLLISION_WITH_NavModifierVolume133          :   142 (  0.3%) fit=    3116.0 t=9.5s
+  COLLISION_WITH_NavModifierVolume48           :   137 (  0.3%) fit=    3131.1 t=14.6s
+  COLLISION_WITH_BP_IntersectionBorder213      :   137 (  0.3%) fit=     774.8 t=7.7s
+  COLLISION_WITH_NavModifierVolume39           :   135 (  0.3%) fit=      86.6 t=5.2s
+  COLLISION_WITH_NavModifierVolume140          :   130 (  0.3%) fit=    4482.3 t=16.3s
+  COLLISION_WITH_BP_IntersectionBorder86       :   126 (  0.2%) fit=    3726.8 t=13.4s
+  COLLISION_WITH_BP_IntersectionBorder3        :   116 (  0.2%) fit=     668.4 t=9.0s
+  COLLISION_WITH_NavModifierVolume             :   115 (  0.2%) fit=    5278.6 t=18.0s
+  COLLISION_WITH_BP_IntersectionBorder35       :   113 (  0.2%) fit=    2666.0 t=8.1s
+  COLLISION_WITH_BP_IntersectionBorder173      :   112 (  0.2%) fit=     984.7 t=9.3s
+  COLLISION_WITH_BP_IntersectionBorder177      :   111 (  0.2%) fit=     770.7 t=8.4s
+  COLLISION_WITH_BP_IntersectionBorder124      :   107 (  0.2%) fit=    1024.4 t=9.4s
+  COLLISION_WITH_BP_IntersectionBorder101      :   105 (  0.2%) fit=    6255.5 t=16.3s
+  COLLISION_WITH_BP_IntersectionBorder107      :    94 (  0.2%) fit=   13245.6 t=33.9s
+  COLLISION_WITH_BP_IntersectionBorder82       :    90 (  0.2%) fit=     431.7 t=7.4s
+  COLLISION_WITH_BP_IntersectionBorder208      :    86 (  0.2%) fit=    4421.1 t=14.5s
+  YIELD_VIOLATION                              :    84 (  0.2%) fit=    7176.7 t=12.2s
+  COLLISION_WITH_BP_IntersectionBorder184      :    84 (  0.2%) fit=     401.6 t=8.4s
+  COLLISION_WITH_BP_IntersectionBorder111      :    80 (  0.2%) fit=     241.6 t=8.6s
+  COLLISION_WITH_NavModifierVolume37           :    79 (  0.2%) fit=     931.2 t=9.5s
+  COLLISION_WITH_BP_IntersectionBorder36       :    73 (  0.1%) fit=   16322.6 t=38.4s
+  COLLISION_WITH_BP_IntersectionBorder108      :    66 (  0.1%) fit=     113.3 t=8.2s
+  COLLISION_WITH_BP_IntersectionBorder6        :    66 (  0.1%) fit=    7838.2 t=15.0s
+  COLLISION_WITH_BP_IntersectionBorder97       :    63 (  0.1%) fit=   11445.3 t=24.7s
+  COLLISION_WITH_BP_IntersectionBorder27       :    62 (  0.1%) fit=    -542.1 t=7.1s
+  COLLISION_WITH_BP_IntersectionBorder117      :    58 (  0.1%) fit=     911.4 t=10.0s
+  COLLISION_WITH_NavModifierVolume52           :    54 (  0.1%) fit=    1327.4 t=8.1s
+  COLLISION_WITH_BP_IntersectionBorder106      :    48 (  0.1%) fit=    6029.9 t=16.3s
+  COLLISION_WITH_BP_IntersectionBorder200      :    47 (  0.1%) fit=    8895.9 t=30.9s
+  COLLISION_WITH_BP_IntersectionBorder156      :    47 (  0.1%) fit=    5401.2 t=14.4s
+  COLLISION_WITH_BP_IntersectionBorder72       :    47 (  0.1%) fit=   11547.6 t=29.6s
+  COLLISION_WITH_BP_IntersectionBorder190      :    46 (  0.1%) fit=    2172.8 t=7.0s
+  COLLISION_WITH_BP_IntersectionBorder71       :    46 (  0.1%) fit=    -218.6 t=7.2s
+  COLLISION_WITH_BP_IntersectionBorder128      :    41 (  0.1%) fit=    1438.2 t=12.1s
+  COLLISION_WITH_BP_IntersectionBorder193      :    39 (  0.1%) fit=     754.8 t=9.5s
+  COLLISION_WITH_BP_IntersectionBorder123      :    36 (  0.1%) fit=    2904.8 t=9.3s
+  COLLISION_WITH_BP_IntersectionBorder26       :    35 (  0.1%) fit=    1552.8 t=7.0s
+  COLLISION_WITH_BP_IntersectionBorder181      :    35 (  0.1%) fit=    3198.2 t=11.3s
+  COLLISION_WITH_BP_IntersectionBorder127      :    33 (  0.1%) fit=     967.6 t=9.3s
+  COLLISION_WITH_NavModifierVolume137          :    31 (  0.1%) fit=    5268.5 t=13.9s
+  COLLISION_WITH_BP_IntersectionBorder104      :    31 (  0.1%) fit=    2568.0 t=9.3s
+  COLLISION_WITH_BP_IntersectionBorder110      :    31 (  0.1%) fit=    1218.3 t=7.3s
+  COLLISION_WITH_BP_IntersectionBorder131      :    31 (  0.1%) fit=   18100.6 t=41.5s
+  COLLISION_WITH_BP_IntersectionBorder202      :    31 (  0.1%) fit=   29018.2 t=60.5s
+  COLLISION_WITH_NavModifierVolume58           :    30 (  0.1%) fit=   13373.5 t=27.9s
+  COLLISION_WITH_BP_IntersectionBorder96       :    27 (  0.1%) fit=   11245.3 t=28.1s
+  COLLISION_WITH_BP_IntersectionBorder112      :    26 (  0.1%) fit=      44.1 t=7.0s
+  COLLISION_WITH_BP_IntersectionBorder192      :    25 (  0.0%) fit=    3532.7 t=13.2s
+  COLLISION_WITH_BP_IntersectionBorder215      :    25 (  0.0%) fit=    1625.7 t=11.4s
+  COLLISION_WITH_BP_IntersectionBorder212      :    23 (  0.0%) fit=     -55.7 t=9.2s
+  COLLISION_WITH_BP_IntersectionBorder150      :    23 (  0.0%) fit=   18308.6 t=46.8s
+  COLLISION_WITH_BP_IntersectionBorder10       :    22 (  0.0%) fit=    2016.1 t=10.8s
+  COLLISION_WITH_BP_IntersectionBorder109      :    21 (  0.0%) fit=      26.3 t=4.6s
+  COLLISION_WITH_BP_IntersectionBorder46       :    21 (  0.0%) fit=   17394.6 t=44.1s
+  COLLISION_WITH_BP_IntersectionBorder92       :    21 (  0.0%) fit=    9971.6 t=18.6s
+  COLLISION_WITH_BP_IntersectionBorder1        :    21 (  0.0%) fit=    2200.5 t=10.0s
+  COLLISION_WITH_BP_IntersectionBorder29       :    20 (  0.0%) fit=    1404.8 t=8.0s
+  COLLISION_WITH_BP_IntersectionBorder44       :    20 (  0.0%) fit=    4188.6 t=7.9s
+  COLLISION_WITH_BP_IntersectionBorder125      :    20 (  0.0%) fit=    3267.8 t=10.3s
+  COLLISION_WITH_BP_IntersectionBorder87       :    20 (  0.0%) fit=    2758.8 t=10.9s
+  COLLISION_WITH_BP_IntersectionBorder214      :    19 (  0.0%) fit=    -158.4 t=9.2s
+  COLLISION_WITH_BP_IntersectionBorder220      :    18 (  0.0%) fit=    7961.0 t=30.3s
+  COLLISION_WITH_BP_IntersectionBorder171      :    17 (  0.0%) fit=    3649.7 t=7.7s
+  COLLISION_WITH_BP_IntersectionBorder221      :    16 (  0.0%) fit=   11893.1 t=33.5s
+  COLLISION_WITH_BP_IntersectionBorder69       :    16 (  0.0%) fit=     262.8 t=8.3s
+  COLLISION_WITH_BP_IntersectionBorder183      :    16 (  0.0%) fit=     220.6 t=7.9s
+  COLLISION_WITH_BP_IntersectionBorder15       :    16 (  0.0%) fit=   26475.7 t=48.9s
+  COLLISION_WITH_BP_IntersectionBorder146      :    14 (  0.0%) fit=    -826.8 t=6.4s
+  COLLISION_WITH_BP_IntersectionBorder182      :    14 (  0.0%) fit=    -822.9 t=8.1s
+  COLLISION_WITH_BP_IntersectionBorder203      :    14 (  0.0%) fit=   24872.9 t=60.9s
+  COLLISION_WITH_BP_IntersectionBorder20       :    13 (  0.0%) fit=    7541.1 t=13.1s
+  COLLISION_WITH_BP_IntersectionBorder25       :    13 (  0.0%) fit=     964.9 t=6.5s
+  COLLISION_WITH_BP_IntersectionBorder19       :    12 (  0.0%) fit=    6162.9 t=24.0s
+  COLLISION_WITH_BP_IntersectionBorder85       :    12 (  0.0%) fit=    7967.5 t=10.7s
+  COLLISION_WITH_BP_IntersectionBorder24       :    11 (  0.0%) fit=    1699.2 t=9.4s
+  COLLISION_WITH_BP_IntersectionBorder114      :    11 (  0.0%) fit=    5162.3 t=19.3s
+  COLLISION_WITH_BP_IntersectionBorder17       :    10 (  0.0%) fit=    1855.9 t=7.0s
+  COLLISION_WITH_BP_IntersectionBorder172      :     9 (  0.0%) fit=     514.8 t=9.2s
+  COLLISION_WITH_BP_IntersectionBorder12       :     9 (  0.0%) fit=    6490.8 t=11.7s
+  COLLISION_WITH_BP_IntersectionBorder211      :     9 (  0.0%) fit=    -216.3 t=10.4s
+  COLLISION_WITH_BP_IntersectionBorder34       :     9 (  0.0%) fit=    1245.9 t=8.0s
+  COLLISION_WITH_BP_IntersectionBorder134      :     9 (  0.0%) fit=    1154.3 t=13.7s
+  COLLISION_WITH_BP_IntersectionBorder51       :     8 (  0.0%) fit=    8090.8 t=20.9s
+  COLLISION_WITH_BP_IntersectionBorder175      :     8 (  0.0%) fit=    2255.0 t=9.9s
+  COLLISION_WITH_BP_IntersectionBorder74       :     7 (  0.0%) fit=    -369.2 t=10.1s
+  COLLISION_WITH_BP_IntersectionBorder83       :     7 (  0.0%) fit=    2310.0 t=8.3s
+  COLLISION_WITH_BP_IntersectionBorder155      :     7 (  0.0%) fit=   13560.7 t=35.3s
+  COLLISION_WITH_NavModifierVolume60           :     6 (  0.0%) fit=    9284.4 t=13.3s
+  COLLISION_WITH_BP_IntersectionBorder47       :     6 (  0.0%) fit=    6239.3 t=10.2s
+  COLLISION_WITH_BP_IntersectionBorder48       :     6 (  0.0%) fit=    2796.5 t=12.8s
+  COLLISION_WITH_BP_IntersectionBorder148      :     6 (  0.0%) fit=   13412.8 t=33.2s
+  COLLISION_WITH_BP_IntersectionBorder75       :     6 (  0.0%) fit=   12608.6 t=35.0s
+  COLLISION_WITH_BP_IntersectionBorder40       :     6 (  0.0%) fit=   16035.3 t=33.0s
+  COLLISION_WITH_BP_IntersectionBorder94       :     5 (  0.0%) fit=    5426.1 t=19.8s
+  COLLISION_WITH_BP_IntersectionBorder160      :     5 (  0.0%) fit=    -372.7 t=6.0s
+  COLLISION_WITH_BP_IntersectionBorder168      :     5 (  0.0%) fit=     -91.6 t=12.6s
+  COLLISION_WITH_BP_IntersectionBorder8        :     5 (  0.0%) fit=    5199.3 t=8.4s
+  COLLISION_WITH_BP_IntersectionBorder230      :     5 (  0.0%) fit=    6118.3 t=15.8s
+  COLLISION_WITH_BP_IntersectionBorder206      :     4 (  0.0%) fit=    4921.9 t=21.0s
+  COLLISION_WITH_BP_IntersectionBorder170      :     4 (  0.0%) fit=    3917.8 t=9.0s
+  COLLISION_WITH_BP_IntersectionBorder2        :     4 (  0.0%) fit=    1606.9 t=10.2s
+  COLLISION_WITH_BP_IntersectionBorder18       :     4 (  0.0%) fit=    3919.6 t=6.8s
+  COLLISION_WITH_BP_IntersectionBorder13       :     4 (  0.0%) fit=    7278.1 t=13.0s
+  COLLISION_WITH_BP_IntersectionBorder88       :     4 (  0.0%) fit=    1687.6 t=8.2s
+  COLLISION_WITH_BP_IntersectionBorder191      :     3 (  0.0%) fit=    2189.2 t=8.7s
+  COLLISION_WITH_BP_IntersectionBorder100      :     3 (  0.0%) fit=    5331.1 t=13.3s
+  TRAFFIC_VIOLATION                            :     3 (  0.0%) fit=   -1957.3 t=13.3s
+  COLLISION_WITH_BP_IntersectionBorder152      :     3 (  0.0%) fit=    3278.7 t=17.3s
+  COLLISION_WITH_BP_IntersectionBorder195      :     3 (  0.0%) fit=    2772.6 t=16.3s
+  COLLISION_WITH_BP_IntersectionBorder139      :     3 (  0.0%) fit=   11712.8 t=33.7s
+  COLLISION_WITH_BP_IntersectionBorder103      :     3 (  0.0%) fit=    5903.4 t=20.3s
+  COLLISION_WITH_BP_IntersectionBorder84       :     3 (  0.0%) fit=   17408.8 t=30.7s
+  COLLISION_WITH_BP_IntersectionBorder229      :     2 (  0.0%) fit=   10538.5 t=43.0s
+  COLLISION_WITH_BP_IntersectionBorder174      :     2 (  0.0%) fit=    2402.7 t=7.5s
+  COLLISION_WITH_BP_IntersectionBorder176      :     2 (  0.0%) fit=     -46.3 t=7.0s
+  COLLISION_WITH_BP_IntersectionBorder33       :     2 (  0.0%) fit=    4889.1 t=17.5s
+  COLLISION_WITH_BP_IntersectionBorder90       :     2 (  0.0%) fit=    6401.6 t=15.5s
+  COLLISION_WITH_BP_IntersectionBorder58       :     2 (  0.0%) fit=    2486.4 t=18.0s
+  COLLISION_WITH_BP_IntersectionBorder76       :     2 (  0.0%) fit=   13268.2 t=39.0s
+  COLLISION_WITH_BP_IntersectionBorder153      :     2 (  0.0%) fit=    8527.7 t=23.0s
+  COLLISION_WITH_BP_IntersectionBorder137      :     2 (  0.0%) fit=    3608.1 t=14.0s
+  COLLISION_WITH_BP_IntersectionBorder105      :     2 (  0.0%) fit=    5280.1 t=12.5s
+  COLLISION_WITH_BP_IntersectionBorder4        :     1 (  0.0%) fit=    7416.4 t=10.0s
+  COLLISION_WITH_BP_IntersectionBorder178      :     1 (  0.0%) fit=   19816.0 t=80.0s
+  COLLISION_WITH_BP_IntersectionBorder197      :     1 (  0.0%) fit=    7849.2 t=25.0s
+  COLLISION_WITH_BP_IntersectionBorder180      :     1 (  0.0%) fit=    2288.6 t=21.0s
+  COLLISION_WITH_BP_IntersectionBorder140      :     1 (  0.0%) fit=    8275.7 t=21.0s
+  COLLISION_WITH_BP_IntersectionBorder228      :     1 (  0.0%) fit=    8841.4 t=39.0s
+  COLLISION_WITH_BP_IntersectionBorder113      :     1 (  0.0%) fit=    3948.0 t=10.0s
+  COLLISION_WITH_BP_IntersectionBorder205      :     1 (  0.0%) fit=   25022.6 t=58.0s
+  COLLISION_WITH_BP_IntersectionBorder9        :     1 (  0.0%) fit=     939.1 t=8.0s
+  COLLISION_WITH_BP_IntersectionBorder222      :     1 (  0.0%) fit=   12018.4 t=47.0s
+  COLLISION_WITH_BP_IntersectionBorder126      :     1 (  0.0%) fit=    3063.1 t=9.0s
+  COLLISION_WITH_BP_IntersectionBorder59       :     1 (  0.0%) fit=    -887.9 t=6.0s
+  COLLISION_WITH_BP_IntersectionBorder5        :     1 (  0.0%) fit=    7722.6 t=16.0s
+  COLLISION_WITH_BP_IntersectionBorder216      :     1 (  0.0%) fit=   11091.5 t=43.0s
+
+-- Componentes del Fitness (medias globales, 50996 coches) --
+  Acum_A  (vel x centrado):        2332.4478
+  Media_B (mejora centrado):         0.000119
+  Acum_E  (B x C x D reward):         0.2550
+  Acum_F  (vel^2 x frontObst^2):      1.0540
+  Acum_NetNormal (A+E+F):           2333.7569
+  Penalty_Muerte:                    429.5191
+  Penalty_Velocidad:                 197.2416
+  Penalty_CorrectingWrong:             1.6334
+  Penalty_TrafficViolation:            2.6947
+  Penalty_Creeping:                   31.2189
+  Penalty_Reverse:                     0.0010
+  Penalty_Lazy:                       58.9599
+  Penalty_SteeringWhileStopped:       77.8354
+  Ticks Normal / Total:             151.3 /  152.0
+  Acum_ThrottlePos:                    2.2705
+  Acum_ThrottleDuringGraceTime:        0.0045
+  Acum_BrakeDuringGraceTime:           0.0087
+  Acum_BrakeInput:                     0.8745
+  Acum_CoastTime:                      1.2067
+  Acum_StopBrake:                      0.0622
+  Acum_StopThrottle:                   0.0280
+  Ticks_StopContext:                   6.2192
+  Ticks_StopContext_TrafficLight:      1.1273
+  Ticks_StopContext_Stop:              4.3026
+  Ticks_StopContext_Yield:             0.7893
+  YieldValidationTime:                 0.0214
+  StopValidationTime:                  0.2067
+  Acum_SteeringInput:                 -1.8237
+  Acum_TargetSteering:                -1.8237
+  Acum_ABS_Steering:                  48.9526
+  Avg_ABS_Steering/tick:               0.4093
+  AvgAbs_TargetVsAppliedGap:           0.0000
+  SteeringGapAbs (|input-target|):     0.0000
+  CarIndex min/max/uniq:                    1 /   51 /   51
+  CarIndex familias:               LOADED=1000, SESSION=1000, MUT_LOADED=21996, MUT_SESSION=22000, RANDOM=5000
+  ShareBrake (Throttle+Brake):         0.2781
+  ShareGraceBrake (GraceContext):      0.6601
+  ShareStopBrake (StopContext):        0.6894
+  Cobertura StopContext (ticks):       0.0409
+  Fitness_Final medio:              1564.6570
+  Fitness P10/P50/P90:                -150.45 /      -7.53 /    4353.58
+  Fitness CVaR10 (peor 10%):          -695.22
+  Tiempo P10/P50/P90:                    3.00 /       5.00 /      16.00
+
+-- Componentes por Generacion --
+    Gen |   NetNorm |        A |        E |        F |      PenM |     PenV |    PenTV |    PenCr |    PenRv |    PenLz |    PenSS |    FitMed
+  --------------------------------------------------------------------------------------------------------------------------------------------
+      1 | 5825.6145 | 5822.0742 |   0.7963 |   2.7440 |   1943.14 | 673.5648 |   0.0000 |  40.5091 |   0.0000 |   1.1799 |  83.8013 |   3080.20
+      2 | 2639.9985 | 2638.6247 |   0.3317 |   1.0421 |   1246.59 | 459.4866 |  29.1392 |  59.7086 |   0.0002 |  16.6608 |  96.8939 |    747.98
+      3 | 3986.2257 | 3984.1104 |   0.3993 |   1.7160 |   1662.58 | 322.8706 |   0.0000 |  99.1555 |   0.0003 |  22.2254 |  52.2704 |   1833.64
+      4 | 2534.6840 | 2533.0535 |   0.2312 |   1.3993 |    712.84 | 266.7819 |   0.0000 |  14.8536 |   0.0005 |  32.1452 | 192.8032 |   1326.17
+      5 | 1630.6608 | 1629.8520 |   0.1709 |   0.6379 |    765.50 | 209.5970 |   0.0000 |  38.6006 |   0.0005 |  30.7835 |  21.7901 |    574.53
+      6 | 1691.3975 | 1690.4858 |   0.2081 |   0.7035 |    633.83 | 182.3714 |   0.0000 |   2.3248 |   0.0004 |  44.6080 |  31.3214 |    810.72
+      7 | 2576.0788 | 2574.7968 |   0.1951 |   1.0869 |    741.54 | 250.3106 |  17.8750 |   3.8074 |   0.0004 |  33.3105 | 205.2737 |   1365.06
+      8 | 2352.0356 | 2350.5999 |   0.3419 |   1.0938 |    778.59 | 335.9188 |   0.0000 |   7.3278 |   0.0006 |  37.3945 |  18.6272 |   1182.68
+      9 |  678.0864 | 677.7927 |   0.0669 |   0.2268 |    227.22 | 104.2907 |   4.7850 |   2.0467 |   0.0011 |  72.4199 |  10.1952 |    284.43
+     10 | 1596.8596 | 1596.1275 |   0.1724 |   0.5598 |    353.45 | 110.7713 |   2.2885 |   7.7190 |   0.0012 |  74.7396 |   7.0482 |   1069.90
+     11 | 1406.7646 | 1405.8616 |   0.2814 |   0.6217 |    262.74 | 145.0563 |   0.0000 |  42.7808 |   0.0014 |  82.4581 |  48.5871 |    849.98
+     12 | 1693.7043 | 1692.8993 |   0.2091 |   0.5959 |    433.96 | 191.8164 |   0.0000 |   0.0000 |   0.0008 |  56.3369 |  28.1581 |   1001.34
+     13 | 1840.0390 | 1838.9791 |   0.2216 |   0.8383 |    496.45 | 208.9895 |   0.0000 |   0.0000 |   0.0007 |  51.8560 |  12.2608 |   1085.85
+     14 | 1456.0493 | 1455.2424 |   0.1896 |   0.6173 |    342.90 | 174.6316 |  11.0088 |  16.0415 |   0.0007 |  62.1547 | 124.8033 |    770.01
+     15 |  805.1594 | 804.7846 |   0.0687 |   0.3061 |    278.94 |  87.5623 |   0.0000 |  10.8226 |   0.0010 |  69.2202 |   7.8538 |    372.91
+     16 | 1688.0791 | 1687.0264 |   0.2230 |   0.8298 |    487.77 | 167.6619 |   0.0000 |  19.9253 |   0.0011 |  72.7230 |  18.0525 |    943.73
+     17 | 2177.8195 | 2176.3660 |   0.3196 |   1.1338 |    531.01 | 228.8026 |   2.8441 |  33.7903 |   0.0008 |  64.4601 |  31.7583 |   1326.60
+     18 | 3541.8545 | 3539.7779 |   0.4051 |   1.6715 |    541.40 | 225.1573 |   0.0000 |  27.3538 |   0.0004 |  24.1176 |  88.7216 |   2647.72
+     19 |  774.8977 | 774.5961 |   0.0728 |   0.2288 |    329.81 | 120.1190 |   0.0000 |   3.3618 |   0.0006 |  49.9347 |   8.0807 |    279.10
+     20 | 1525.2168 | 1524.3866 |   0.1313 |   0.6988 |    207.81 |  71.8526 |   0.0000 |   9.9623 |   0.0011 |  68.1207 |  20.7680 |   1168.59
+    ...
+    996 | 4396.5803 | 4394.0394 |   0.3359 |   2.2050 |    623.01 | 366.3485 |   0.0000 |  65.7063 |   0.0007 |  46.1322 | 106.7951 |   3883.09
+    997 | 3645.4538 | 3642.9106 |   0.4538 |   2.0894 |    649.35 | 404.5526 |   0.0000 |  28.8611 |   0.0014 |  78.0808 |  65.1505 |   2442.78
+    998 | 3179.8907 | 3177.9377 |   0.3808 |   1.5722 |    461.30 | 215.0179 |   0.0000 |  41.6132 |   0.0014 |  86.2306 | 233.3573 |   2167.48
+    999 | 3326.7301 | 3324.7785 |   0.2453 |   1.7063 |    273.93 | 240.2408 |   0.0000 |  61.1676 |   0.0011 |  67.1622 |  65.5398 |   2650.53
+   1000 | 3086.9651 | 3085.1234 |   0.2891 |   1.5526 |    700.41 | 296.8685 |   0.0000 |  46.8862 |   0.0014 |  77.7631 |  11.2524 |   1978.44
+
+-- Control por Generacion --
+    Gen |     Thr+ | GraceThr |  GraceBr |    Brake |    Coast |    StopB |    StopT | StopTicks |   YldVal |  StopVal |  SteerIn | SteerTgt |   GapAbs | StopBrake% |  GraceBr%
+  ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      1 |   5.2690 |   0.1188 |   0.0000 |   0.2403 |   0.4456 |   0.1954 |   0.0199 |     6.059 |   0.0745 |   0.0490 |   3.1348 |   3.1348 |   0.0000 |     90.76% |     0.00%
+      2 |   3.6302 |   0.0461 |   0.0000 |   0.2989 |   0.1676 |   0.1015 |   0.0215 |     7.255 |   0.1686 |   0.0824 |   6.6220 |   6.6220 |   0.0000 |     82.51% |     0.00%
+      3 |   3.9606 |   0.1306 |   0.0000 |   0.3250 |   0.3817 |   0.1555 |   0.0569 |     6.843 |   0.0549 |   0.1137 | -10.5106 | -10.5106 |   0.0000 |     73.21% |     0.00%
+      4 |   2.7478 |   0.0396 |   0.0000 |   0.6576 |   0.7198 |   0.1537 |   0.0105 |     4.373 |   0.0118 |   0.1745 | -12.3156 | -12.3156 |   0.0000 |     93.62% |     0.00%
+      5 |   2.5916 |   0.0000 |   0.0000 |   0.2515 |   0.4573 |   0.0180 |   0.0175 |     1.176 |   0.0000 |   0.0549 |   2.3866 |   2.3866 |   0.0000 |     50.79% |     0.00%
+      6 |   2.5011 |   0.0824 |   0.0000 |   0.3583 |   0.5292 |   0.0813 |   0.0043 |     2.118 |   0.0176 |   0.0157 |   8.9497 |   8.9497 |   0.0000 |     94.99% |     0.00%
+      7 |   2.9027 |   0.0396 |   0.0560 |   0.6811 |   0.6820 |   0.3011 |   0.0059 |    11.510 |   0.0137 |   0.0078 |  -7.7499 |  -7.7499 |   0.0000 |     98.08% |    58.58%
+      8 |   2.8601 |   0.0268 |   0.0000 |   0.4508 |   0.3132 |   0.0159 |   0.0046 |     0.765 |   0.0000 |   0.0157 |   3.7938 |   3.7938 |   0.0000 |     77.65% |     0.00%
+      9 |   1.5394 |   0.0000 |   0.0422 |   1.0360 |   0.2444 |   0.0334 |   0.0023 |     2.333 |   0.0000 |   0.0098 |   7.1943 |   7.1943 |   0.0000 |     93.50% |   100.00%
+     10 |   1.8200 |   0.0000 |   0.0000 |   1.3627 |   0.1671 |   0.0197 |   0.0314 |     2.961 |   0.0490 |   0.0902 |  -3.9016 |  -3.9016 |   0.0000 |     38.47% |     0.00%
+     11 |   1.8507 |   0.0536 |   0.0000 |   2.0057 |   0.3049 |   0.0587 |   0.0457 |     6.980 |   0.0157 |   0.2255 |  32.5190 |  32.5190 |   0.0000 |     56.20% |     0.00%
+     12 |   2.3554 |   0.0357 |   0.0000 |   0.6682 |   0.3981 |   0.0668 |   0.0307 |     3.392 |   0.0647 |   0.0000 |   2.9345 |   2.9345 |   0.0000 |     68.53% |     0.00%
+     13 |   2.4214 |   0.0000 |   0.0000 |   0.4313 |   0.3204 |   0.0108 |   0.0308 |     1.471 |   0.0647 |   0.0000 |  -6.9100 |  -6.9100 |   0.0000 |     25.96% |     0.00%
+     14 |   2.0375 |   0.0116 |   0.0542 |   0.8258 |   0.7647 |   0.2377 |   0.0029 |     6.745 |   0.0039 |   0.0275 |  10.7931 |  10.7931 |   0.0000 |     98.78% |    82.32%
+     15 |   1.5546 |   0.0000 |   0.0000 |   0.7580 |   0.4485 |   0.0000 |   0.0099 |     0.431 |   0.0000 |   0.0157 |   0.4296 |   0.4296 |   0.0000 |      0.00% |     0.00%
+     16 |   1.9614 |   0.0039 |   0.0137 |   1.0847 |   0.3672 |   0.0091 |   0.0421 |     1.706 |   0.0353 |   0.0412 |  10.4122 |  10.4122 |   0.0000 |     17.81% |    77.70%
+     17 |   2.4704 |   0.0343 |   0.0282 |   1.1451 |   0.4588 |   0.2821 |   0.0189 |    12.706 |   0.0490 |   0.0549 |  -3.2401 |  -3.2401 |   0.0000 |     93.71% |    45.17%
+     18 |   3.2559 |   0.0480 |   0.0000 |   0.4762 |   0.7623 |   0.1481 |   0.0302 |     8.902 |   0.0980 |   0.2902 |  -0.5052 |  -0.5052 |   0.0000 |     83.08% |     0.00%
+     19 |   1.8506 |   0.0000 |   0.0000 |   0.3311 |   0.6678 |   0.0167 |   0.0041 |     2.941 |   0.0196 |   0.1235 |  19.7861 |  19.7861 |   0.0000 |     80.39% |     0.00%
+     20 |   1.6930 |   0.0000 |   0.0000 |   1.0729 |   0.9082 |   0.0229 |   0.0151 |     1.608 |   0.0431 |   0.0314 |  19.7389 |  19.7389 |   0.0000 |     60.32% |     0.00%
+    ...
+    996 |   3.3753 |   0.0000 |   0.0000 |   0.6680 |   3.0405 |   0.1807 |   0.1070 |    47.412 |   0.1451 |   0.6039 |  -9.6654 |  -9.6654 |   0.0000 |     62.81% |     0.00%
+    997 |   2.8218 |   0.0530 |   0.0053 |   1.9548 |   0.4438 |   0.0658 |   0.0354 |     5.918 |   0.1000 |   0.0959 |   0.5038 |   0.5038 |   0.0000 |     65.06% |     9.03%
+    998 |   2.2203 |   0.0030 |   0.0000 |   1.3902 |   1.1520 |   0.0612 |   0.0499 |    10.660 |   0.0000 |   0.3860 |   2.7413 |   2.7413 |   0.0000 |     55.08% |     0.00%
+    999 |   2.3327 |   0.0384 |   0.0000 |   1.0915 |   1.5350 |   0.1206 |   0.0242 |    17.780 |   0.0260 |   0.8340 |  27.9384 |  27.9384 |   0.0000 |     83.30% |     0.00%
+   1000 |   2.4394 |   0.0000 |   0.0000 |   1.5573 |   0.8450 |   0.0369 |   0.0331 |     9.137 |   0.0059 |   0.4451 |  -2.3528 |  -2.3528 |   0.0000 |     52.66% |     0.00%
+
+-- Mejor Coche por Generacion (raw fitness) --
+  Gen    1: fit=  23426.30 spawn=BP_SpawnPoint30 t=36s death=COLLISION_WITH_NavModifierVolume141
+  Gen    2: fit=  12239.48 spawn=BP_SpawnPoint16 t=13s death=COLLISION_WITH_NavModifierVolume142
+  Gen    3: fit=  16053.30 spawn=BP_SpawnPoint42 t=10s death=COLLISION_WITH_NavModifierVolume14
+  Gen    4: fit=  43579.28 spawn=BP_SpawnPoint19 t=72s death=COLLISION_WITH_NavModifierVolume140
+  Gen    5: fit=   9493.59 spawn=BP_SpawnPoint49 t=29s death=COLLISION_WITH_BP_IntersectionBorder86
+  Gen    6: fit=   9205.30 spawn=BP_SpawnPoint12 t=16s death=COLLISION_WITH_NavModifierVolume8
+  Gen    7: fit=  14783.84 spawn=BP_SpawnPoint19 t=14s death=COLLISION_WITH_NavModifierVolume133
+  Gen    8: fit=  17616.98 spawn=BP_SpawnPoint16 t=35s death=COLLISION_WITH_NavModifierVolume53
+  Gen    9: fit=   2836.09 spawn=BP_SpawnPoint15 t=10s death=COLLISION_WITH_NavModifierVolume46
+  Gen   10: fit=  16633.71 spawn=BP_SpawnPoint8 t=53s death=LAZY
+  Gen   11: fit=  10523.73 spawn=BP_SpawnPoint9 t=20s death=COLLISION_WITH_BP_IntersectionBorder36
+  Gen   12: fit=  16770.07 spawn=BP_SpawnPoint48 t=60s death=LAZY
+  Gen   13: fit=   8010.20 spawn=BP_SpawnPoint33 t=22s death=COLLISION_WITH_NavModifierVolume13
+  Gen   14: fit=  21375.32 spawn=BP_SpawnPoint12 t=51s death=COLLISION_WITH_NavModifierVolume19
+  Gen   15: fit=   4796.71 spawn=BP_SpawnPoint20 t=8s death=COLLISION_WITH_NavModifierVolume8
+  Gen   16: fit=  15488.83 spawn=BP_SpawnPoint8 t=17s death=COLLISION_WITH_NavModifierVolume141
+  Gen   17: fit=  31586.85 spawn=BP_SpawnPoint14 t=70s death=COLLISION_WITH_NavModifierVolume2
+  Gen   18: fit=  28776.00 spawn=BP_SpawnPoint10 t=57s death=COLLISION_WITH_NavModifierVolume11
+  Gen   19: fit=   4828.86 spawn=BP_SpawnPoint11 t=10s death=COLLISION_WITH_NavModifierVolume8
+  Gen   20: fit=  38092.21 spawn=BP_SpawnPoint13 t=84s death=LAZY
+  Gen   21: fit=  52399.63 spawn=BP_SpawnPoint25 t=85s death=LAZY
+  Gen   22: fit=  26881.61 spawn=BP_SpawnPoint4 t=76s death=LAZY
+  Gen   23: fit=  76061.33 spawn=BP_SpawnPoint14 t=120s death=TIMEFINISHED
+  Gen   24: fit=  23599.47 spawn=BP_SpawnPoint30 t=51s death=LAZY
+  Gen   25: fit=  12371.47 spawn=BP_SpawnPoint27 t=15s death=COLLISION_WITH_BP_IntersectionBorder47
+  Gen   26: fit=  13852.44 spawn=BP_SpawnPoint7 t=39s death=LAZY
+  Gen   27: fit=  22001.17 spawn=BP_SpawnPoint19 t=48s death=LAZY
+  Gen   28: fit=  13088.46 spawn=BP_SpawnPoint9 t=41s death=LAZY
+  Gen   29: fit=   4226.73 spawn=BP_SpawnPoint51 t=56s death=STOP_VIOLATION
+  Gen   30: fit=  23016.28 spawn=BP_SpawnPoint19 t=74s death=COLLISION_WITH_NavModifierVolume8
+  ...
+  Gen  996: fit=  62441.76 spawn=BP_SpawnPoint20 t=120s death=TIMEFINISHED
+  Gen  997: fit=  38412.69 spawn=BP_SpawnPoint29 t=83s death=COLLISION_WITH_NavModifierVolume141
+  Gen  998: fit=  15880.84 spawn=BP_SpawnPoint19 t=24s death=COLLISION_WITH_NavModifierVolume32
+  Gen  999: fit=  20758.24 spawn=BP_SpawnPoint27 t=67s death=STOP_VIOLATION
+  Gen 1000: fit=  52404.35 spawn=BP_SpawnPoint8 t=88s death=COLLISION_WITH_NavModifierVolume53
+
+============================================================================
+  ANALISIS DE DIVERSIDAD GENETICA
+============================================================================
+
+-- Distribución de Familias --
+  Total coches evaluados:    50996
+  Modelos cargados:          2.0%
+  Modelos aleatorios:        9.8%
+  Modelos mutados:           86.3%
+
+-- Desempeño por Familia --
+  LOADED         : N=1000 | media=  5710.75 | std=9838.32
+  RANDOM         : N=5000 | media=   259.57 | std=1243.11
+  MUT_LOADED     : N=21996 | media=  3092.47 | std=7464.70
+  MUT_SESSION    : N=22000 | media=   209.84 | std=1326.60
+
+-- Entropía y Diversidad --
+  Entropía Shannon:          1.1073
+  Entropía normalizada:      0.6880
+  [OK] DIVERSIDAD ADECUADA: Población heterogénea
+
+============================================================================
+  ANALISIS DE COMPONENTES FITNESS
+============================================================================
+
+-- Correlación Componentes vs Fitness Final --
+  A (vel*centrado):           0.9730
+  E (reward centrar):         0.8420
+  F (vel^2*obst^2):           0.9124
+  NetNormal (A+E+F):          0.9730
+
+-- Contribución Promedio --
+  A media / Fitness media:   1.4907
+  E media / Fitness media:   0.0002
+  F media / Fitness media:   0.0007
+
+-- Valores Medios por Componente --
+  A (vel*centrado):          2332.4478
+  E (reward centrar):        0.2550
+  F (vel^2*obst^2):          1.0540
+  NetNormal (suma):          2333.7569
+
+-- Top 3 Penalizaciones --
+  pen_m               : media = 429.5191
+  pen_v               : media = 197.2416
+  pen_lazy            : media = 58.9599
+
+-- Calidad de Registros Debug --
+  Registros totales:         50996
+  Spawn vacio:               0 (0.00%)
+  DeathReason vacio:         0 (0.00%)
+  TicksNormal > TicksTotal:  0 (0.00%)
+  Tiempo negativo:           0 (0.00%)
+  Fase TRAIN/TEST/UNK:       50996 / 0 / 0
+
+-- Deteccion de posible atasco en CEDA (TIME_FINISHED) --
+  TIME_FINISHED:            150/50996 (0.29%)
+  Umbrales dinamicos: Fit<=46706.41, Fit/s<=389.220, StopCtx>=25.00%, StopTicks>=2.0, YCtx>=2.0, SCtx>=0.0, TLCtx>=0.0, YShare>=34%, Time>=120.00s, YieldVal>=0.00s, StopVal>=0.00s
+  Scores: candidato>=3.20, vigilancia>=2.50
+  Candidatos fuertes:       5 (3.33% de TIME_FINISHED)
+  Candidatos vigilancia:    120 (80.00% de TIME_FINISHED)
+  Top candidatos (score compuesto):
+    Gen |              Car |           Spawn |        Fit |      t |     Fit/s |  StopCtx% |  YShare% |  SShare% |  TShare% |  StopTk |   YVal |   SVal |    GBr |  Score |   Sev
+  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    989 | BP_VehicleAI2503 |  BP_SpawnPoint4 |   25346.96 | 120.0s |   211.225 |    75.82% |  100.00% |    0.00% |    0.00% |  1627.0 |    1.9 |    0.0 |   0.00 |   7.10 |  alta
+    900 | BP_VehicleAI2458 | BP_SpawnPoint11 |   44716.50 | 120.0s |   372.638 |     0.14% |  100.00% |    0.00% |    0.00% |     3.0 |    0.0 |    0.0 |   0.00 |   5.50 |  alta
+    385 | BP_VehicleAI2195 | BP_SpawnPoint13 |   42990.67 | 120.0s |   358.256 |     0.09% |  100.00% |    0.00% |    0.00% |     2.0 |    0.0 |    0.0 |   0.00 |   5.30 |  alta
+    498 | BP_VehicleAI2253 | BP_SpawnPoint13 |   37292.93 | 120.0s |   310.774 |     0.09% |  100.00% |    0.00% |    0.00% |     2.0 |    0.0 |    0.0 |   0.00 |   5.30 |  alta
+    977 | BP_VehicleAI2497 | BP_SpawnPoint13 |   29455.65 | 120.0s |   245.464 |     0.09% |  100.00% |    0.00% |    0.00% |     2.0 |    0.0 |    0.0 |   0.00 |   5.30 |  alta
+
+  Spawns con mas sospecha de atasco en ceda (candidatos fuertes):
+            Spawn |    TF |  Cand |  Watch | Cand/TF% |     FitMed |  StopCtxP50 |    tP50 |  ScoreP50
+  ----------------------------------------------------------------------------------------------------
+  BP_SpawnPoint13 |    22 |     3 |     21 |    13.6% |   37292.93 |       0.09% |  120.0s |      5.30
+   BP_SpawnPoint4 |    12 |     1 |     11 |     8.3% |   25346.96 |      75.82% |  120.0s |      7.10
+  BP_SpawnPoint11 |     3 |     1 |      3 |    33.3% |   44716.50 |       0.14% |  120.0s |      5.50
+  BP_SpawnPoint14 |    25 |     0 |     21 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint16 |    14 |     0 |     12 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint15 |    18 |     0 |      9 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint19 |    10 |     0 |      9 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint17 |     8 |     0 |      8 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint20 |     5 |     0 |      5 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint48 |     5 |     0 |      5 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+   BP_SpawnPoint8 |     6 |     0 |      5 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint18 |     4 |     0 |      3 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint21 |     3 |     0 |      2 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint25 |     5 |     0 |      2 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+  BP_SpawnPoint12 |     1 |     0 |      1 |     0.0% |       0.00 |       0.00% |    0.0s |      0.00
+
+  Generaciones con mas sospecha de atasco en ceda:
+    Gen |    TF |  Cand |  Watch | Cand/TF% |  ScoreP50
+  -----------------------------------------------------
+    900 |     2 |     1 |      2 |    50.0% |      5.50
+    989 |     1 |     1 |      1 |   100.0% |      7.10
+    385 |     1 |     1 |      1 |   100.0% |      5.30
+    498 |     1 |     1 |      1 |   100.0% |      5.30
+    977 |     1 |     1 |      1 |   100.0% |      5.30
+    134 |     2 |     0 |      2 |     0.0% |      0.00
+    137 |     2 |     0 |      2 |     0.0% |      0.00
+    235 |     2 |     0 |      2 |     0.0% |      0.00
+    301 |     2 |     0 |      2 |     0.0% |      0.00
+    350 |     2 |     0 |      2 |     0.0% |      0.00
+    562 |     2 |     0 |      2 |     0.0% |      0.00
+    957 |     2 |     0 |      2 |     0.0% |      0.00
+     23 |     1 |     0 |      1 |     0.0% |      0.00
+     60 |     1 |     0 |      1 |     0.0% |      0.00
+     67 |     1 |     0 |      1 |     0.0% |      0.00
+
+-- Diagnostico Especifico LAZY --
+  LAZY total: 22870/50996 (44.85%)
+  Contexto stop/semaforo dentro de LAZY:
+    StopTicks==0: 22007/22870 (96.2%)
+    StopCtx <1% / 1-10% / >=10%: 22600/103/167
+  Top spawns con LAZY (count y ratio interno):
+            Spawn |  LazyN |  SpawnN | Lazy%Spawn |  Stop0% | Stop>=10% |  FitMedLazy | tMedLazy
+  ----------------------------------------------------------------------------------------------
+  BP_SpawnPoint42 |    599 |    1000 |      59.9% |   72.8% |     26.2% |     -150.11 |    5.00s
+  BP_SpawnPoint12 |    520 |     999 |      52.1% |   72.3% |      0.0% |     -150.25 |    5.00s
+  BP_SpawnPoint26 |    501 |    1000 |      50.1% |  100.0% |      0.0% |     -150.25 |    5.00s
+  BP_SpawnPoint29 |    488 |    1000 |      48.8% |   99.2% |      0.0% |     -150.21 |    5.00s
+  BP_SpawnPoint43 |    477 |    1000 |      47.7% |   91.6% |      0.0% |     -150.29 |    5.00s
+  BP_SpawnPoint28 |    474 |    1000 |      47.4% |   99.8% |      0.0% |     -150.29 |    5.00s
+  BP_SpawnPoint11 |    471 |    1000 |      47.1% |   91.3% |      0.0% |     -150.29 |    5.00s
+  BP_SpawnPoint20 |    469 |    1000 |      46.9% |   97.0% |      0.0% |     -150.29 |    5.00s
+  BP_SpawnPoint33 |    467 |    1000 |      46.7% |  100.0% |      0.0% |     -150.29 |    5.00s
+  BP_SpawnPoint44 |    465 |    1000 |      46.5% |   82.6% |      0.0% |     -150.28 |    5.00s
+  BP_SpawnPoint30 |    464 |    1000 |      46.4% |  100.0% |      0.0% |     -150.28 |    5.00s
+  BP_SpawnPoint48 |    462 |     999 |      46.2% |   95.7% |      0.0% |     -150.28 |    5.00s
+  BP_SpawnPoint41 |    460 |    1000 |      46.0% |   89.8% |      0.4% |     -150.30 |    5.00s
+  BP_SpawnPoint27 |    456 |    1000 |      45.6% |  100.0% |      0.0% |     -150.22 |    5.00s
+  BP_SpawnPoint45 |    456 |    1000 |      45.6% |   93.6% |      0.0% |     -150.29 |    5.00s
+
+  Gens con mas LAZY:
+    Gen    83:  38/51 (74.5%)
+    Gen    59:  36/51 (70.6%)
+    Gen   108:  36/51 (70.6%)
+    Gen   128:  36/51 (70.6%)
+    Gen   265:  36/51 (70.6%)
+    Gen   711:  36/51 (70.6%)
+    Gen   802:  36/51 (70.6%)
+    Gen   109:  35/51 (68.6%)
+    Gen   757:  35/51 (68.6%)
+    Gen    67:  34/51 (66.7%)
+    Gen   112:  34/51 (66.7%)
+    Gen   136:  34/51 (66.7%)
+    Gen   166:  34/51 (66.7%)
+    Gen   193:  34/51 (66.7%)
+    Gen   298:  34/51 (66.7%)
+
+  Comparativa LAZY vs no-LAZY:
+    Fit medio:       287.87 vs 2602.85
+    Tiempo medio:    6.75s vs 9.91s
+    PenMuerte media: 43.03 vs 743.79
+    PenVel media:    5.56 vs 353.10
+    PenLazy media:   130.48 vs 0.80
+    PenRev media:    0.00 vs 0.00
+    ThrGrace media:  0.00 vs 0.01
+    BrGrace media:   0.02 vs 0.00
+    NetNormal medio: 434.70 vs 3877.93
+
+-- Penalty_Lazy por Spawn (top dinamico) --
+            Spawn |      N |  LazyN |   Lazy% |  PenLzMed |  PenLzP90 |  Contrib%
+  -------------------------------------------------------------------------------
+  BP_SpawnPoint42 |   1000 |    599 |   59.9% |     74.30 |    149.82 |     2.47%
+  BP_SpawnPoint12 |    999 |    520 |   52.1% |     67.34 |    149.82 |     2.24%
+  BP_SpawnPoint43 |   1000 |    477 |   47.7% |     62.98 |    149.82 |     2.09%
+  BP_SpawnPoint28 |   1000 |    474 |   47.4% |     62.52 |    149.82 |     2.08%
+  BP_SpawnPoint26 |   1000 |    501 |   50.1% |     62.49 |    149.83 |     2.08%
+  BP_SpawnPoint20 |   1000 |    469 |   46.9% |     62.12 |    149.82 |     2.07%
+  BP_SpawnPoint41 |   1000 |    460 |   46.0% |     62.03 |    149.82 |     2.06%
+   BP_SpawnPoint3 |   1000 |    456 |   45.6% |     61.98 |    149.82 |     2.06%
+  BP_SpawnPoint30 |   1000 |    464 |   46.4% |     61.35 |    149.82 |     2.04%
+    BP_SpawnPoint |   1000 |    451 |   45.1% |     61.12 |    149.82 |     2.03%
+  BP_SpawnPoint33 |   1000 |    467 |   46.7% |     60.75 |    149.82 |     2.02%
+  BP_SpawnPoint11 |   1000 |    471 |   47.1% |     60.72 |    149.82 |     2.02%
+   BP_SpawnPoint6 |    999 |    442 |   44.2% |     60.68 |    149.82 |     2.02%
+  BP_SpawnPoint10 |    999 |    447 |   44.7% |     60.56 |    149.82 |     2.01%
+   BP_SpawnPoint2 |   1000 |    453 |   45.3% |     60.28 |    149.82 |     2.00%
+
+-- Penalty_Lazy por Razon de Muerte --
+                          DeathReason |      N |  PenLzMed |  PenLzP90 |  Contrib%
+  --------------------------------------------------------------------------------
+                                 LAZY |  22870 |    130.48 |    149.82 |    99.25%
+  COLLISION_WITH_BP_IntersectionBorder195 |      3 |     11.27 |     27.04 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder2 |      4 |      5.51 |     15.42 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder94 |      5 |      5.33 |     15.98 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder48 |      6 |      4.73 |     14.20 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder100 |      3 |      4.36 |     10.46 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder103 |      3 |      4.19 |     10.05 |     0.00%
+                    TRAFFIC_VIOLATION |      3 |      4.12 |      9.89 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder13 |      4 |      3.70 |     10.37 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder1 |     21 |      3.59 |     20.43 |     0.00%
+   COLLISION_WITH_NavModifierVolume39 |    135 |      2.72 |      8.66 |     0.01%
+  COLLISION_WITH_BP_IntersectionBorder206 |      4 |      2.60 |      7.29 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder74 |      7 |      2.13 |      5.95 |     0.00%
+  COLLISION_WITH_BP_IntersectionBorder6 |     66 |      1.70 |      0.00 |     0.00%
+   COLLISION_WITH_NavModifierVolume54 |    492 |      1.63 |      0.00 |     0.03%
+
+-- Muertes por Familia --
+     Familia |       N |     Pct |     FitMed |    tMed |      PenM |      PenV |     PenSS
+  -----------------------------------------------------------------------------------------
+   COLLISION |   26520 |  52.00% |    2190.22 |   8.63s |    766.49 |    342.64 |     36.29
+        LAZY |   22870 |  44.85% |     287.87 |   6.75s |     43.03 |      5.56 |     16.88
+   VIOLATION |    1456 |   2.86% |    5257.98 |  21.83s |    406.86 |    406.51 |   1673.38
+     TIMEOUT |     150 |   0.29% |   49782.26 | 120.00s |      0.00 |   1683.84 |   1228.49
+
+-- CarIndex / Genealogia --
+       Familia |       N |     Pct |  IdxMed |     FitMed |    FitMean |    tMed |    YldV |    StpV
+  --------------------------------------------------------------------------------------------------
+        LOADED |    1000 |   1.96% |     1.0 |    2486.63 |    5710.75 |  10.00s |   0.00s |   0.00s
+       SESSION |    1000 |   1.96% |     2.0 |    -150.17 |     144.38 |   5.00s |   0.00s |   0.00s
+    MUT_LOADED |   21996 |  43.13% |    13.5 |     426.09 |    3092.47 |   6.00s |   0.00s |   0.00s
+   MUT_SESSION |   22000 |  43.14% |    35.5 |    -150.19 |     209.84 |   5.00s |   0.00s |   0.00s
+        RANDOM |    5000 |   9.80% |    49.0 |    -150.12 |     259.57 |   5.00s |   0.00s |   0.00s
+
+-- Correlaciones con Fitness (Pearson) --
+  Acum_A                      : +0.9730
+  Acum_NetNormal              : +0.9730
+  Acum_F                      : +0.9124
+  Ticks_Normal                : +0.8575
+  Ticks_Total                 : +0.8558
+  Tiempo                      : +0.8537
+  Acum_E                      : +0.8420
+  Acum_ThrottlePos            : +0.7364
+  Acum_ABS_Steering           : +0.6300
+  Penalty_Velocidad           : +0.5356
+  Acum_CoastTime              : +0.4992
+  Media_B                     : +0.2843
+  CarIndex                    : -0.2602
+  Avg_ABS_Steering            : -0.2455
+  Penalty_Lazy                : -0.2400
+  Penalty_CorrectingWrong     : +0.2169
+  Acum_TargetSteering         : -0.2085
+  Acum_SteeringInput          : -0.2085
+  Penalty_Muerte              : +0.1129
+  Penalty_Creeping            : +0.0832
+  Acum_ThrottleDuringGraceTime: +0.0796
+  YieldValidationTime         : +0.0758
+  Ticks_StopContext_Yield     : +0.0758
+  StopValidationTime          : +0.0754
+  Ticks_StopContext_Stop      : +0.0748
+  Ticks_StopContext           : +0.0745
+  Acum_StopThrottle           : +0.0647
+  Acum_BrakeInput             : -0.0611
+  Penalty_SteeringWhileStopped: +0.0256
+  Acum_StopBrake              : +0.0252
+  Avg_SteeringInput           : -0.0168
+  Penalty_TrafficViolation    : -0.0124
+  Ticks_StopContext_TrafficLight: -0.0102
+  Penalty_Reverse             : -0.0069
+  Acum_BrakeDuringGraceTime   : -0.0002
+  SteeringGapAbs              : +0.0000
+  AvgAbs_TargetVsAppliedGap   : +0.0000
+
+-- Conduccion en Contexto Stop/Semaforo por Familia --
+     Familia |       N |  StopTicks |   StopTL |   StopSt |  StopYld |  StopBrake |    StopThr | StopBrake% |   Brake% |  GraceThr |   GraceBr |   YldVal |  StopVal |    StIn |   StTgt |   GapAbs |  SteerStop
+  --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+   COLLISION |   26520 |      2.065 |    0.127 |    0.817 |    1.122 |     0.0187 |     0.0273 |     40.70% |    2.18% |    0.0072 |    0.0008 |    0.030 |    0.040 |  -1.740 |  -1.740 |    0.000 |    36.2943
+        LAZY |   22870 |      2.434 |    2.354 |    0.000 |    0.080 |     0.0484 |     0.0025 |     95.14% |   81.29% |    0.0006 |    0.0182 |    0.000 |    0.000 |  -1.237 |  -1.237 |    0.000 |    16.8803
+   VIOLATION |    1456 |    134.332 |    0.203 |  129.575 |    4.555 |     1.0160 |     0.4377 |     69.89% |   17.25% |    0.0113 |    0.0014 |    0.199 |    6.483 |   1.338 |   1.338 |    0.000 |  1673.3813
+     TIMEOUT |     150 |     74.227 |    0.000 |   60.613 |   13.613 |     0.6063 |     0.0864 |     87.52% |    7.64% |    0.0400 |    0.0085 |    0.013 |    0.226 | -136.663 | -136.663 |    0.000 |  1228.4925
+
+-- Stop/Semaforo por Spawn (percentiles dinamicos) --
+            Spawn |     N |   Legal% |      StopCtx P10/P50/P90 |   StopBrake P50/P90 | Brake P50 |  GapStop%
+  -----------------------------------------------------------------------------------------------------------
+  BP_SpawnPoint51 |  1000 |   25.20% |   0.00/  0.00/ 28.77% |   92.00/ 100.00% |    12.83% |   +23.06pp
+  BP_SpawnPoint50 |  1000 |   22.80% |   0.00/  0.00/ 65.96% |   41.74/ 100.00% |    15.60% |   -27.20pp
+  BP_SpawnPoint32 |  1000 |   16.40% |   0.00/  0.00/ 43.10% |   93.90/ 100.00% |    12.46% |   +24.96pp
+   BP_SpawnPoint6 |   999 |   16.22% |   0.00/  0.00/ 34.94% |   85.03/ 100.00% |    10.46% |   +16.08pp
+  BP_SpawnPoint38 |  1000 |   15.90% |   0.00/  0.00/ 38.33% |   92.67/ 100.00% |    12.24% |   +23.72pp
+  BP_SpawnPoint36 |  1000 |   11.30% |   0.00/  0.00/ 25.75% |   12.88/  98.17% |     3.21% |   -56.06pp
+  BP_SpawnPoint40 |  1000 |    6.50% |   0.00/  0.79/ 11.92% |    0.00/  96.39% |     1.92% |   -68.94pp
+  BP_SpawnPoint31 |  1000 |    6.30% |   0.00/  0.00/ 14.09% |   33.95/ 100.00% |     1.95% |   -34.99pp
+    BP_SpawnPoint |  1000 |    6.10% |   0.00/  0.00/  0.00% |   85.96/ 100.00% |     2.70% |   +17.02pp
+   BP_SpawnPoint7 |  1000 |    4.00% |   0.00/  0.55/  1.93% |    0.00/  99.07% |     3.07% |   -68.94pp
+  BP_SpawnPoint13 |  1000 |    2.90% |   0.00/  0.00/  0.14% |    6.90/ 100.00% |     1.15% |   -62.05pp
+  BP_SpawnPoint34 |  1000 |    2.00% |   0.00/  0.00/  7.92% |    0.00/ 100.00% |     0.81% |   -68.94pp
+  BP_SpawnPoint11 |  1000 |    1.30% |   0.00/  0.00/  0.34% |    0.00/ 100.00% |     2.67% |   -68.94pp
+  BP_SpawnPoint45 |  1000 |    1.30% |   0.00/  0.00/  0.14% |    0.00/ 100.00% |     3.12% |   -68.94pp
+  BP_SpawnPoint14 |  1000 |    1.00% |   0.00/  0.00/  0.19% |    0.00/ 100.00% |     0.64% |   -68.94pp
+
+  Spawns con fallo legal alto (>= P75=4.53%):
+    BP_SpawnPoint51: legal=25.20% stopCtxP50=0.00% stopBrakeP50=92.00%
+    BP_SpawnPoint50: legal=22.80% stopCtxP50=0.00% stopBrakeP50=41.74%
+    BP_SpawnPoint32: legal=16.40% stopCtxP50=0.00% stopBrakeP50=93.90%
+    BP_SpawnPoint6: legal=16.22% stopCtxP50=0.00% stopBrakeP50=85.03%
+    BP_SpawnPoint38: legal=15.90% stopCtxP50=0.00% stopBrakeP50=92.67%
+    BP_SpawnPoint36: legal=11.30% stopCtxP50=0.00% stopBrakeP50=12.88%
+    BP_SpawnPoint40: legal=6.50% stopCtxP50=0.79% stopBrakeP50=0.00%
+    BP_SpawnPoint31: legal=6.30% stopCtxP50=0.00% stopBrakeP50=33.95%
+    BP_SpawnPoint: legal=6.10% stopCtxP50=0.00% stopBrakeP50=85.96%
+
+-- Spawns Mas Inestables (por desv. fitness) --
+            Spawn |     N |     FitMed |        Std |      CV% |       P10 |       P50 |       P90 |   Lazy%
+  ----------------------------------------------------------------------------------------------------------
+  BP_SpawnPoint14 |  1000 |    4349.91 |   12475.57 |   286.8% |   -150.43 |     65.28 |  12600.64 |   42.6%
+  BP_SpawnPoint16 |  1000 |    5270.36 |   12223.20 |   231.9% |   -150.43 |     80.05 |  22171.60 |   39.4%
+  BP_SpawnPoint15 |  1000 |    3436.91 |   11644.00 |   338.8% |   -150.44 |    -38.39 |   3771.98 |   45.4%
+  BP_SpawnPoint13 |  1000 |    3916.30 |   11267.33 |   287.7% |   -150.44 |     46.85 |   9674.44 |   44.8%
+  BP_SpawnPoint19 |  1000 |    3929.93 |    9359.56 |   238.2% |   -150.43 |    112.21 |  16283.80 |   42.1%
+  BP_SpawnPoint17 |  1000 |    2991.89 |    8165.42 |   272.9% |   -150.44 |    109.88 |  10658.82 |   42.5%
+   BP_SpawnPoint4 |  1000 |    2088.33 |    7898.29 |   378.2% |   -208.38 |    -51.59 |   2435.85 |   44.5%
+  BP_SpawnPoint20 |  1000 |    2691.44 |    7282.32 |   270.6% |   -150.43 |     12.75 |   9499.70 |   46.9%
+  BP_SpawnPoint18 |  1000 |    2083.69 |    7090.89 |   340.3% |   -150.54 |     46.67 |   5853.68 |   44.0%
+  BP_SpawnPoint21 |  1000 |    3343.09 |    7029.07 |   210.3% |   -150.43 |     67.85 |  13374.25 |   44.9%
+  BP_SpawnPoint30 |  1000 |    2927.74 |    6770.50 |   231.3% |   -150.42 |     57.84 |  16161.31 |   46.4%
+  BP_SpawnPoint10 |   999 |    2073.70 |    6255.64 |   301.7% |   -159.24 |    -59.66 |   5143.33 |   44.7%
+  BP_SpawnPoint25 |  1000 |    2072.73 |    6126.65 |   295.6% |   -150.44 |    111.06 |   7030.40 |   42.7%
+  BP_SpawnPoint11 |  1000 |    1797.10 |    6044.75 |   336.4% |   -150.43 |     60.60 |   5797.53 |   47.1%
+   BP_SpawnPoint8 |  1000 |    2052.74 |    5146.68 |   250.7% |   -150.44 |     43.63 |   8491.05 |   42.5%
+
+-- Top Razones y Spawns Dominantes --
+  LAZY                                     ->  22870 | BP_SpawnPoint42:599, BP_SpawnPoint12:520, BP_SpawnPoint26:501, BP_SpawnPoint29:488, BP_SpawnPoint43:477
+  COLLISION_WITH_NavModifierVolume8        ->   1400 | BP_SpawnPoint11:263, BP_SpawnPoint13:234, BP_SpawnPoint19:229, BP_SpawnPoint4:198, BP_SpawnPoint20:198
+  STOP_VIOLATION                           ->   1369 | BP_SpawnPoint51:252, BP_SpawnPoint50:228, BP_SpawnPoint32:164, BP_SpawnPoint6:162, BP_SpawnPoint38:159
+  COLLISION_WITH_NavModifierVolume14       ->    859 | BP_SpawnPoint37:255, BP_SpawnPoint31:244, BP_SpawnPoint46:228, BP_SpawnPoint49:128, BP_SpawnPoint42:4
+  COLLISION_WITH_NavModifierVolume13       ->    821 | BP_SpawnPoint32:217, BP_SpawnPoint21:198, BP_SpawnPoint:187, BP_SpawnPoint38:185, BP_SpawnPoint10:16
+  COLLISION_WITH_NavModifierVolume2        ->    768 | BP_SpawnPoint43:272, BP_SpawnPoint9:254, BP_SpawnPoint26:160, BP_SpawnPoint44:39, BP_SpawnPoint25:13
+  COLLISION_WITH_NavModifierVolume5        ->    694 | BP_SpawnPoint17:243, BP_SpawnPoint16:233, BP_SpawnPoint18:169, BP_SpawnPoint15:44, BP_SpawnPoint14:3
+  COLLISION_WITH_NavModifierVolume21       ->    692 | BP_SpawnPoint35:287, BP_SpawnPoint36:272, BP_SpawnPoint3:73, BP_SpawnPoint34:18, BP_SpawnPoint37:14
+  COLLISION_WITH_NavModifierVolume10       ->    673 | BP_SpawnPoint40:201, BP_SpawnPoint2:190, BP_SpawnPoint42:150, BP_SpawnPoint41:130, BP_SpawnPoint15:2
+  COLLISION_WITH_NavModifierVolume50       ->    647 | BP_SpawnPoint27:245, BP_SpawnPoint14:232, BP_SpawnPoint28:165, BP_SpawnPoint26:2, BP_SpawnPoint13:2
+
+-- Peores 15 Coches (raw fitness) --
+  Gen   921 | BP_SpawnPoint36 | fit= -28349.54 | t= 120s | death=TIMEFINISHED
+  Gen   812 | BP_SpawnPoint42 | fit= -26830.94 | t=  41s | death=LAZY
+  Gen   198 | BP_SpawnPoint36 | fit= -25580.15 | t=  75s | death=STOP_VIOLATION
+  Gen   554 | BP_SpawnPoint42 | fit= -21735.40 | t=  45s | death=LAZY
+  Gen   104 | BP_SpawnPoint42 | fit= -20238.52 | t=  41s | death=LAZY
+  Gen   275 | BP_SpawnPoint42 | fit= -18935.05 | t=  39s | death=LAZY
+  Gen   640 | BP_SpawnPoint42 | fit= -18260.60 | t=  52s | death=LAZY
+  Gen    69 | BP_SpawnPoint42 | fit= -14271.47 | t=  30s | death=LAZY
+  Gen   679 | BP_SpawnPoint42 | fit= -12605.60 | t=  40s | death=LAZY
+  Gen    56 | BP_SpawnPoint50 | fit= -11496.27 | t=  20s | death=STOP_VIOLATION
+  Gen    38 | BP_SpawnPoint50 | fit= -10599.49 | t=  72s | death=STOP_VIOLATION
+  Gen   617 | BP_SpawnPoint40 | fit= -10221.49 | t=  17s | death=COLLISION_WITH_NavModifierVolume34
+  Gen   118 | BP_SpawnPoint42 | fit=  -9793.52 | t=  25s | death=LAZY
+  Gen    84 | BP_SpawnPoint42 | fit=  -8979.19 | t=  37s | death=LAZY
+  Gen   558 | BP_SpawnPoint40 | fit=  -8453.12 | t=  35s | death=COLLISION_WITH_NavModifierVolume34
+
+-- Mejores 15 Coches (raw fitness) --
+  Gen   890 | BP_SpawnPoint13 | fit=  95080.67 | t= 120s | death=TIMEFINISHED
+  Gen   816 | BP_SpawnPoint14 | fit=  89019.62 | t= 120s | death=TIMEFINISHED
+  Gen   937 | BP_SpawnPoint11 | fit=  88360.91 | t= 120s | death=TIMEFINISHED
+  Gen   130 | BP_SpawnPoint14 | fit=  85923.24 | t= 120s | death=TIMEFINISHED
+  Gen   914 | BP_SpawnPoint15 | fit=  85686.70 | t= 120s | death=TIMEFINISHED
+  Gen   745 | BP_SpawnPoint15 | fit=  83389.75 | t= 120s | death=TIMEFINISHED
+  Gen   384 | BP_SpawnPoint16 | fit=  82666.97 | t= 120s | death=TIMEFINISHED
+  Gen   754 | BP_SpawnPoint16 | fit=  82543.15 | t= 120s | death=TIMEFINISHED
+  Gen   476 | BP_SpawnPoint14 | fit=  82350.11 | t= 120s | death=TIMEFINISHED
+  Gen   928 | BP_SpawnPoint14 | fit=  81113.12 | t=  91s | death=COLLISION_WITH_BP_IntersectionBorder6
+  Gen   134 | BP_SpawnPoint14 | fit=  81038.97 | t= 120s | death=TIMEFINISHED
+  Gen   893 | BP_SpawnPoint14 | fit=  80797.22 | t= 119s | death=STOP_VIOLATION
+  Gen   906 | BP_SpawnPoint15 | fit=  80714.21 | t= 120s | death=TIMEFINISHED
+  Gen   836 | BP_SpawnPoint15 | fit=  80444.62 | t= 120s | death=TIMEFINISHED
+  Gen   231 | BP_SpawnPoint16 | fit=  80252.04 | t= 120s | death=TIMEFINISHED
+
+============================================================================
+  RESUMEN RAPIDO (copiar para comparar)
+============================================================================
+  Modo:             train
+  Fecha:            06/05/2026
+  Generaciones:     1000
+  BestFit max:      95080.673911 (gen 890)
+  BestFit medio:    17038.472312
+  MeanFit max:      5211.799828 (gen 816)
+  MeanFit medio:    1554.724044
+  MeanFit P50:      1402.844429
+  %MeanFit < 0:     0.0%
+  TiempoMedio:      8.49s
+  Fitness raw med:  1564.66
+  NetNormal med:    2333.7569
+  PenMuerte med:    429.52
+  PenTraffic med:   2.69
+  PenCreeping med:  31.22
+  PenReverse med:   0.00
+  PenLazy med:      58.96
+  PenSteerStop med: 77.84
+  ThrGrace med:     0.00
+  BrGrace med:      0.01
+  YieldVal med:     0.02
+  StopVal med:      0.21
+  SteerIn med:      -1.82
+  SteerTgt med:     -1.82
+  SteerAbs/tick med:0.4093
+  SteerGap med:     0.0000
+  CarIdx familias:  LOADED=1000, SESSION=1000, MUT_LOADED=21996, MUT_SESSION=22000, RANDOM=5000
+  Brake share:      27.81%
+  Grace brake share:66.01%
+  Stop brake share: 68.94%
+  Stop ctx/tot tick:4.09%
+  Muerte #1:        LAZY (45%)
+  YieldTrap(TF):    5/150 (3.3%) | watch=120
+  Ult50 MeanFit:    2222.722781
+  Ult50 Tiempo:     9.60s
+
+============================================================================
+  COMPARATIVA ENTRE SESIONES (modo=train, ultimas 9)
+============================================================================
+                  Sesion |  Gens |     BestMax |     MeanMed |  TimeMed |   Neg% |   Succ% |    DbgN |   Lazy%
+  ------------------------------------------------------------------------------------------------------------
+  train_2026-04-28_14-19 |    27 |     8992.40 |     -284.94 |    4.47s |  81.5% |   0.00% |    1269 |  26.16%
+  train_2026-04-29_12-06 |  4775 |    49338.25 |     -220.02 |    4.46s |  82.4% |   0.00% |  229200 |  32.29%
+  train_2026-04-29_15-26 |   223 |    23727.85 |      257.92 |    5.73s |  20.2% |   0.00% |   11093 |  54.33%
+  train_2026-04-30_10-09 |  1880 |    29751.37 |      617.30 |    6.98s |   1.1% |   0.00% |   97760 |  65.42%
+  train_2026-04-30_12-54 |    70 |    20642.93 |      321.02 |    5.58s |   8.6% |   0.00% |    3570 |  50.25%
+  train_2026-05-04_11-28 |  3694 |    88442.51 |      821.10 |    6.80s |   0.8% |   0.00% |  188444 |  50.96%
+  train_2026-05-05_12-38 |  1500 |   123743.19 |     1198.06 |    7.16s |   0.4% |   0.00% |   76500 |  41.87%
+  train_2026-05-05_15-07 |    25 |    43781.15 |     1332.18 |    6.94s |   0.0% |   0.00% |    1277 |  35.79%
+  ACTUAL_2026-05-06_09-2 |  1000 |    95080.67 |     1554.72 |    8.49s |   0.0% |   0.00% |   50996 |  44.85%
+
+-- Delta vs sesion inmediatamente anterior --
+  Sesion previa: train_2026-05-05_15-07, Sesion actual: ACTUAL_2026-05-06_09-25
+  dBestMax: +51299.52
+  dMeanMed: +222.54
+  dTimeMed: +1.56s
+  dNegPct:  +0.00pp
+  dSuccPct: +0.00pp
+  dLazyPct: +9.06pp
+
+  Ranking actual entre 9 sesiones con summary:
+    BestMax : #2
+    MeanMed : #1
+    Neg%    : #2 (menor es mejor)
+
+============================================================================
+  Analisis completado: ENTRENAMIENTO
+  Summary: 1000 gens | Debug: 50996 registros
+  Mapeo generaciones: deshabilitado (no se guarda archivo).
+  Carpeta: c:\Users\SergioULE\Documents\Unreal Projects\cognitive-car\Saved\Logs\Analisis\train_2026-05-06_09-25
+============================================================================
