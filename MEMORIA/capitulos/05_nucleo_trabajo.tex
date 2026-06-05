@@ -23,6 +23,7 @@ El sistema se completa con elementos de tráfico que comunican contexto a los co
   \item exportar resúmenes de entrenamiento y test.
 \end{itemize}
 
+\Needspace{5\baselineskip}
 Una decisión relevante es la normalización por punto de aparición. La ciudad contiene zonas de dificultad desigual; comparar directamente fitness de spawns distintos puede favorecer rutas sencillas. Por ello se mantiene el mejor fitness observado por spawn y se selecciona el mejor coche para pesos atendiendo a una relación normalizada respecto a ese punto.
 
 \subsection{Controlador de IA y red neuronal}
@@ -47,6 +48,7 @@ donde \(x_i\) son las entradas normalizadas, \(h_j\) las neuronas ocultas e \(y_
 
 El controlador lanza once trazas en abanico sobre 180 grados. Cada sensor devuelve una distancia normalizada hasta el primer elemento relevante. Los bordes de intersección se tratan con lógica específica: solo deben considerarse obstáculos cuando no corresponden a la decisión de dirección o trigger actual. Esta solución evita que el vehículo interprete como barrera una zona por la que realmente debe circular al completar una maniobra.
 
+\Needspace{6\baselineskip}
 Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos.
 
 \subsection{Sistema de fitness}
@@ -72,6 +74,7 @@ El sistema de semáforos se compone de \texttt{BP\_IntersectionController} y \te
 
 Cuando un vehículo entra en la zona, el semáforo comunica estado, línea de parada y distancia. Si el semáforo está en rojo o ámbar restrictivo, el controlador activa contexto de parada. Al salir de la zona, se comprueba si el vehículo atravesó la línea a una velocidad legal. El sistema aprende umbrales de velocidad legal a partir de muestras previas, evitando depender siempre de un valor fijo.
 
+\Needspace{10\baselineskip}
 \subsection{Stop y ceda el paso}
 
 Las señales \texttt{BP\_Sign\_Stop} y \texttt{BP\_Sign\_Yield} amplían la interacción normativa. En stop se exige detención suficiente dentro de una ventana dinámica antes de la línea, espera mínima y comprobación de cruce libre. Si se cumple, se aplica bonus y se libera el vehículo; si no, se aplica penalización y muerte por \texttt{STOP\_VIOLATION}. En ceda se monitoriza velocidad, aproximación y disponibilidad de la zona de cruce, con penalización por \texttt{YIELD\_VIOLATION} y bonus al completar correctamente.
