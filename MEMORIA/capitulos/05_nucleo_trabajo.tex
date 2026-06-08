@@ -2,7 +2,7 @@
 
 \section{Descripción general de la solución}
 
-La solución final se estructura como un sistema de agentes autónomos entrenados dentro del simulador. Cada vehículo dispone de un controlador de IA que percibe el entorno, ejecuta una red neuronal, aplica acciones al sistema físico y registra métricas de comportamiento. Por encima de los vehículos existe un gestor evolutivo que crea poblaciones, asigna pesos, evalúa resultados, selecciona los mejores individuos y guarda modelos.
+La solución actual se estructura como un sistema de agentes autónomos entrenados dentro del simulador. Cada vehículo dispone de un controlador de IA que percibe el entorno, ejecuta una red neuronal, aplica acciones al sistema físico y registra métricas de comportamiento. Por encima de los vehículos existe un gestor evolutivo que crea poblaciones, asigna pesos, evalúa resultados, selecciona los mejores individuos y guarda modelos.
 
 El sistema se completa con elementos de tráfico que comunican contexto a los controladores: semáforos, señales de stop, señales de ceda y zonas de cruce. Estos elementos no son meros objetos visuales, sino actores con lógica propia que activan zonas de detección, informan al vehículo de líneas de parada, controlan estados y aplican penalizaciones o bonus según el comportamiento observado.
 
@@ -34,26 +34,31 @@ Para evitar saltos bruscos, el controlador dispone de variables de suavizado com
 
 La inferencia se calcula manualmente sobre arrays de pesos:
 
-\[
+\begin{equation}
+\label{eq:capa-oculta}
 h_j = \tanh\left(\sum_i w^{IH}_{j,i} x_i\right)
-\]
+\end{equation}
 
-\[
+\begin{equation}
+\label{eq:capa-salida}
 y_k = \tanh\left(\sum_j w^{HO}_{k,j} h_j\right)
-\]
+\end{equation}
 
-donde \(x_i\) son las entradas normalizadas, \(h_j\) las neuronas ocultas e \(y_k\) las dos salidas de control. El sistema incluye guardas para detectar cerebros inválidos: número incorrecto de entradas, pesos ausentes o dimensiones incoherentes. Si el error se repite, el coche se elimina con razón de muerte \texttt{INVALID\_BRAIN}.
+La ecuación~\ref{eq:capa-oculta} calcula las activaciones ocultas y la ecuación~\ref{eq:capa-salida} obtiene las dos salidas de control, donde \(x_i\) son las entradas normalizadas, \(h_j\) las neuronas ocultas e \(y_k\) las salidas. El sistema incluye guardas para detectar cerebros inválidos: número incorrecto de entradas, pesos ausentes o dimensiones incoherentes. La dimensión de entrada esperada se calcula como la longitud de los pesos de entrada dividida por el número de neuronas ocultas, en lugar de compararse con una constante. Si el error se repite cinco veces, el coche se elimina con razón de muerte \texttt{INVALID\_BRAIN}.
 
 \subsection{Percepción mediante sensores}
 
-El controlador lanza once trazas en abanico sobre 180 grados. Cada sensor devuelve una distancia normalizada hasta el primer elemento relevante. Los bordes de intersección se tratan con lógica específica: solo deben considerarse obstáculos cuando no corresponden a la decisión de dirección o trigger actual. Esta solución evita que el vehículo interprete como barrera una zona por la que realmente debe circular al completar una maniobra.
+El controlador lanza once trazas en abanico sobre 180 grados. Cada sensor devuelve una distancia normalizada hasta el primer elemento relevante. Los bordes de intersección se tratan con lógica específica: un borde virtual solo interviene en la lectura cuando su intención de dirección y su trigger coinciden con la decisión vigente del vehículo. Los bordes asociados a otras trayectorias se ignoran, de modo que una misma intersección puede contener límites sensoriales distintos para cada maniobra.
+
+\Needspace{6\baselineskip}
+La decisión se modela mediante la enumeración \texttt{E\_DirectionIntent}, con hasta cuatro alternativas de salida. Al entrar en un \texttt{BP\_IntersectionTrigger}, el vehículo selecciona aleatoriamente una de las opciones habilitadas para el modo de entrenamiento o de test. El controlador conserva tanto la dirección elegida como el trigger que la originó. Cada \texttt{BP\_IntersectionBorders} declara la pareja dirección--trigger a la que pertenece, lo que permite que los rayos perciban únicamente los límites que delimitan la trayectoria seleccionada.
 
 \Needspace{6\baselineskip}
 Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos.
 
 \subsection{Sistema de fitness}
 
-La función de fitness se ha convertido en uno de los elementos centrales del proyecto. Su objetivo no es solo premiar distancia o velocidad, sino guiar comportamientos compatibles con conducción urbana. La versión final documentada incluye:
+La función de fitness se ha convertido en uno de los elementos centrales del proyecto. Su objetivo no es solo premiar distancia o velocidad, sino guiar comportamientos compatibles con conducción urbana. La versión documentada actualmente incluye:
 
 \begin{itemize}[leftmargin=*]
   \item recompensa por avance, velocidad útil y centrado respecto a sensores laterales;
