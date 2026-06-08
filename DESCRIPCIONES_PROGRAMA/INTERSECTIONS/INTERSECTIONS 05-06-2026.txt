@@ -1,0 +1,827 @@
+
+E_TrafficLightState
+
+Enumerators:
+
+Red
+
+Green
+
+Amber
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+
+BP_IntersectionController
+
+VariablesGlobles:
+
+Lights_NS array de BP_TrafficLight editable
+
+Lights_EW array de BP_TrafficLight editable
+
+Time_Green float 20.0 editable
+
+Time_Amber float 3.0 editable
+
+Time_AllRed float 3.0 editable
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+
+EventGraph:
+
+
+
+EventBeginPlay: lo primero hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego llama al customevent PhaseNSGreen.
+
+
+
+CustomsEvents: 
+
+
+- Phase_NS_Green: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=green), luego hay un delay cuya duration=Time_green. luego llama al customevent PhaseNSAmber.
+
+
+
+- Phase_NS_Amber: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=amber), luego hay un delay cuya duration=Time_amber. luego llama al customevent PhaseAllRed1.
+
+
+
+- Phase_AllRed_1: hay un foreachloop de LightsNS, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego hay un delay cuya duration=Timeallred. luego llama al customevent PhaseEWGreen.
+ 
+
+
+- Phase_EW_Green: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=green), luego hay un delay cuya duration=Time_green. luego llama al customevent PhaseEWAmber.
+
+
+
+- Phase_EW_Amber: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=amber), luego hay un delay cuya duration=Time_amber. luego llama al customevent PhaseAllRed2.
+
+
+
+- Phase_AllRed_2: hay un foreachloop de LightsEW, cuyo loop body es: SetLightState(target=arrayelement, newstate=red), luego hay un delay cuya duration=Timeallred. luego llama al customevent PhaseNSGreen.
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BI_TrafficControl:
+
+
+functions: 
+
+- TrafficStop
+
+- TrafficGo
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_TrafficLight:
+
+StaticMesh:
+
+StopLinePosition arrow justo debajo del semáforo
+
+SensorZone boxcollision que cubre toda la zona de parada del semaforo
+
+
+
+variables globales:
+
+DMI_Roja MaterialIntanceDynamic
+
+DMI_Verde MaterialIntanceDynamic
+
+DMI_Amarilla MaterialIntanceDynamic 
+ 
+bIsRedLight boolean true 
+
+CurrentState E_TrafficLightState
+
+ColorState float 0.0
+
+ViolationPenaltyMultiplier float 3.0
+
+LegalTrafficLightsSpeeds array de floats
+
+MinSamplesForLearnedThreshold integer 10
+
+MaxStoredSamples integer 100
+
+LearnedThreshold float 0.0
+
+
+
+-----------------------------------------------------------------------------------------
+
+EventGraph:
+
+
+
+- OnComponentBeginOverlap(SensorZone): llama a UpdateTrafficZone
+
+
+
+- OnComponentEndOverlap(SensorZone): primero un isvalid? de OtherActor, luego si es válido, casttobpvehicleai2 del otheractor. Del getaicontroller del cast se hace un casttobpaicontroller. Luego, llama a GetLearnedTrafficLightSpeedThreshold con el mycontrolledcar del cast, con el output, se setea LearnedThreshold.
+
+Luego hay un Branch, cuya condición es TrafficLigthState del aicontroller <= 0.5. Si es false, setea AproachSpeed del MycontrolledCar del aicontroller como 0.0, luego del cast se setea IsTrafficLightActive del aicontroller en false, TrafficLightState del aicontroller como 1.0 y setea del cast del aicontroller TrafficControlType como 3 y ForceStop como False.
+
+Si es true, pasa a otro Branch cuya condition es (ABS(GetForwardspeed(MyControlledCardelaicontroller)) > LearnedThreshold).
+
+Si es True, llama a ApplyTrafficLightDeathPenalty con MyControlledCar
+
+Si el Branch es false, llama a AddLegalSample con SampleSpeed=ABS(GetForwardspeed(MyControlledCardelaicontroller)), y luego limpia el contexto de parada (AproachSpeed como 0.0, IsTrafficLightActive como false, TrafficLightState como 1.0, TrafficControlType como 3 y ForceStop como False). 
+
+
+
+
+- UpdateTrafficZone: foreachloop de Getoverlappingactors(target=SensorZone, class=bpvehicleai2), cuyo loop body es: primero un isvalid? de arrayelement, luego si es válido, casttobpaicontroller con el getaicontroller del arrayelement. Del cast, se setea StopLineForwardVector como GetForwardVector(StopLinePosition), se setea StopTargetLocation como GetWorldposition(StopLinePosition), se setean del cast IsTrafficLightActive como true, se setea TrafficLightState como ColorState y SensorEntryDistance como Distance(WorldLocation(StopLinePosition), GetActorLocation(MyControllerdCar del aicontroller)). 
+
+Luego hay un Branch cuya condition es ColorState<=0.5. si es false, se setea setea AproachSpeeddelmycontrolledcar como 0.0, y setea del castaicontroller TrafficControlType como 3, ForceStop como False, bIsTrafficLightActive como False y TrafficLightState como 1.0. 
+
+Si el Branch es true, se pasa a otro branch cuya condition es AproachSpeeddelmycontrolledcar == 0.0. Si es false vacío, si es true, se setea TrafficControlType del castaicontroller como 0, setea AproachSpeed del MyControlledCar del castaicontroller como GetForwardSpeed del mycontrolledCar.
+
+
+- SetLightState:
+
+input:
+
+newstate E_TrafficLightState 
+
+flujo: 
+
+setea CurrentState como Newstate. luego hay un Switch on E_TrafficLightState: 
+
+- si es red: primero setscalarparametervalue(target=DMI_Roja, parametervalue=brillo, value=50.0), luego setscalarparametervalue(target=DMI_Amarilla, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Verde, parametervalue=brillo, value=0.0), luego setea ColorState como 0.0 y llama a UpdateTrafficZone.
+
+- si es green: primero setscalarparametervalue(target=DMI_Roja, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Amarilla, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Verde, parametervalue=brillo, value=50.0), luego setea ColorState como 1.0 y llama a UpdateTrafficZone.
+
+- si es amber: primero setscalarparametervalue(target=DMI_Roja, parametervalue=brillo, value=0.0), luego setscalarparametervalue(target=DMI_Amarilla, parametervalue=brillo, value=50.0), luego setscalarparametervalue(target=DMI_Verde, parametervalue=brillo, value=0.0), luego setea ColorState como 0.5 y llama a UpdateTrafficZone.
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+función de BP_TrafficLight
+
+ApplyTrafficLightDeathPenalty
+
+
+inputs:
+
+TargetCar BP_VehicleAI2
+
+
+variables locales:
+
+DeltaTrafficLightDeathPenalty float
+
+
+flujo:
+
+Lo primero setea DeltaTrafficLightDeathPenalty como (((Clamp(value=(ABS(forwardspeed)/maxspeed),min=0.0,max=1.0))^2) x maxspeed x ViolationPenaltyMultiplier), luego setea Fitness del TargetCar como Fitness - DeltaTrafficLightDeathPenalty, hace un Set DebugDeathPenalty del TargetCar como DeltaTrafficLightDeathPenalty, y llama a la función KillCar del TargetCar cuya razón de muerte es "TRAFFIC_VIOLATION".
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------
+
+función de BP_TrafficLight
+
+AddLegalSample:
+
+
+inputs:
+
+SampleSpeed float
+
+
+flujo:
+
+lo primero hace un addarray de LegalTrafficLightsSpeeds con SampleSpeed. Luego, hay un branch cuya condition es Length(LegalTrafficLightsSpeeds)>MaxStoreSamples. Si false vacío, si es true, hace un RemoveIndex0(LegalTrafficLightsSpeeds).
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+
+función de BP_TrafficLight
+
+GetLearnedTrafficLightSpeedThreshold:
+
+
+inputs:
+
+TargetCar BP_VehicleAi2
+
+
+outputs:
+
+Threshold float
+
+
+variables locales:
+
+TempSum float
+
+
+
+flujo:
+
+lo primero hay un Branch cuya condition es Length(LegalTrafficLightsSpeeds)>=MinSamplesForLearnedThreshold. Si es false, hace un ReturnNode con Threshold=(Maxspeeddelaicontroller*0.005). 
+
+Si es true, setea TempSum como 0.0, luego hace un foreachloop de LegalTrafficLightsSpeeds, cuyo loop body es un seteo de TempSum como TempSum + arrayelement. Al completarse el loop, hace un ReturnNode con Threshold=SafeDivide(TempSum, Length(LegalTrafficLightsSpeeds)).
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_Sign_Stop:
+
+DefaultSceenRoot:
+…
+SensorZone boxcollision que cubre toda la zona de parada del stop
+
+StopLine arrow justo al final del stop
+
+
+
+
+variables globales:
+
+CarsAlivedInCrossingZones integer 0
+
+ViolationPenaltyMultiplier float 2.0
+
+CrossingZones array de BP_CrossingZone editable
+
+MinSamplesForLearnedThreshold integer 10
+
+MaxStoredSamples integer 100
+
+LearnedThreshold float 0.0
+
+LearnedMinTime float 0.0
+
+LegalStopsSamples array de S_StopsSample
+
+PendingWaitCars array de BP_VehicleAI2
+
+bWaitTimerActive boolean false
+
+PendingCrossCheckCars array de BP_VehicleAI2
+
+LocalWaitQueue array de BP_VehicleAI2
+
+bCrossCheckTimerActive boolean false
+
+LocalCrossQueue array de BP_VehicleAI2
+
+
+
+EventGraph:
+
+
+- OnComponentBeginOverlap(SensorZone): primero un isvalid? de OtherActor, luego si es válido, casttoBpVehicleAi2 de otheractor. del cast se coge aicontroller y se hace un casttobpaicontroller. Del cast se setea TrafficControlType como 1, setea StopTargetLocation como GetWorldposition(StopLine), se setea StopLineForwardVector como GetForwardVector(StopLine), se setea ForceStop como True, se setea StoppedCorrectly del casttoaicontroller como false, setea AproachSpeed del MyControlledCar del aicontroller como GetForwardSpeed del mycontrolledCar, se setea SensorEntryDistance del aicontroller como Distance(WorldLocation(StopLine), GetActorLocation(MyControllerdCar del aicontroller)), setea CurrentStopWaitTime del MyControlledCar como 0.0, setea StopValidationTime del MyControlledCar como 0.0 y se llama a WaitforFullStop con el targetCar como el casttoBpVehicleAi2.
+
+
+
+- OnComponentEndOverlap(SensorZone): primero un isvalid? de OtherActor, luego si es válido, casttobpvehicleai2 del otheractor. Del getaicontroller del cast se hace un casttobpaicontroller. luego un Branch cuya condición es StoppedCorrectly del aicontroller. Si es True, setea AproachSpeed del MycontrolledCar del aicontroller como 0.0, luego del cast se setea forcestop como false, y por último hace un removeitem de PendingWaitCars(MyControlledCar). Si es false, llama a ApplyStopDeathPenalty con MyControlledCar.
+
+
+
+- WaitForFullStop: 
+
+inputs: 
+
+TargetCar BP_VehicleAi2
+
+lo primero hay un isvalid? de TargetCar. si es valid, pasa a un Branch cuya condition es IsDead del TargetCar. Si es true vacío, si es false sigue el flujo.
+
+Luego se llama a GetLearnedStopSpeedThreshold con TargetCar, del output se setea LearnedThreshold. Luego se llama a GetLearnedStopMinTime, del output se setea LearnedMinTime. Luego se setea StopValidationTime de targetcar como StopValidationTime + 0.1.
+
+Después hay un Branch cuya condition es ABS(ForwardSpeed)<LearnedThreshold, si es false setea CurrentStopWaitTime como 0.0 y sigue el flujo, si es true setea CurrentStopWaitTime como CurrentStopWaitTime + 0.1.
+
+Después, tras ambos caminos, llama a ComputeStopValidationData, luego, hay un Branch (llamémosle A) cuya condition es (IsStoppedEnough AND IsInsideStopWindow AND HasWaitedEnough).
+
+Si es false, pasa a otro Branch (llamémosle B), cuya condition es ShouldTimeoutAsBadStop. 
+
+Si el branch B es false, hace un addunique de PendingWaitCars, al que se le añade TargetCar, luego hay un Branch cuya condition es NOT(WaitTimerActive). Si es false vacío, si es true, setea WaitTimerActive como True, luego hay un SetTimerByEvent(time=0.1, looping=false) que está conectado con el hilo rojo al customevent Recheck_WaitForStop.
+
+Si el branch B es true, llama a ApplyStopDeathPenalty con TargetCar.
+
+si el Branch A es true, setea StopValidationTime de TargetCar como 0.0, llama a AddLegalSample con ABS(ForwardSpeed) y CurrentStopWaitTime. Luego, con el aicontorller de Targetcar se setea StoppedCorrectly como true, hace un ++ de StopCrossingCheckIDdeTargetCar y luego llama a CheckCrossingClear con TargetCar y StopCrossingCheckIDdeTargetCar. 
+
+
+
+- CheckCrossingClear:
+
+inputs: 
+
+TargetCar BP_VehicleAi2
+
+RequestID integer
+
+lo primero, hay un isvalid? de TargetCar, si es valido, hay un Branch cuya condition es IsDead del TargetCar, si es true vacío, si es false, pasa a un Branch cuya condition es RequestID != StopCrossingCheckIDdeTargetCar, si es true vacío, si es false, setea CarsAlivedInCrossingZone como 0. 
+
+Luego hay un foreachloop de CrossingZones, cuyo loop body es: primero un isvalid? de arrayelement, luego hay un foreachloop de GetOverlappingActorsarrayelementZone(BP_VehicleAI2), cuyo loopbody es: primero un casttoBPvehicleAI2, luego un Branch cuya condition es IsDead(cast) OR (arrayelement == TargetCar) OR (StoppedCorrectlydelAIControllerdearrayelement AND ForceStopdelAIControllerdearrayelement). Si es true vacío, si es false hace un ++ de CarsAlivedInCrossingZones. 
+
+Cuando se completa el loop exterior, hay un Branch cuya condition es CarsAlivedInCrossingZones>0, si es true, hace un addunique de PendingCrossCheckCars con TargetCar, luego hay un Branch cuya condition es NOT(CrossCheckTimerActive), si es true setea bCrossCheckTimerActive como true, y luego hace un SetTimerByEvent(time=0.5, looping=false) que está conectado con el hilo rojo al evento Recheck_CrossingClear.
+ 
+Si es false, primero hay un isvalid? de target car, y luego si es valido, pasa a un Branch cuya condition es RequestID == StopCrossingCheckIDdeTargetCar, si es false vacío, si es true, setea TrafficControlType del aicontroller como 3, llama a ApplyStopCompletionBonus con MycontrolledCar, setea AproachSpeed del MycontrolledCar del aicontroller como 0.0, luego, se setea forcestop del aicontroller como false. Por último hace un RemoveItem con TargetCar de PendingWaitCars y PendingCrossCheckCars.
+
+
+
+- Recheck_WaitForStop: setea WaitTimerActive como false, luego setea LocalWaitQueue como PendingWaitCars, hace un cleararray de PendingWaitCars, luego hay un ForEachLoop de LocalWaitQueue, cuyo loop body es: primero un isvalid? de arrayelement, luego si es válido, un branch cuya condition es IsDead del arrayelement. Si es true vacío, si es false llama a WaitForFullStop con arrayelement.
+
+
+
+- Recheck_CrossingClear: setea CrossCheckTimerActive como false, luego setea LocalCrossQueue como PendingCrossCheckCars, hace un cleararray de PendingCrossCheckCars, luego hay un ForEachLoop de LocalCrossQueue, cuyo loop body es: primero un isvalid? de arrayelement, luego si es válido, un branch cuya condition es IsDead del arrayelement. Si es true vacío, si es false llama a CheckCrossingClear con TargetCar=arrayelement y RequestID=StopCrossingCheckIDdelarrayelement.
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+función de BP_Sign_Stop
+
+
+ApplyStopDeathPenalty:
+
+
+inputs:
+
+TargetCar BP_VehicleAI2
+
+
+variables locales:
+
+DeltaStopDeathPenalty float
+
+SignedDistance float
+
+
+flujo:
+
+lo primero, setea SignedDistance como dot((GetActorLocation(TargetCar) - StopTargetLocationdelAIControllerdeTarget), StopLineForwardVectordelAIControllerdeTarget).
+
+luego setea DeltaStopDeathPenalty como (((Clamp(value=(ABS(forwardspeed)/maxspeed),min=0.0,max=1.0))^2) x maxspeed x ViolationPenaltyMultiplier) + (SafeDivide(MAX(0.0, SignedDistance), MAX(SensorEntryDistancedelAIControllerdeTarget, 1.0)) x MaxSpeed x ViolationPenaltyMultiplier). 
+
+luego setea Fitness como Fitness - DeltaStopDeathPenalty, hace un Set DebugDeathPenalty de TargetCar como DeltaStopDeathPenalty, y llama a la función KillCar del TargetCar cuya razón de muerte es "STOP_VIOLATION".
+
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+función de BP_Sign_Stop
+
+
+ApplyStopCompletionBonus:
+
+
+
+inputs:
+
+TargetCar BP_VehicleAI2
+
+
+variables locales:
+
+DeltaStopCompletionBonus float
+
+
+
+flujo:
+
+lo primero, setea DeltaStopCompletionBonus como ClampFloat((AproachSpeed(TargetCar) / MaxSpeed(aicontroller)), 0.0, 1.0)^2 × MaxSpeed(aicontroller) × ViolationPenaltyMultiplier × LearnedMinTime.
+
+luego setea Fitness del TargetCar como Fitness + DeltaStopCompletionBonus.
+
+luego setea Debug_Acum_StopCompletionBonus de TargetCar como Debug_Acum_StopCompletionBonus + DeltaStopCompletionBonus.
+
+por ultimo hace un ++ de Debug_NumStopsCompleted de TargetCar.
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+función de BP_Sign_Stop
+
+
+AddLegalSample:
+
+inputs:
+
+SampleSpeed float
+
+SampleTime float
+
+
+flujo:
+
+lo primero hace un addarray de LegalStopSamples con makeSStopSample(Speed=SampleSpeed, Time=SampleTime). Luego, hay un branch cuya condition es Length(LegalStopSamples)>MaxStoreSamples. Si false vacío, si es true, hace un RemoveIndex0(LegalStopSamples). 
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+función de BP_Sign_Stop
+
+
+GetLearnedStopSpeedThreshold:
+
+inputs:
+
+TargetCar BP_VehicleAi2
+
+
+outputs:
+
+Threshold float
+
+
+variables locales:
+
+TempSum float
+
+
+
+flujo:
+
+lo primero hay un Branch cuya condition es Length(LegalStopSamples)>=MinSamplesForLearnedThreshold. Si es false, hace un ReturnNode con Threshold=(Maxspeeddelaicontroller*0.005). 
+
+Si es true, setea TempSum como 0.0, luego hace un foreachloop de LegalStopSamples, cuyo loop body es un seteo de TempSum como TempSum + breakSStopSample.Speed(arrayelement). Al completarse el loop, hace un ReturnNode con Threshold=SafeDivide(TempSum, Length(LegalStopSamples)).
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+función de BP_Sign_Stop
+
+
+GetLearnedStopMinTime:
+
+
+outputs:
+
+MinTime float
+
+
+variables locales:
+
+TempSum float
+
+
+
+flujo:
+
+lo primero hay un Branch cuya condition es Length(LegalStopSamples)>=MinSamplesForLearnedThreshold. Si es false, hace un ReturnNode con MinTime=3.0. 
+
+Si es true, setea TempSum como 0.0, luego hace un foreachloop de LegalStopSamples, cuyo loop body es un seteo de TempSum como TempSum + breakSStopSample.Time(arrayelement). Al completarse el loop, hace un ReturnNode con MinTime=SafeDivide(TempSum, Length(LegalStopSamples)).
+
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
+función de BP_Sign_Stop
+
+
+ComputeStopValidationData:
+
+
+
+variables locales:
+
+ForwardSpeedAbs Float
+
+SignedDistanceToStopLine Float
+
+TravelTimeToStopLine Float
+
+DynamicStopWindowRatio Float
+
+AllowedStopBeforeLine Float
+
+
+inputs:
+
+TargetCar BP_VehicleAi2
+
+
+
+outputs:
+
+IsStoppedEnough Boolean
+
+IsInsideStopWindow Boolean
+
+HasWaitedEnough Boolean
+
+ShouldTimeoutAsBadStop Boolean
+
+
+
+flujo:
+
+
+se setea ForwardSpeedAbs como ABS(GetForwardSpeed(TargetCar)).
+
+luego se setea SignedDistanceToStopLine como dot((GetActorLocation(TargetCar) - StopTargetLocationdelAIControllerdeTarget), StopLineForwardVectordelAIControllerdeTarget).
+
+luego se setea TravelTimeToStopLine como SafeDivide(SensorEntryDistancedelAIControllerdeTarget, MAX(ABS(AproachSpeeddelTargetCar), LearnedThreshold)).
+
+luego se setea DynamicStopWindowRatio como SafeDivide(TravelTimeToStopLine, (LearnedMinTime + TravelTimeToStopLine)).
+
+luego se setea AllowedStopBeforeLine como SensorEntryDistancedelAIControllerdeTarget * DynamicStopWindowRatio
+
+finalmente está el ReturnNode(IsStoppedEnough = (ForwardSpeedAbs < LearnedThreshold), IsInsideStopWindow = (SignedDistanceToStopLine <= AllowedStopBeforeLine), HasWaitedEnough = (CurrentStopWaitTimedelTargetCar >= LearnedMinTime), ShouldTimeoutAsBadStop = (StopValidationTimedelTargetCar > (LearnedMinTime + TravelTimeToStopLine)) AND (ForwardSpeedAbs < LearnedThreshold) AND NOT(SignedDistanceToStopLine <= AllowedStopBeforeLine))
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_Sign_Yield:
+
+DefaultSceenRoot:
+…
+SensorZone boxcollision que cubre toda la zona de parada del ceda
+
+YieldLine arrow justo al final del ceda
+ 
+
+
+
+
+variables:
+
+CarsAlivedCrossingZone integer 0
+
+ViolationPenaltyMultiplier float 1.5
+
+CrossingZones array de BP_CrossingZone editable
+
+PendingMonitorCars array de BP_VehicleAI2
+
+PendingYieldCheckCars array de BP_VehicleAI2
+
+bMonitorTimerActive boolean false
+
+LocalMonitorQueue array de BP_VehicleAI2
+
+bYieldCheckTimerActive boolean false
+
+LocalYieldQueue array de BP_VehicleAI2
+
+
+
+EventGraph:
+
+
+- OnComponentBeginOverlap(SensorZone): primero un isvalid? de OtherActor, luego si es válido, casttoBpVehicleAi2 de otheractor. del cast se coge aicontroller y se hace un casttobpaicontroller. Del cast se setea TrafficControlType como 2, se setea StopLineForwardVector como GetForwardVector(YieldLine), se setea StopTargetLocation como GetWorldposition(YieldLine), se setea ForceStop como True, se setea StoppedCorrectly  del castdeaicontroller como false, se setea SensorEntryDistance del aicontroller como Distance(WorldLocation(YieldLine), GetActorLocation(MyControllerdCar del aicontroller)), setea AproachSpeed del MyControlledCar del aicontroller como GetForwardSpeeddelmycontrolledCar, y se llama a MonitorSpeed con el targetCar como el casttoBpVehicleAi2.
+
+
+
+- OnComponentEndOverlap(SensorZone): primero un isvalid? de OtherActor, luego si es válido, casttobpvehicleai2 del otheractor. Del getaicontroller del cast se hace un casttobpaicontroller. luego un Branch cuya condición es StoppedCorrectly del aicontroller. Si es True, del cast se setea TrafficControlType como 3, setea AproachSpeed del MycontrolledCar del aicontroller como 0.0, del cast aicontroller se setea forcestop como false y por último hace un removeitem de PendingMonitorCars(MyControlledCar). Si es false, llama a ApplyYieldDeathPenalty con MyControlledCar
+
+
+
+MonitorSpeed: 
+
+inputs: 
+
+TargetCar BP_VehicleAi2
+
+lo primero hay un isvalid? de TargetCar, si es valid, pasa a un Branch cuya condition es: IsDeaddeTargetCar OR NOT(ForceStopdeaicontroller) OR StoppedCorrectlydeaicontroller OR (TrafficControlTypedeaicontroller!=2). Si es true, vacío, si es false, setea YieldValidationTime de targetcar como YieldValidationTime + 0.1. 
+
+Luego hay un Branch cuya condition es ((ClampFloat(value=SafeDivide(a=ABS(dot(GetActorLocation(TargetCar)-StopTargetLocationdeaicontrollerdetargetcar, GetForwardVector(YieldLine))), b=MAX(SensorEntryDistancedelaicontroller, 1.0)), min=0.0, max=1.0)) >= (ClampFloat(value=ABS(ForwardSpeed)/Maxspeeddelaicontroller, min=0.0, max=1.0)). 
+
+si es true, primero setea YieldValidationTime como 0.0. luego con el aicontorller de Targetcar se setea StoppedCorrectly como true, hace un ++ de YieldCrossingCheckIDdelTargetCar y luego llama a CheckCrossing con TargetCar y YieldCrossingCheckIDdelTargetCar.
+
+Si es false, hace un addunique de PendingMonitorCars, al que se le añade TargetCar, luego hay un Branch cuya condition es NOT(MonitorTimerActive). Si es false vacío, si es true, setea MonitorTimerActive como True, luego hay un SetTimerByEvent(time=0.1, looping=false) que está conectado con el hilo rojo al customevent Recheck_MonitorStop.  
+
+
+
+CheckCrossing:
+
+inputs: 
+
+TargetCar BP_VehicleAi2
+
+RequestID integer
+
+lo primero, hay un isvalid? de TargetCar, si es valido, hay un Branch cuya condition es RequestID != YieldCrossingCheckIDdelTargetCar, si es true vacío, si es false, pasa a otro branch cuya condition es: IsDeaddelTargetCar OR (TrafficControlTypedelaicontroller!=2). Si es true, vacio, si es false: 
+
+setea CarsAlivedInCrossingZone como 0. Luego hay un foreachloop de CrossingZones, cuyo loop body es: primero un isvalid? de arrayelement, luego hay un foreachloop de GetOverlappingActorsarrayelementZone(BP_VehicleAI2), cuyo loopbody es: primero un casttoBPvehicleAI2, luego un Branch cuya condition es IsDead(cast) OR (arrayelement == TargetCar) OR (StoppedCorrectlydelAIControllerdearrayelement AND ForceStopdelAIControllerdearrayelement). Si es true vacío, si es false hace un ++ de CarsAlivedInCrossingZones. 
+
+Cuando se completa el loop exterior, hay un Branch cuya condition es CarsAlivedInCrossingZones>0, si es true, hace un addunique de PendingYieldCheckCars, al que se le añade TargetCar, luego hay un Branch cuya condition es NOT(YieldCheckTimerActive). Si es false vacío, si es true, setea YieldCheckTimerActive como True, luego hay un SetTimerByEvent(time=0.1, looping=false) que está conectado con el hilo rojo al customevent Recheck_Crossing.
+
+Si es false, primero hay un isvalid? de target car, y luego si es valido, pasa a un Branch cuya condition es RequestID == YieldCrossingCheckIDdelTargetCar, si es false vacío, si es true, setea TrafficControlTypedelaicontroller como 3, llama a ApplyYieldCompletionBonus con MycontrolledCar, setea AproachSpeed del MycontrolledCar del aicontroller como 0.0, luego, se setea forcestop del aicontroller como false. Por último hace un RemoveItem con TargetCar de PendingMonitorCars y PendingYieldCheckCars.
+
+
+
+- Recheck_MonitorStop: setea MonitorTimerActive como false, luego setea LocalMonitorQueue como PendingMonitorCars, hace un cleararray de PendingMonitorCars, luego hay un ForEachLoop de LocalMonitorQueue, cuyo loop body es: primero un isvalid? de arrayelement, luego si es válido, un branch cuya condition es IsDead del arrayelement. Si es true vacío, si es false llama a MonitorSpeed con arrayelement.
+
+
+
+- Recheck_Crossing: setea YieldCheckTimerActive como false, luego setea LocalYieldQueue como PendingYieldCheckCars, hace un cleararray de PendingYieldCheckCars, luego hay un ForEachLoop de LocalYieldQueue, cuyo loop body es: primero un isvalid? de arrayelement, luego si es válido, un branch cuya condition es IsDead del arrayelement. Si es true vacío, si es false llama a CheckCrossing con TargetCar=arrayelement y RequestID=YieldCrossingCheckIDdelarrayelement.
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+función de BP_Sign_Yield
+
+ApplyYieldDeathPenalty:
+
+
+inputs:
+
+TargetCar BP_VehicleAI2
+
+
+variables locales:
+
+DeltaYieldDeathPenalty float
+
+
+
+flujo:
+
+lo primero setea DeltaYieldDeathPenalty como (((Clamp(value=(ABS(forwardspeed)/maxspeed),min=0.0,max=1.0))^2) x maxspeed x ViolationPenaltyMultiplier), luego setea Fitness como Fitness - DeltaYieldDeathPenalty, hace un Set DebugDeathPenalty del TargetCar como DeltaYieldDeathPenalty, y llama a la función KillCar del TargetCar cuya razón de muerte es "YIELD_VIOLATION".
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+función de BP_Sign_Yield
+
+ApplyYieldCompletionBonus:
+
+
+inputs:
+
+TargetCar BP_VehicleAI2
+
+
+variables locales:
+
+DeltaYieldCompletionBonus float
+
+
+
+flujo:
+
+lo primero, setea DeltaYieldCompletionBonus como ClampFloat((AproachSpeed(TargetCar) / MaxSpeed(aicontroller)), 0.0, 1.0)^2 × MaxSpeed(aicontroller) × ViolationPenaltyMultiplier.
+
+luego setea Fitness del TargetCar como Fitness + DeltaYieldCompletionBonus.
+
+luego setea Debug_Acum_YieldCompletionBonus de TargetCar como Debug_Acum_YieldCompletionBonus + DeltaYieldCompletionBonus.
+
+por ultimo hace un ++ de Debug_NumYieldsCompleted de TargetCar.
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_CrossingZone:
+
+
+DefaultSceenRoot:
+
+Zone BoxCollision area que debe estar liberada de coches para los que están en un ceda/stop
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+S_StopSample:
+
+variables:
+
+Speed float
+
+Time float
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+E_DirectionIntent:
+
+
+Enumerators:
+
+None
+
+First
+
+Second
+
+Third
+
+Fourth
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_IntersectionTrigger
+
+
+DefaultSceenRoot:
+
+Box BoxCollision area que al entrar marca la dirección escogida
+
+
+variables:
+
+TrainOptions array de E_DirectionIntent editable
+
+TestOptions array de E_DirectionIntent editable
+
+
+
+
+EventGraph:
+
+- OnComponentBeginOverlap(Box): 
+
+lo primero hay un isvalid? de OtherActor. Si es válido, hace un CasttoBP_VehicleAI2 con OtherActor. Si el cast es válido, llama a GetRandomDirectionForMode con TrainingMode del AIController del Cast. Luego, setea IntersectionDecision del AIController del Cast como SelectedDirection. Luego setea CurrentTrigger del AIController del Cast como Self.
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+función de BP_IntersectionTrigger
+
+GetRandomDirectionForMode:
+
+
+inputs:
+
+bTrainingMode boolean
+
+
+outputs:
+
+SelectedDirection E_DirectionIntent
+
+
+variables locales:
+
+LocalSelectedDirection E_DirectionIntent
+
+
+flujo:
+
+lo primero, hay un Branch, cuya condition es bTrainingMode.
+
+Si es true bTrainingMode: pasa a un Branch cuya condition es Length(TrainOptions) > 0. Si es false hay un ReturnNode(SelectedDirection = First). Si es true, setea LocalSelectedDirection como Random(TrainOptions). Después, hace un ReturnNode(SelectedDirection = LocalSelectedDirection).
+
+Si es false bTrainingMode: pasa a un Branch cuya condition es Length(TestOptions) > 0. Si es false hay un ReturnNode(SelectedDirection = First). Si es true, setea LocalSelectedDirection como Random(TestOptions). Después, hace un ReturnNode(SelectedDirection = LocalSelectedDirection).
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+BP_IntersectionBorders
+
+
+DefaultSceenRoot:
+
+Box BoxCollision borde virtual que verán los rayos del coche que marcan la dirección en la intersección
+
+
+variables:
+
+DirectionIntent E_DirectionIntent editable
+
+Trigger BP_IntersectionTrigger editable
+
+
+
