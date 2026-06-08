@@ -2,13 +2,13 @@
 
 \section{Conclusiones}
 
-El trabajo realizado demuestra la viabilidad de integrar movilidad autónoma basada en redes neuronales y algoritmos evolutivos dentro de un simulador urbano en Unreal Engine 5. La solución final supera las limitaciones iniciales de navegación determinista y proporciona una arquitectura capaz de percibir el entorno, actuar sobre un vehículo físico, aprender mediante generaciones y producir datos analizables.
+El trabajo realizado demuestra la viabilidad de integrar movilidad autónoma basada en redes neuronales y algoritmos evolutivos dentro de un simulador urbano en Unreal Engine 5. La solución actual supera las limitaciones iniciales de navegación determinista y proporciona una arquitectura capaz de percibir el entorno, actuar sobre un vehículo físico, aprender mediante generaciones y producir datos analizables.
 
 La principal aportación técnica es la combinación de cuatro piezas: percepción local por raycasting, red neuronal ligera, gestor evolutivo con persistencia de modelos y función de fitness instrumentada. Esta combinación permite entrenar agentes sin disponer de un dataset previo de conducción humana y, al mismo tiempo, analizar con detalle por qué cada iteración mejora o falla.
 
 También se ha demostrado la importancia de la trazabilidad. Las decisiones más relevantes del proyecto no surgieron de una única implementación, sino de iteraciones documentadas: descarte de mallas dinámicas, prueba y abandono de Path Finding como solución principal, introducción de bordes dinámicos, reformulación del fitness tras una demo fallida y separación entre entrenamiento y test.
 
-Los resultados finales son prometedores pero no definitivos. La sesión final de entrenamiento alcanza buen fitness máximo, elimina fitness medio negativo y erradica el estancamiento tipo \texttt{LAZY}. La sesión final de test mejora claramente a las anteriores y alcanza un 30\% de acierto. Aun así, las colisiones siguen siendo la familia de muerte dominante, por lo que la IA todavía requiere mejoras antes de considerarse tráfico autónomo plenamente robusto para sesiones clínicas.
+Los resultados disponibles son prometedores pero no definitivos. La sesión de entrenamiento más reciente alcanza buen fitness máximo, evita generaciones con fitness medio negativo y erradica el estancamiento tipo \texttt{LAZY}. La sesión de test de referencia mejora claramente a las anteriores y alcanza un 30\% de acierto sobre 260 evaluaciones. Aun así, las colisiones siguen siendo la familia de muerte dominante, por lo que la IA todavía requiere mejoras antes de considerarse tráfico autónomo plenamente robusto para sesiones clínicas.
 
 \Needspace{16\baselineskip}
 \section{Aportaciones realizadas}
@@ -16,8 +16,9 @@ Los resultados finales son prometedores pero no definitivos. La sesión final de
 Las aportaciones principales son:
 
 \begin{itemize}[leftmargin=*]
-  \item diseño de arquitectura de IA vehicular con 22 entradas y dos salidas continuas;
+  \item diseño de una arquitectura de IA vehicular cuya configuración actual utiliza 22 entradas y dos salidas continuas;
   \item sensores por raycasting adaptados a límites, obstáculos e intersecciones;
+  \item selección de trayectoria mediante intenciones de dirección, triggers diferenciados para entrenamiento y test, y bordes virtuales asociados a cada maniobra;
   \item entrenamiento evolutivo con población, mutación, elitismo, pesos cargados y pesos de sesión;
   \item normalización de fitness por punto de aparición;
   \item integración de semáforos, stops y cedas con contexto de parada y validación;
