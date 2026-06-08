@@ -1,0 +1,68 @@
+\chapter{Conclusiones y líneas futuras}
+
+\section{Conclusiones}
+
+El trabajo realizado demuestra la viabilidad de integrar movilidad autónoma basada en redes neuronales y algoritmos evolutivos dentro de un simulador urbano en Unreal Engine 5. La solución final supera las limitaciones iniciales de navegación determinista y proporciona una arquitectura capaz de percibir el entorno, actuar sobre un vehículo físico, aprender mediante generaciones y producir datos analizables.
+
+La principal aportación técnica es la combinación de cuatro piezas: percepción local por raycasting, red neuronal ligera, gestor evolutivo con persistencia de modelos y función de fitness instrumentada. Esta combinación permite entrenar agentes sin disponer de un dataset previo de conducción humana y, al mismo tiempo, analizar con detalle por qué cada iteración mejora o falla.
+
+También se ha demostrado la importancia de la trazabilidad. Las decisiones más relevantes del proyecto no surgieron de una única implementación, sino de iteraciones documentadas: descarte de mallas dinámicas, prueba y abandono de Path Finding como solución principal, introducción de bordes dinámicos, reformulación del fitness tras una demo fallida y separación entre entrenamiento y test.
+
+Los resultados finales son prometedores pero no definitivos. La sesión final de entrenamiento alcanza buen fitness máximo, elimina fitness medio negativo y erradica el estancamiento tipo \texttt{LAZY}. La sesión final de test mejora claramente a las anteriores y alcanza un 30\% de acierto. Aun así, las colisiones siguen siendo la familia de muerte dominante, por lo que la IA todavía requiere mejoras antes de considerarse tráfico autónomo plenamente robusto para sesiones clínicas.
+
+\Needspace{16\baselineskip}
+\section{Aportaciones realizadas}
+
+Las aportaciones principales son:
+
+\begin{itemize}[leftmargin=*]
+  \item diseño de arquitectura de IA vehicular con 22 entradas y dos salidas continuas;
+  \item sensores por raycasting adaptados a límites, obstáculos e intersecciones;
+  \item entrenamiento evolutivo con población, mutación, elitismo, pesos cargados y pesos de sesión;
+  \item normalización de fitness por punto de aparición;
+  \item integración de semáforos, stops y cedas con contexto de parada y validación;
+  \item función de fitness con componentes de avance, centrado, velocidad, señales, penalizaciones y bonus;
+  \item persistencia de modelos entrenados;
+  \item pipeline de análisis con informes, gráficas y comparación entre sesiones;
+  \item documentación cronológica de decisiones técnicas.
+\end{itemize}
+
+Estas aportaciones no deben entenderse solo como funcionalidades aisladas, sino como una infraestructura de experimentación. El proyecto deja conectados simulación, entrenamiento, persistencia y análisis, de manera que cada nueva iteración puede evaluarse con criterios comparables y no únicamente mediante observación visual dentro del editor.
+
+\section{Problemas encontrados}
+
+Los problemas más relevantes fueron:
+
+\begin{itemize}[leftmargin=*]
+  \item curva de aprendizaje de Unreal Engine 5 y del sistema Chaos Vehicle;
+  \item rigidez de soluciones basadas en NavMesh para vehículos físicos;
+  \item complejidad de intersecciones, cruces y bordes de calzada;
+  \item dificultad para diseñar un fitness que premie conducción útil sin favorecer atajos;
+  \item coste computacional de entrenar poblaciones con renderizado y física activa;
+  \item necesidad de depurar comportamientos emergentes no previstos, como estancamiento, marcha atrás o correcciones incorrectas.
+\end{itemize}
+
+\Needspace{6\baselineskip}
+La resolución de estos problemas exigió combinar depuración técnica y análisis de datos. En varias fases, el comportamiento observado en pantalla no era suficiente para explicar los fallos, por lo que fue necesario revisar métricas exportadas, razones de muerte, penalizaciones acumuladas y diferencias entre puntos de aparición.
+
+\Needspace{14\baselineskip}
+\section{Líneas futuras}
+
+Las líneas futuras recomendadas son:
+
+\begin{itemize}[leftmargin=*]
+  \item ampliar el entrenamiento específico en spawns problemáticos, especialmente aquellos con colisiones recurrentes;
+  \item mejorar la percepción en intersecciones y la semántica de bordes;
+  \item implementar perfiles de conductor normal, inseguro y agresivo;
+  \item añadir interacción entre vehículos y reglas de prioridad más completas;
+  \item extender el sistema a peatones, bicicletas y otros agentes autónomos;
+  \item crear un modo de entrenamiento sin renderizado o desacoplado para acelerar generaciones;
+  \item aumentar la duración y número de tests para estimar acierto con mayor confianza estadística;
+  \item preparar un protocolo de validación con profesionales de ASPAYM antes de su uso con pacientes.
+\end{itemize}
+
+\chapter*{Agradecimientos}
+\phantomsection
+\addcontentsline{toc}{chapter}{Agradecimientos}
+
+Pendiente de redacción definitiva.
