@@ -51,7 +51,22 @@ SAVE_DETAILED_JSON = False
 SAVE_GENERATION_MAPPING = False
 SAVE_GLOBAL_SUMMARY = False
 MIN_SPAWN_N = 10
-WEIGHTS_TOTAL = max(1, int(os.environ.get('ANALYSE_WEIGHTS_TOTAL', '384')))
+NETWORK_SENSOR_COUNT = max(1, int(os.environ.get('ANALYSE_SENSOR_COUNT', '11')))
+NETWORK_HIDDEN_COUNT = max(1, int(os.environ.get('ANALYSE_HIDDEN_COUNT', '16')))
+NETWORK_OUTPUT_COUNT = max(1, int(os.environ.get('ANALYSE_OUTPUT_COUNT', '2')))
+NETWORK_INPUT_COUNT = NETWORK_SENSOR_COUNT + 2 + 2 + 4 + 1
+NETWORK_WEIGHTS_TOTAL = (
+    NETWORK_INPUT_COUNT * NETWORK_HIDDEN_COUNT
+    + NETWORK_HIDDEN_COUNT * NETWORK_OUTPUT_COUNT
+)
+WEIGHTS_TOTAL = max(1, int(os.environ.get('ANALYSE_WEIGHTS_TOTAL', str(NETWORK_WEIGHTS_TOTAL))))
+TEST_MIN_TIME = float(os.environ.get('ANALYSE_TEST_MIN_TIME', '60'))
+TEST_MIN_FITNESS = float(os.environ.get('ANALYSE_TEST_MIN_FITNESS', '25000'))
+TEST_USE_FITNESS = str(
+    os.environ.get('ANALYSE_TEST_USE_FITNESS', 'false')
+).strip().lower() in ('1', 'true', 'yes', 'on')
+MUTATION_RATE_EVOLVED = float(os.environ.get('ANALYSE_MUTATION_RATE', '0.03'))
+MUTATION_RATE_RANDOM_FAMILY = float(os.environ.get('ANALYSE_RANDOM_MUTATION_RATE', '0.06'))
 MUTATION_TOP_SPAWNS = max(5, int(os.environ.get('ANALYSE_MUTATION_TOP_SPAWNS', '15')))
 MUTATION_TOP_GENS = max(10, int(os.environ.get('ANALYSE_MUTATION_TOP_GENS', '20')))
 CARINDEX_MUT_LOADED_END = max(3, int(os.environ.get('ANALYSE_CARINDEX_MUT_LOADED_END', '20')))
@@ -256,6 +271,22 @@ def mean_field(rows, key, default=0.0):
 def mean_abs_delta(rows, left_key, right_key):
     return mean([abs(num(r.get(left_key, 0.0)) - num(r.get(right_key, 0.0))) for r in rows]) if rows else 0.0
 
+def debug_available_fields(rows):
+    if not rows:
+        return set()
+    return set(rows[0].get('_available_fields', ()))
+
+def debug_field_available(rows, key):
+    return key in debug_available_fields(rows)
+
+def detect_debug_schema(mapped_keys):
+    keys = set(mapped_keys or [])
+    if {'b', 'c', 'd', 'e'} & keys:
+        return 'legacy-components'
+    if {'a', 'f', 'net', 'stop_bonus', 'yield_bonus', 'pen_nav'} <= keys:
+        return '2026-06'
+    return 'partial'
+
 def env_flag(name, default=True):
     if name not in os.environ:
         return default
@@ -358,7 +389,25 @@ def car_index_family(value, analysis_mode=None, bounds=None, pop_est=None):
         return 'MUT_LOADED'
     if (mut_loaded_end + 1) <= idx <= mut_session_end:
         return 'MUT_SESSION'
-    return 'RANDOM'
+    return 'MUT_LOADED_LARGE'
+
+def is_initial_random_brain(row):
+    return (
+        int(num(row.get('gen', 0), 0.0)) == 1
+        and num(row.get('mut_parent_fit', 0.0), 0.0) == 0.0
+        and num(row.get('mut_changed', 0.0), 0.0) >= WEIGHTS_TOTAL * 0.95
+    )
+
+def car_index_family_for_row(row, analysis_mode=None, bounds=None, pop_est=None):
+    """Classify a concrete car, preserving true InitializeRandomBrain rows."""
+    if is_initial_random_brain(row):
+        return 'RANDOM'
+    return car_index_family(
+        row.get('car_index', 0),
+        analysis_mode=analysis_mode,
+        bounds=bounds,
+        pop_est=pop_est,
+    )
 
 def summarize_car_index_families(rows, analysis_mode=None, bounds=None):
     if analysis_mode is None:
@@ -367,9 +416,12 @@ def summarize_car_index_families(rows, analysis_mode=None, bounds=None):
         bounds = infer_carindex_bounds(rows, analysis_mode=analysis_mode)
     by_family = defaultdict(list)
     for r in rows or []:
-        by_family[car_index_family(r.get('car_index', 0), analysis_mode, bounds=bounds)].append(r)
+        by_family[car_index_family_for_row(r, analysis_mode, bounds=bounds)].append(r)
 
-    family_order = ['LOADED', 'SESSION', 'MUT_LOADED', 'MUT_SESSION', 'RANDOM', 'UNKNOWN']
+    family_order = [
+        'LOADED', 'SESSION', 'MUT_LOADED', 'MUT_SESSION',
+        'MUT_LOADED_LARGE', 'RANDOM', 'UNKNOWN',
+    ]
     stats = []
     for fam in family_order:
         fam_rows = by_family.get(fam, [])
@@ -398,6 +450,45 @@ def summarize_car_index_families(rows, analysis_mode=None, bounds=None):
     for st in stats:
         st['pct'] = sdiv(st['n'] * 100.0, total)
     return stats
+
+def mutation_profile_for_row(row, bounds=None):
+    """Classify mutation telemetry according to the latest EvolutionManager."""
+    changed = num(row.get('mut_changed', 0.0), 0.0)
+    gen = int(num(row.get('gen', 0), 0.0))
+    parent_fit = num(row.get('mut_parent_fit', 0.0), 0.0)
+    observed = sdiv(changed, WEIGHTS_TOTAL)
+
+    if is_initial_random_brain(row):
+        return {
+            'kind': 'INITIAL_RANDOM',
+            'is_initialization': True,
+            'expected_rate': None,
+            'observed_rate': observed,
+        }
+
+    family = car_index_family_for_row(row, bounds=bounds)
+    if gen == 1:
+        kind = 'INITIAL_LOADED'
+        expected = 0.0
+    elif family in ('LOADED', 'SESSION'):
+        kind = family
+        expected = 0.0
+    elif family in ('MUT_LOADED', 'MUT_SESSION'):
+        kind = family
+        expected = MUTATION_RATE_EVOLVED
+    elif family == 'MUT_LOADED_LARGE':
+        kind = 'MUT_LOADED_LARGE'
+        expected = MUTATION_RATE_RANDOM_FAMILY
+    else:
+        kind = family
+        expected = None
+
+    return {
+        'kind': kind,
+        'is_initialization': False,
+        'expected_rate': expected,
+        'observed_rate': observed,
+    }
 
 def stdev(vals):
     vals = finite_vals(vals)
@@ -515,6 +606,29 @@ def select_debug_rows_by_mode(rows, mode):
         'mode': mode,
     }
     return selected, info
+
+def align_debug_to_completed_summary(summary_rows, debug_rows, mode):
+    """Exclude debug rows from generations not yet closed in the summary."""
+    if mode not in ('train', 'test') or not summary_rows or not debug_rows:
+        return debug_rows, {
+            'excluded_rows': 0,
+            'excluded_generations': [],
+        }
+
+    completed_gens = {int(num(r.get('gen', 0), 0.0)) for r in summary_rows}
+    completed_gens.discard(0)
+    selected = []
+    excluded = []
+    for row in debug_rows:
+        gen = int(num(row.get('gen', 0), 0.0))
+        if gen in completed_gens:
+            selected.append(row)
+        else:
+            excluded.append(row)
+    return selected, {
+        'excluded_rows': len(excluded),
+        'excluded_generations': sorted(set(int(num(r.get('gen', 0), 0.0)) for r in excluded)),
+    }
 
 def detect_mode_from_inputs(debug_rows, train_summary, test_summary):
     train_rows, test_rows, unknown_rows, has_flag = split_debug_by_phase(debug_rows)
@@ -669,7 +783,7 @@ def quick_debug_snapshot(path, target_training=None):
             if not reason:
                 continue
             deaths[reason] += 1
-            if reason == 'LAZY':
+            if is_lazy_reason(reason):
                 out['lazy_rows'] += 1
 
     if deaths:
@@ -720,7 +834,11 @@ def summarize_session(summary_rows, dbg_rows_count=0, lazy_rows=0, top_death='',
 
     kpis = [r for r in summary_rows if 'success_rate' in r]
     if kpis:
-        metrics['success_mean'] = mean([r.get('success_rate', 0.0) for r in kpis])
+        test_metrics = summarize_test_results(summary_rows)
+        metrics['success_mean'] = test_metrics['success_rate']
+        metrics['success_median'] = test_metrics['success_median']
+        metrics['success_std'] = test_metrics['success_std']
+        metrics['test_evaluations'] = test_metrics['total_n']
     return metrics
 
 def collect_previous_sessions(mode, summary_file, out_dir, limit=8):
@@ -735,6 +853,11 @@ def collect_previous_sessions(mode, summary_file, out_dir, limit=8):
         if name.startswith(pref) and os.path.isdir(full):
             names.append(name)
     names.sort()
+    current_out = os.path.abspath(out_dir)
+    names = [
+        name for name in names
+        if os.path.abspath(os.path.join(root, name)) != current_out
+    ][-max(1, limit):]
 
     sessions = []
     summary_names = []
@@ -746,8 +869,6 @@ def collect_previous_sessions(mode, summary_file, out_dir, limit=8):
     target_training = target_training_for_mode(mode)
     for name in names:
         full = os.path.join(root, name)
-        if os.path.abspath(full) == os.path.abspath(out_dir):
-            continue
 
         s_rows = []
         for summary_name in summary_names:
@@ -776,7 +897,7 @@ def collect_previous_sessions(mode, summary_file, out_dir, limit=8):
         m['session'] = name
         sessions.append(m)
 
-    return sessions[-max(1, limit):]
+    return sessions
 
 def short_list(items, max_items=10):
     if not items:
@@ -795,10 +916,41 @@ def estimate_population_size(summary_rows, default=60):
     return max(1, int(round(pctl(ns, 50))))
 
 def normalize_reason(reason):
-    return (reason or '').upper()
+    return clean(str(reason or '')).upper()
 
 def compact_reason(reason):
-    return normalize_reason(reason).replace('_', '').replace('-', '').replace(' ', '')
+    return re.sub(r'[^A-Z0-9]+', '', normalize_reason(reason))
+
+def canonical_death_reason(reason):
+    r = normalize_reason(reason)
+    r_compact = compact_reason(r)
+    if not r_compact:
+        return 'UNKNOWN'
+    if 'COLLISION' in r_compact:
+        return 'COLLISION'
+    if 'TRAFFICVIOLATION' in r_compact:
+        return 'TRAFFIC_VIOLATION'
+    if 'STOPVIOLATION' in r_compact:
+        return 'STOP_VIOLATION'
+    if 'YIELDVIOLATION' in r_compact:
+        return 'YIELD_VIOLATION'
+    if 'NAVVIOLATION' in r_compact:
+        return 'NAV_VIOLATION'
+    if 'INVALIDBRAIN' in r_compact:
+        return 'INVALID_BRAIN'
+    if 'TIMEFINISHED' in r_compact:
+        return 'TIMEFINISHED'
+    if 'CORRECTINGWRONG' in r_compact:
+        return 'CORRECTING_WRONG'
+    if 'REVERSINGWRONG' in r_compact:
+        return 'REVERSING_WRONG'
+    if 'REVERSE' in r_compact or 'REVERS' in r_compact:
+        return 'REVERSE'
+    if 'FLIPPED' in r_compact:
+        return 'FLIPPED'
+    if 'LAZY' in r_compact:
+        return 'LAZY'
+    return r or 'UNKNOWN'
 
 def is_reverse_reason(reason):
     return 'REVERS' in compact_reason(reason)
@@ -806,11 +958,13 @@ def is_reverse_reason(reason):
 def death_family(reason):
     r = normalize_reason(reason)
     r_compact = compact_reason(reason)
-    if r.startswith('COLLISION_WITH_'):
+    if not r_compact:
+        return 'UNKNOWN'
+    if 'COLLISION' in r_compact:
         return 'COLLISION'
-    if 'VIOLATION' in r:
+    if 'VIOLATION' in r_compact:
         return 'VIOLATION'
-    if 'INVALID_BRAIN' in r_compact:
+    if 'INVALIDBRAIN' in r_compact:
         return 'INVALID_BRAIN'
     if 'TIMEFINISHED' in r_compact:
         return 'TIMEOUT'
@@ -820,7 +974,136 @@ def death_family(reason):
         return 'CORRECTING'
     if is_reverse_reason(reason):
         return 'REVERSE'
+    if 'FLIPPED' in r_compact:
+        return 'FLIPPED'
     return 'OTHER'
+
+DEATH_FAMILY_ORDER = (
+    'COLLISION',
+    'VIOLATION',
+    'TIMEOUT',
+    'LAZY',
+    'CORRECTING',
+    'REVERSE',
+    'INVALID_BRAIN',
+    'FLIPPED',
+    'UNKNOWN',
+    'OTHER',
+)
+
+def death_family_order_index(family):
+    try:
+        return DEATH_FAMILY_ORDER.index(family)
+    except ValueError:
+        return len(DEATH_FAMILY_ORDER)
+
+def group_death_reasons(deaths):
+    family_counts = Counter()
+    for reason, cnt in deaths.items():
+        family_counts[death_family(reason)] += cnt
+    grouped = [(family, cnt, family) for family, cnt in family_counts.items()]
+    grouped.sort(key=lambda x: (death_family_order_index(x[2]), -x[1], x[0]))
+    return grouped
+
+def death_reason_color(reason):
+    fam = death_family(reason)
+    if fam == 'LAZY':
+        return 'gold'
+    if fam == 'COLLISION':
+        return 'tomato'
+    if fam == 'REVERSE':
+        return 'mediumpurple'
+    if fam == 'CORRECTING':
+        return 'orange'
+    if fam == 'VIOLATION':
+        return 'brown'
+    if fam == 'TIMEOUT':
+        return 'seagreen'
+    if fam == 'INVALID_BRAIN':
+        return 'black'
+    if fam == 'FLIPPED':
+        return 'darkred'
+    return 'gray'
+
+def short_death_reason(reason):
+    r = normalize_reason(reason)
+    if r in DEATH_FAMILY_ORDER:
+        return r
+    return (reason or '').replace('COLLISION_WITH_', 'COL_') or 'UNKNOWN'
+
+def is_death_family(reason, family):
+    return death_family(reason) == family
+
+def is_lazy_reason(reason):
+    return canonical_death_reason(reason) == 'LAZY'
+
+def is_invalid_brain_reason(reason):
+    return canonical_death_reason(reason) == 'INVALID_BRAIN'
+
+def is_test_failure_reason(reason):
+    # Mirrors BP_EvolutionManager CalculateAndExport death-based fail rules
+    # from the latest local description (01-06-2026). Fitness/time thresholds
+    # are handled in Unreal and are not inferable from DeathReason alone.
+    canon = canonical_death_reason(reason)
+    if canon in {
+        'LAZY',
+        'REVERSE',
+        'REVERSING_WRONG',
+        'CORRECTING_WRONG',
+        'TRAFFIC_VIOLATION',
+        'STOP_VIOLATION',
+        'YIELD_VIOLATION',
+        'NAV_VIOLATION',
+        'INVALID_BRAIN',
+        'FLIPPED',
+        'COLLISION',
+    }:
+        return True
+    return False
+
+def classify_test_outcome(row, min_time=None, min_fitness=None, use_fitness=None):
+    """Mirror EvolutionManager test rules using configurable runtime assumptions."""
+    if min_time is None:
+        min_time = TEST_MIN_TIME
+    if min_fitness is None:
+        min_fitness = TEST_MIN_FITNESS
+    if use_fitness is None:
+        use_fitness = TEST_USE_FITNESS
+
+    if is_test_failure_reason(row.get('death', '')):
+        return 'fail_death'
+    if use_fitness and num(row.get('fit', 0.0), 0.0) < min_fitness:
+        return 'fail_fitness'
+    if num(row.get('time', 0.0), 0.0) < min_time:
+        return 'fail_time'
+    return 'success'
+
+def reconstruct_test_outcomes(rows):
+    counts = Counter(classify_test_outcome(row) for row in rows or [])
+    total = sum(counts.values())
+    success = counts.get('success', 0)
+    fail = total - success
+    return {
+        'total': total,
+        'success': success,
+        'fail': fail,
+        'success_rate': sdiv(success * 100.0, total),
+        'fail_rate': sdiv(fail * 100.0, total),
+        'counts': dict(counts),
+        'min_time': TEST_MIN_TIME,
+        'min_fitness': TEST_MIN_FITNESS,
+        'use_fitness': TEST_USE_FITNESS,
+    }
+
+def add_family_separators(ax, grouped):
+    last_fam = None
+    for idx, (_, _, fam) in enumerate(grouped):
+        if last_fam is None:
+            last_fam = fam
+            continue
+        if fam != last_fam:
+            ax.axhline(idx - 0.5, color='k', linewidth=0.6, alpha=0.2)
+            last_fam = fam
 
 def is_time_finished_reason(reason):
     return 'TIMEFINISHED' in compact_reason(reason)
@@ -1672,10 +1955,16 @@ def detect_stop_stuck_candidates(dbg_rows):
     return info
 
 def rolling(data, w):
+    if not data:
+        return []
+    w = max(1, int(w))
     out = []
-    for i in range(len(data)):
-        s = max(0, i - w + 1)
-        out.append(sum(data[s:i+1]) / (i - s + 1))
+    window_sum = 0.0
+    for i, value in enumerate(data):
+        window_sum += value
+        if i >= w:
+            window_sum -= data[i - w]
+        out.append(window_sum / min(i + 1, w))
     return out
 
 def pctl(vals, p):
@@ -1760,6 +2049,54 @@ def binary_metrics_from_row(r):
 # ║ ANÁLISIS AVANZADOS: Convergencia, Predicción y Diversidad
 # ═══════════════════════════════════════════════════════════════════════
 
+def select_test_summary_rows(summary_rows):
+    """Return only rows that represent test generations."""
+    rows = [r for r in summary_rows or [] if 'success_rate' in r]
+    phased = [r for r in rows if r.get('source_phase') == 'test']
+    return phased if phased else rows
+
+def summarize_test_results(summary_rows):
+    """Aggregate binary test KPIs, weighting rates by evaluated cars."""
+    rows = select_test_summary_rows(summary_rows)
+    if not rows:
+        return None
+
+    derived = [binary_metrics_from_row(r) for r in rows]
+    total_n = sum(m['n'] for m in derived)
+    total_success = sum(int(num(r.get('success_count', 0), 0.0)) for r in rows)
+    total_fail = sum(int(num(r.get('fail_count', 0), 0.0)) for r in rows)
+    rates = [m['success_rate'] for m in derived]
+    weighted_rate = (
+        sdiv(total_success * 100.0, total_n)
+        if total_n > 0 and (total_success + total_fail) > 0
+        else mean(rates)
+    )
+    lo, hi = wilson_ci(total_success, total_n) if total_n > 0 else (0.0, 0.0)
+    best_idx = max(range(len(rows)), key=lambda i: rates[i])
+    worst_idx = min(range(len(rows)), key=lambda i: rates[i])
+
+    return {
+        'rows': rows,
+        'derived': derived,
+        'gens': len(rows),
+        'total_n': total_n,
+        'total_success': total_success,
+        'total_fail': total_fail,
+        'success_rate': weighted_rate,
+        'success_mean': mean(rates),
+        'success_median': pctl(rates, 50),
+        'success_std': stdev(rates),
+        'success_min': min(rates),
+        'success_max': max(rates),
+        'best_gen': rows[best_idx].get('gen_phase', rows[best_idx].get('gen', 0)),
+        'worst_gen': rows[worst_idx].get('gen_phase', rows[worst_idx].get('gen', 0)),
+        'wilson_lo': lo * 100.0,
+        'wilson_hi': hi * 100.0,
+        'fitness_mean': mean([r.get('mean', 0.0) for r in rows]),
+        'fitness_best': max(r.get('best', 0.0) for r in rows),
+        'time_mean': mean([r.get('time', 0.0) for r in rows]),
+    }
+
 def analyze_convergence(summary_rows):
     """Analiza convergencia, plateaus y estabilidad de fitness."""
     if not summary_rows or len(summary_rows) < 3:
@@ -1787,15 +2124,7 @@ def analyze_convergence(summary_rows):
         plateau_gens += 1
     
     # Varianza intra-generacional (de mean vs best)
-    variance_ratio = []
-    for g in gens:
-        rows_gen = [r for r in summary_rows if r['gen'] == g]
-        if len(rows_gen) > 0:
-            best_gen = rows_gen[0]['best']
-            mean_gen = rows_gen[0]['mean']
-            var = abs(best_gen - mean_gen)
-            variance_ratio.append(var)
-    avg_variance = mean(variance_ratio) if variance_ratio else 0.0
+    avg_variance = mean([abs(best - mean_val) for best, mean_val in zip(best_vals, mean_vals)])
     
     # Tendencia reciente (últimas 10 gens)
     recent_n = min(10, len(best_vals))
@@ -1831,18 +2160,22 @@ def analyze_diversity(debug_rows):
     # Familia de índices de coche
     families = defaultdict(int)
     for r in debug_rows:
-        fam = car_index_family(r.get('car_index', 0), bounds=bounds)
+        fam = car_index_family_for_row(r, bounds=bounds)
         families[fam] += 1
     
     total = len(debug_rows)
     loaded_share = sdiv(families.get('LOADED', 0) * 100.0, total)
     random_share = sdiv(families.get('RANDOM', 0) * 100.0, total)
-    mutated_share = sdiv((families.get('MUT_LOADED', 0) + families.get('MUT_SESSION', 0)) * 100.0, total)
+    mutated_share = sdiv((
+        families.get('MUT_LOADED', 0)
+        + families.get('MUT_SESSION', 0)
+        + families.get('MUT_LOADED_LARGE', 0)
+    ) * 100.0, total)
     
     # Fitness por familia
     fitness_by_family = defaultdict(list)
     for r in debug_rows:
-        fam = car_index_family(r.get('car_index', 0), bounds=bounds)
+        fam = car_index_family_for_row(r, bounds=bounds)
         fitness_by_family[fam].append(r.get('fit', 0.0))
     
     family_stats = {}
@@ -1858,7 +2191,7 @@ def analyze_diversity(debug_rows):
     # Muertes por familia
     deaths_by_family = defaultdict(lambda: defaultdict(int))
     for r in debug_rows:
-        fam = car_index_family(r.get('car_index', 0), bounds=bounds)
+        fam = car_index_family_for_row(r, bounds=bounds)
         death = r.get('death', 'UNKNOWN')
         deaths_by_family[fam][death] += 1
     
@@ -1932,66 +2265,54 @@ def predict_fitness_trajectory(summary_rows, future_gens=10):
         'is_stable': abs(slope) < max(best_vals) * 0.0001,
     }
 
+# ── Parsers ──
+
 def analyze_fitness_components_correlation(debug_rows):
-    """Analiza correlación entre componentes de fitness."""
+    """Analyze only fitness components that really exist in the CSV schema."""
     if not debug_rows or len(debug_rows) < 20:
         return None
-    
-    components = {
-        'a': [r.get('a', 0.0) for r in debug_rows],
-        'e': [r.get('e', 0.0) for r in debug_rows],
-        'f': [r.get('f', 0.0) for r in debug_rows],
-        'net': [r.get('net', 0.0) for r in debug_rows],
-        'fit': [r.get('fit', 0.0) for r in debug_rows],
+
+    available = debug_available_fields(debug_rows)
+    labels = {
+        'a': 'A (velocidad y centrado)',
+        'b': 'B (legacy)',
+        'c': 'C (legacy)',
+        'd': 'D (legacy)',
+        'e': 'E (legacy)',
+        'f': 'F (velocidad y obstaculo)',
+        'wait_bonus': 'Wait bonus',
+        'stop_bonus': 'Stop completion bonus',
+        'yield_bonus': 'Yield completion bonus',
+        'net': 'Net normal',
     }
-    
-    # Penalizaciones
-    penalties = {
-        'pen_m': [r.get('pen_m', 0.0) for r in debug_rows],
-        'pen_v': [r.get('pen_v', 0.0) for r in debug_rows],
-        'pen_tv': [r.get('pen_tv', 0.0) for r in debug_rows],
-        'pen_nav': [r.get('pen_nav', 0.0) for r in debug_rows],
-        'pen_lazy': [r.get('pen_lazy', 0.0) for r in debug_rows],
-        'pen_steer_app': [r.get('pen_steer_app', 0.0) for r in debug_rows],
-    }
-    
-    # Correlaciones componentes-fitness
-    corr_a_fit = pearson_corr(components['a'], components['fit'])
-    corr_e_fit = pearson_corr(components['e'], components['fit'])
-    corr_f_fit = pearson_corr(components['f'], components['fit'])
-    corr_net_fit = pearson_corr(components['net'], components['fit'])
-    
-    # Contribución promedio de cada componente
-    contrib_a = sdiv(mean(components['a']), mean(components['fit'])) if mean(components['fit']) != 0 else 0.0
-    contrib_e = sdiv(mean(components['e']), mean(components['fit'])) if mean(components['fit']) != 0 else 0.0
-    contrib_f = sdiv(mean(components['f']), mean(components['fit'])) if mean(components['fit']) != 0 else 0.0
-    
-    # Top-3 penalizaciones
-    pen_means = [(k, mean(v)) for k, v in penalties.items()]
-    pen_means.sort(key=lambda x: x[1], reverse=True)
-    
+    fit_vals = [r.get('fit', 0.0) for r in debug_rows]
+    fit_mean = mean(fit_vals)
+    correlations = {}
+    contributions = {}
+    component_means = {}
+    for key in labels:
+        if key not in available:
+            continue
+        vals = [r.get(key, 0.0) for r in debug_rows]
+        correlations[key] = pearson_corr(vals, fit_vals)
+        component_means[key] = mean(vals)
+        contributions[key] = sdiv(component_means[key], fit_mean) if fit_mean != 0 else 0.0
+
+    penalty_keys = ('pen_m', 'pen_v', 'pen_tv', 'pen_nav', 'pen_lazy', 'pen_steer_app')
+    pen_means = [
+        (key, mean([r.get(key, 0.0) for r in debug_rows]))
+        for key in penalty_keys if key in available
+    ]
+    pen_means.sort(key=lambda item: item[1], reverse=True)
+
     return {
-        'component_fitness_correlations': {
-            'a_vs_fit': corr_a_fit,
-            'e_vs_fit': corr_e_fit,
-            'f_vs_fit': corr_f_fit,
-            'net_vs_fit': corr_net_fit,
-        },
-        'component_contributions': {
-            'a': contrib_a,
-            'e': contrib_e,
-            'f': contrib_f,
-        },
-        'component_means': {
-            'a': mean(components['a']),
-            'e': mean(components['e']),
-            'f': mean(components['f']),
-            'net': mean(components['net']),
-        },
+        'schema': debug_rows[0].get('_schema', 'unknown'),
+        'component_labels': labels,
+        'component_fitness_correlations': correlations,
+        'component_contributions': contributions,
+        'component_means': component_means,
         'top_penalties': pen_means[:3],
     }
-
-# ── Parsers ──
 
 def parse_summary(path):
     rows = []
@@ -2038,16 +2359,28 @@ def parse_summary(path):
                     rec['eval_n'] = to_num(p, header_map.get('eval_n'), int)
 
                 # KPIs de test (binario nuevo)
-                if 'success_count' in header_map and 'success_rate' in header_map:
+                if 'success_count' in header_map:
+                    success_count = to_num(p, header_map.get('success_count'), int)
+                    fail_count = to_num(p, header_map.get('fail_count'), int)
+                    eval_n = to_num(p, header_map.get('eval_n'), int)
+                    if not eval_n:
+                        eval_n = success_count + fail_count
+                    success_rate = to_num(p, header_map.get('success_rate'), float)
+                    fail_rate = to_num(p, header_map.get('fail_rate'), float)
+                    if eval_n > 0:
+                        if 'success_rate' not in header_map or (success_rate == 0.0 and success_count > 0):
+                            success_rate = sdiv(success_count * 100.0, eval_n)
+                        if 'fail_rate' not in header_map or (fail_rate == 0.0 and fail_count > 0):
+                            fail_rate = sdiv(fail_count * 100.0, eval_n)
                     rec.update({
-                        'success_count': to_num(p, header_map.get('success_count'), int),
-                        'fail_count': to_num(p, header_map.get('fail_count'), int),
-                        'eval_n': to_num(p, header_map.get('eval_n'), int),
+                        'success_count': success_count,
+                        'fail_count': fail_count,
+                        'eval_n': eval_n,
                         'fail_hard_count': to_num(p, header_map.get('fail_hard_count'), int),
                         'fail_early_count': to_num(p, header_map.get('fail_early_count'), int),
                         'fail_collision_count': to_num(p, header_map.get('fail_collision_count'), int),
-                        'success_rate': to_num(p, header_map.get('success_rate'), float),
-                        'fail_rate': to_num(p, header_map.get('fail_rate'), float),
+                        'success_rate': success_rate,
+                        'fail_rate': fail_rate,
                         'hard_fail_rate': to_num(p, header_map.get('hard_fail_rate'), float),
                     })
                     if 'score' in header_map:
@@ -2103,32 +2436,39 @@ def parse_debug(path):
 
     def build_row(parts):
         t_idx = header_map.get('training')
-        return {
+        death_raw = parts[header_map.get('death', 5)].strip() if len(parts) > header_map.get('death', 5) else ''
+        row = {
+            '_schema': detect_debug_schema(header_map.keys()),
+            '_available_fields': tuple(sorted(header_map.keys())),
             'gen': to_num(parts, header_map.get('gen', 0), int),
             'car': parts[header_map.get('car', 1)].strip() if len(parts) > header_map.get('car', 1) else '',
             'fit': to_num(parts, header_map.get('fit', 2), float),
             'time': to_num(parts, header_map.get('time', 3), int),
             'spawn': parts[header_map.get('spawn', 4)].strip() if len(parts) > header_map.get('spawn', 4) else '',
-            'death': parts[header_map.get('death', 5)].strip() if len(parts) > header_map.get('death', 5) else '',
-            'pen_m': to_num(parts, header_map.get('pen_m', 6), float),
-            'pen_v': to_num(parts, header_map.get('pen_v', 7), float),
-            'a': to_num(parts, header_map.get('a', 8), float),
-            'b': to_num(parts, header_map.get('b', 9), float),
-            'c': to_num(parts, header_map.get('c', 10), float),
-            'd': to_num(parts, header_map.get('d', 11), float),
-            'e': to_num(parts, header_map.get('e', 12), float),
-            'f': to_num(parts, header_map.get('f', 13), float),
+            'death': death_raw,
+            'death_norm': normalize_reason(death_raw),
+            'death_canon': canonical_death_reason(death_raw),
+            'death_family': death_family(death_raw),
+            'is_test_failure_death': is_test_failure_reason(death_raw),
+            'pen_m': to_num(parts, header_map.get('pen_m'), float),
+            'pen_v': to_num(parts, header_map.get('pen_v'), float),
+            'a': to_num(parts, header_map.get('a'), float),
+            'b': to_num(parts, header_map.get('b'), float),
+            'c': to_num(parts, header_map.get('c'), float),
+            'd': to_num(parts, header_map.get('d'), float),
+            'e': to_num(parts, header_map.get('e'), float),
+            'f': to_num(parts, header_map.get('f'), float),
             'wait_bonus': to_num(parts, header_map.get('wait_bonus'), float),
-            'net': to_num(parts, header_map.get('net', 14), float),
-            'pen_cw': to_num(parts, header_map.get('pen_cw', 15), float),
+            'net': to_num(parts, header_map.get('net'), float),
+            'pen_cw': to_num(parts, header_map.get('pen_cw'), float),
             'pen_tv': to_num(parts, header_map.get('pen_tv'), float),
             'pen_creep': to_num(parts, header_map.get('pen_creep'), float),
             'pen_rev': to_num(parts, header_map.get('pen_rev'), float),
             'pen_lazy': to_num(parts, header_map.get('pen_lazy'), float),
             'pen_swstop': to_num(parts, header_map.get('pen_swstop'), float),
             'pen_steer_app': to_num(parts, header_map.get('pen_steer_app'), float),
-            't_norm': to_num(parts, header_map.get('t_norm', 16), int),
-            't_tot': to_num(parts, header_map.get('t_tot', 17), int),
+            't_norm': to_num(parts, header_map.get('t_norm'), int),
+            't_tot': to_num(parts, header_map.get('t_tot'), int),
             'thr_pos': to_num(parts, header_map.get('thr_pos'), float),
             'thr_grace': to_num(parts, header_map.get('thr_grace'), float),
             'brake_grace': to_num(parts, header_map.get('brake_grace'), float),
@@ -2159,6 +2499,7 @@ def parse_debug(path):
             'yield_done_n': to_num(parts, header_map.get('yield_done_n'), int),
             'training': parse_bool_token(parts[t_idx]) if t_idx is not None and t_idx < len(parts) else None,
         }
+        return row
 
     with open(path, encoding='utf-8-sig', newline='') as f:
         reader = csv.reader(f)
@@ -2199,6 +2540,7 @@ def parse_debug(path):
                 logging.warning(f'[parse_debug] Row {i} skipped: {type(e).__name__}: {e}')
     logging.info(f'[parse_debug] Loaded {len(rows)} rows from {os.path.basename(path)}')
     # Derivadas compatibles con logs 27-04-2026 y posteriores.
+    mutation_bounds = infer_carindex_bounds(rows)
     for r in rows:
         t_norm = max(float(r.get('t_norm', 0.0)), 1.0)
         t_tot = max(float(r.get('t_tot', 0.0)), 1.0)
@@ -2227,6 +2569,14 @@ def parse_debug(path):
         r['mut_large_rate'] = sdiv(r.get('mut_large', 0.0), WEIGHTS_TOTAL)
         r['mut_large_share'] = sdiv(r.get('mut_large', 0.0), max(mut_changed, 1.0))
         r['mut_strength'] = r.get('mut_avg_mag', 0.0) * mut_changed
+        mutation_profile = mutation_profile_for_row(r, bounds=mutation_bounds)
+        r['mutation_kind'] = mutation_profile['kind']
+        r['is_weight_initialization'] = mutation_profile['is_initialization']
+        r['expected_mut_rate'] = mutation_profile['expected_rate']
+        r['mut_rate_error'] = (
+            r['mut_rate'] - mutation_profile['expected_rate']
+            if mutation_profile['expected_rate'] is not None else 0.0
+        )
         if r.get('mut_parent_fit', 0.0) != 0.0:
             r['mut_parent_delta'] = r.get('fit', 0.0) - r.get('mut_parent_fit', 0.0)
             r['mut_parent_delta_pct'] = sdiv(r['mut_parent_delta'] * 100.0, abs(r.get('mut_parent_fit', 0.0)))
@@ -2481,7 +2831,7 @@ def report_diversity_analysis(R, debug_rows):
     R.p(f'  Modelos mutados:           {div_info["mutated_share"]:.1f}%')
     
     R.p(f'\n-- Desempeño por Familia --')
-    for fam in ['LOADED', 'SESSION', 'RANDOM', 'MUT_LOADED', 'MUT_SESSION']:
+    for fam in ['LOADED', 'SESSION', 'MUT_LOADED', 'MUT_SESSION', 'MUT_LOADED_LARGE', 'RANDOM']:
         stats = div_info["family_stats"].get(fam)
         if stats:
             R.p(f'  {fam:15s}: N={stats["count"]:4d} | media={stats["mean_fitness"]:9.2f} | std={stats["std_fitness"]:.2f}')
@@ -2527,38 +2877,31 @@ def report_prediction_analysis(R, summary_rows):
         R.p(f'  [X] Decayendo: pendiente negativa')
 
 def report_components_correlation(R, debug_rows):
-    """Reporte de correlaciones entre componentes de fitness."""
+    """Report correlations for fields present in the detected debug schema."""
     comp_info = analyze_fitness_components_correlation(debug_rows)
     if not comp_info:
         return
-    
+
     R.p(f'\n{"="*76}')
-    R.p(f'  ANALISIS DE COMPONENTES FITNESS')
+    R.p('  ANALISIS DE COMPONENTES FITNESS')
     R.p(f'{"="*76}')
-    
-    corr = comp_info["component_fitness_correlations"]
-    R.p(f'\n-- Correlación Componentes vs Fitness Final --')
-    R.p(f'  A (vel*centrado):          {corr["a_vs_fit"]:>7.4f}')
-    R.p(f'  E (reward centrar):        {corr["e_vs_fit"]:>7.4f}')
-    R.p(f'  F (vel^2*obst^2):          {corr["f_vs_fit"]:>7.4f}')
-    R.p(f'  NetNormal (A+E+F):         {corr["net_vs_fit"]:>7.4f}')
-    
-    contrib = comp_info["component_contributions"]
-    means = comp_info["component_means"]
-    R.p(f'\n-- Contribución Promedio --')
-    R.p(f'  A media / Fitness media:   {contrib["a"]:.4f}')
-    R.p(f'  E media / Fitness media:   {contrib["e"]:.4f}')
-    R.p(f'  F media / Fitness media:   {contrib["f"]:.4f}')
-    
-    R.p(f'\n-- Valores Medios por Componente --')
-    R.p(f'  A (vel*centrado):          {means["a"]:.4f}')
-    R.p(f'  E (reward centrar):        {means["e"]:.4f}')
-    R.p(f'  F (vel^2*obst^2):          {means["f"]:.4f}')
-    R.p(f'  NetNormal (suma):          {means["net"]:.4f}')
-    
-    R.p(f'\n-- Top 3 Penalizaciones --')
-    for name, val in comp_info["top_penalties"]:
-        R.p(f'  {name:20s}: media = {val:.4f}')
+    R.p(f'  Esquema detectado:         {comp_info.get("schema", "unknown")}')
+
+    labels = comp_info['component_labels']
+    corr = comp_info['component_fitness_correlations']
+    contrib = comp_info['component_contributions']
+    means = comp_info['component_means']
+    R.p('\n-- Correlacion Componentes vs Fitness Final --')
+    for key, value in corr.items():
+        R.p(f'  {labels.get(key, key):30s}: {value:>7.4f}')
+
+    R.p('\n-- Media y proporcion sobre Fitness medio --')
+    for key, value in means.items():
+        R.p(f'  {labels.get(key, key):30s}: media={value:>11.4f}  ratio={contrib.get(key, 0.0):>8.4f}')
+
+    R.p('\n-- Top 3 Penalizaciones --')
+    for name, value in comp_info['top_penalties']:
+        R.p(f'  {name:20s}: media = {value:.4f}')
 
 def compute_debug_aggregates(dbg):
     """
@@ -2570,7 +2913,8 @@ def compute_debug_aggregates(dbg):
         return {}, {}
     
     agg = {
-        'fit': 0.0, 'a': 0.0, 'b': 0.0, 'e': 0.0, 'f': 0.0, 'net': 0.0,
+        'fit': 0.0, 'a': 0.0, 'b': 0.0, 'c': 0.0, 'd': 0.0, 'e': 0.0,
+        'f': 0.0, 'wait_bonus': 0.0, 'net': 0.0,
         'pen_m': 0.0, 'pen_v': 0.0, 'pen_cw': 0.0, 'pen_tv': 0.0, 'pen_nav': 0.0,
         'pen_creep': 0.0, 'pen_rev': 0.0, 'pen_lazy': 0.0, 'pen_swstop': 0.0,
         'pen_steer_app': 0.0, 't_norm': 0.0, 't_tot': 0.0,
@@ -2596,8 +2940,11 @@ def compute_debug_aggregates(dbg):
         agg['fit'] += r.get('fit', 0.0)
         agg['a'] += r.get('a', 0.0)
         agg['b'] += r.get('b', 0.0)
+        agg['c'] += r.get('c', 0.0)
+        agg['d'] += r.get('d', 0.0)
         agg['e'] += r.get('e', 0.0)
         agg['f'] += r.get('f', 0.0)
+        agg['wait_bonus'] += r.get('wait_bonus', 0.0)
         agg['net'] += r.get('net', 0.0)
         agg['pen_m'] += r.get('pen_m', 0.0)
         agg['pen_v'] += r.get('pen_v', 0.0)
@@ -2641,16 +2988,18 @@ def compute_debug_aggregates(dbg):
         agg['grace_cmd_total'] += r.get('thr_grace', 0.0) + r.get('brake_grace', 0.0)
         agg['stop_cmd_total'] += r.get('stop_brake', 0.0) + r.get('stop_throttle', 0.0)
         
-        # Mutation lists
-        mut_lists['mut_changed'].append(r.get('mut_changed', 0.0))
-        mut_lists['mut_avg'].append(r.get('mut_avg_mag', 0.0))
-        mut_lists['mut_large'].append(r.get('mut_large', 0.0))
-        mut_lists['mut_parent'].append(r.get('mut_parent_fit', 0.0))
-        mut_lists['mut_rate'].append(r.get('mut_rate', 0.0))
-        mut_lists['mut_large_rate'].append(r.get('mut_large_rate', 0.0))
-        mut_lists['mut_strength'].append(r.get('mut_strength', 0.0))
-        mut_lists['fit'].append(r.get('fit', 0.0))
-        if r.get('death') == 'INVALID_BRAIN':
+        # InitialRandom reports every weight as changed; it is initialization,
+        # not a 100% mutation, so exclude it from mutation distributions.
+        if not r.get('is_weight_initialization', False):
+            mut_lists['mut_changed'].append(r.get('mut_changed', 0.0))
+            mut_lists['mut_avg'].append(r.get('mut_avg_mag', 0.0))
+            mut_lists['mut_large'].append(r.get('mut_large', 0.0))
+            mut_lists['mut_parent'].append(r.get('mut_parent_fit', 0.0))
+            mut_lists['mut_rate'].append(r.get('mut_rate', 0.0))
+            mut_lists['mut_large_rate'].append(r.get('mut_large_rate', 0.0))
+            mut_lists['mut_strength'].append(r.get('mut_strength', 0.0))
+            mut_lists['fit'].append(r.get('fit', 0.0))
+        if is_invalid_brain_reason(r.get('death', '')):
             mut_lists['invalid_brain_count'] += 1
     
     return agg, mut_lists
@@ -2711,6 +3060,38 @@ def report_debug(R, dbg):
         mt = sdiv(sum(r['time'] for r in grp), cnt)
         R.p(f'  {reason:45s}: {cnt:5d} ({sdiv(cnt*100,len(dbg)):5.1f}%) fit={mf:>10.1f} t={mt:.1f}s')
 
+    family_counts = Counter(r.get('death_family', death_family(r.get('death', ''))) for r in dbg)
+    death_fail_n = sum(1 for r in dbg if r.get('is_test_failure_death', is_test_failure_reason(r.get('death', ''))))
+    R.p(f'\n-- Familias y Fallos por DeathReason --')
+    for fam, cnt in sorted(family_counts.items(), key=lambda kv: (death_family_order_index(kv[0]), -kv[1], kv[0])):
+        R.p(f'  {fam:14s}: {cnt:5d} ({sdiv(cnt*100, len(dbg)):5.1f}%)')
+    R.p(
+        f'  Fail por muerte*: {death_fail_n:5d}/{len(dbg)} ({sdiv(death_fail_n*100, len(dbg)):5.1f}%) '
+        f'(*sin reconstruir TestMinTime/TestMinFitness)'
+    )
+    if MODE in ('test', 'traintest'):
+        reconstructed = reconstruct_test_outcomes(dbg)
+        rc = reconstructed['counts']
+        R.p('\n-- Reconstruccion de Resultado TEST --')
+        R.p(
+            f'  Reglas asumidas: tiempo>={reconstructed["min_time"]:.1f}s, '
+            f'fitness>={reconstructed["min_fitness"]:.1f} '
+            f'(activo={reconstructed["use_fitness"]}), muerte valida'
+        )
+        R.p(
+            f'  Acierto reconstruido: {reconstructed["success"]}/{reconstructed["total"]} '
+            f'({reconstructed["success_rate"]:.2f}%)'
+        )
+        R.p(
+            f'  Fallos: muerte={rc.get("fail_death", 0)}, tiempo={rc.get("fail_time", 0)}, '
+            f'fitness={rc.get("fail_fitness", 0)}'
+        )
+        R.p(
+            '  Nota: Test_Summary.csv sigue siendo autoritativo; ajusta '
+            'ANALYSE_TEST_MIN_TIME/ANALYSE_TEST_MIN_FITNESS/ANALYSE_TEST_USE_FITNESS '
+            'si los valores editables de Unreal cambian.'
+        )
+
     # Componentes globales - usar agregados precomputados (mejora de performance)
     nd = len(dbg)
     if nd == 0:
@@ -2720,11 +3101,26 @@ def report_debug(R, dbg):
     car_bounds = infer_carindex_bounds(dbg)
     
     R.p(f'\n-- Componentes del Fitness (medias globales, {nd} coches) --')
-    R.p(f'  Acum_A  (vel x centrado):       {sdiv(agg["a"], nd):>10.4f}')
-    R.p(f'  Media_B (mejora centrado):       {sdiv(agg["b"], nd):>10.6f}')
-    R.p(f'  Acum_E  (B x C x D reward):     {sdiv(agg["e"], nd):>10.4f}')
-    R.p(f'  Acum_F  (vel^2 x frontObst^2):  {sdiv(agg["f"], nd):>10.4f}')
-    R.p(f'  Acum_NetNormal (A+E+F):          {sdiv(agg["net"], nd):>10.4f}')
+    R.p(f'  Esquema CSV:                     {dbg[0].get("_schema", "unknown")}')
+    R.p(
+        f'  Red asumida:                     inputs={NETWORK_INPUT_COUNT}, hidden={NETWORK_HIDDEN_COUNT}, '
+        f'outputs={NETWORK_OUTPUT_COUNT}, pesos={WEIGHTS_TOTAL}'
+    )
+    component_lines = (
+        ('a', 'Acum_A'),
+        ('b', 'Media_B (legacy)'),
+        ('c', 'Acum_C (legacy)'),
+        ('d', 'Acum_D (legacy)'),
+        ('e', 'Acum_E (legacy)'),
+        ('f', 'Acum_F'),
+        ('wait_bonus', 'Acum_WaitBonus'),
+        ('net', 'Acum_NetNormal'),
+        ('stop_bonus', 'StopCompletionBonus'),
+        ('yield_bonus', 'YieldCompletionBonus'),
+    )
+    for key, label in component_lines:
+        if debug_field_available(dbg, key):
+            R.p(f'  {label:32s}: {sdiv(agg.get(key, 0.0), nd):>10.4f}')
     R.p(f'  Penalty_Muerte:                  {sdiv(agg["pen_m"], nd):>10.4f}')
     R.p(f'  Penalty_Velocidad:               {sdiv(agg["pen_v"], nd):>10.4f}')
     R.p(f'  Penalty_CorrectingWrong:         {sdiv(agg["pen_cw"], nd):>10.4f}')
@@ -2806,8 +3202,12 @@ def report_debug(R, dbg):
             ms = car_bounds.get('mut_session_end', CARINDEX_MUT_SESSION_END)
             pop_est = car_bounds.get('pop_est', 0)
             src = car_bounds.get('source', 'fixed')
-            R.p(f'  CarIndex esquema ({src}):         LOADED=1, SESSION=2, MUT_LOADED=3..{ml}, MUT_SESSION={ml+1}..{ms}, RANDOM>{ms} (pop~{pop_est})')
-    invalid_brain_rows = [r for r in dbg if r.get('death') == 'INVALID_BRAIN']
+            R.p(
+                f'  CarIndex esquema ({src}):         LOADED=1, SESSION=2, MUT_LOADED=3..{ml}, '
+                f'MUT_SESSION={ml+1}..{ms}, MUT_LOADED_LARGE>{ms}; '
+                f'RANDOM=InitializeRandomBrain (pop~{pop_est})'
+            )
+    invalid_brain_rows = [r for r in dbg if is_invalid_brain_reason(r.get('death', ''))]
     if invalid_brain_rows:
         inv_spawn = Counter(r.get('spawn', '') for r in invalid_brain_rows if r.get('spawn', ''))
         inv_gen = Counter(r.get('gen', 0) for r in invalid_brain_rows)
@@ -2828,33 +3228,41 @@ def report_debug(R, dbg):
     mut_large_rate_vals = mut_lists['mut_large_rate']
     mut_strength_vals = mut_lists['mut_strength']
     fit_vals = mut_lists['fit']
+    mutation_n = len(mut_rate_vals)
     if any(mut_changed_vals) or any(mut_avg_vals) or any(mut_large_vals) or any(mut_parent_vals):
         R.p(f'  Weights total (assumed):        {WEIGHTS_TOTAL}')
+        init_rows = sum(1 for r in dbg if r.get('is_weight_initialization', False))
         R.p(
-            f'  MutChanged mean/P50/P90:        {sdiv(sum(mut_changed_vals), nd):>7.2f} / '
+            f'  Config EvolutionManager:        mutados={MUTATION_RATE_EVOLVED*100:.1f}% | '
+            f'MUT_LOADED_LARGE={MUTATION_RATE_RANDOM_FAMILY*100:.1f}%'
+        )
+        if init_rows:
+            R.p(f'  Inicializaciones excluidas:     {init_rows} (no son mutaciones)')
+        R.p(
+            f'  MutChanged mean/P50/P90:        {sdiv(sum(mut_changed_vals), mutation_n):>7.2f} / '
             f'{pctl(mut_changed_vals, 50):>7.2f} / {pctl(mut_changed_vals, 90):>7.2f}'
         )
         R.p(
-            f'  MutRate mean/P50/P90:           {sdiv(sum(mut_rate_vals), nd)*100:>6.2f}% / '
+            f'  MutRate mean/P50/P90:           {sdiv(sum(mut_rate_vals), mutation_n)*100:>6.2f}% / '
             f'{pctl(mut_rate_vals, 50)*100:>6.2f}% / {pctl(mut_rate_vals, 90)*100:>6.2f}%'
         )
         R.p(
-            f'  MutAvgMag mean/P50/P90:         {sdiv(sum(mut_avg_vals), nd):>7.4f} / '
+            f'  MutAvgMag mean/P50/P90:         {sdiv(sum(mut_avg_vals), mutation_n):>7.4f} / '
             f'{pctl(mut_avg_vals, 50):>7.4f} / {pctl(mut_avg_vals, 90):>7.4f}'
         )
         R.p(
-            f'  MutStrength mean/P50/P90:       {sdiv(sum(mut_strength_vals), nd):>7.5f} / '
+            f'  MutStrength mean/P50/P90:       {sdiv(sum(mut_strength_vals), mutation_n):>7.5f} / '
             f'{pctl(mut_strength_vals, 50):>7.5f} / {pctl(mut_strength_vals, 90):>7.5f}'
         )
         R.p(
-            f'  MutNumLarge mean/P50/P90:       {sdiv(sum(mut_large_vals), nd):>7.2f} / '
+            f'  MutNumLarge mean/P50/P90:       {sdiv(sum(mut_large_vals), mutation_n):>7.2f} / '
             f'{pctl(mut_large_vals, 50):>7.2f} / {pctl(mut_large_vals, 90):>7.2f}'
         )
         R.p(
             f'  MutLarge share (global):        {sdiv(sum(mut_large_vals), max(sum(mut_changed_vals), 1.0)) * 100.0:>9.2f}%'
         )
         R.p(
-            f'  MutLargeRate mean/P50/P90:      {sdiv(sum(mut_large_rate_vals), nd)*100:>6.2f}% / '
+            f'  MutLargeRate mean/P50/P90:      {sdiv(sum(mut_large_rate_vals), mutation_n)*100:>6.2f}% / '
             f'{pctl(mut_large_rate_vals, 50)*100:>6.2f}% / {pctl(mut_large_rate_vals, 90)*100:>6.2f}%'
         )
         R.p(f'  Corr MutRate vs Fit:            {pearson_corr(mut_rate_vals, fit_vals):>10.4f}')
@@ -2872,21 +3280,26 @@ def report_debug(R, dbg):
             R.p(f'  DeltaFit% vs Parent (P50):      {pctl(parent_delta_pct, 50):>10.2f}%')
         fam_rows = defaultdict(list)
         for r in dbg:
-            fam_rows[car_index_family(r.get('car_index', 0), bounds=car_bounds)].append(r)
+            fam_rows[car_index_family_for_row(r, bounds=car_bounds)].append(r)
         fam_stats = []
         for fam, rows_f in fam_rows.items():
-            if len(rows_f) < 5:
+            mutation_rows = [x for x in rows_f if not x.get('is_weight_initialization', False)]
+            if len(mutation_rows) < 5:
                 continue
             fam_stats.append((
                 fam,
-                len(rows_f),
-                mean([x.get('mut_rate', 0.0) for x in rows_f]),
-                mean([x.get('fit', 0.0) for x in rows_f]),
+                len(mutation_rows),
+                mean([x.get('mut_rate', 0.0) for x in mutation_rows]),
+                mean([x.get('expected_mut_rate', 0.0) or 0.0 for x in mutation_rows]),
+                mean([x.get('fit', 0.0) for x in mutation_rows]),
             ))
         if fam_stats:
-            R.p('  By family (mut_rate mean):')
-            for fam, n, mrate, mfit in sorted(fam_stats, key=lambda x: x[2], reverse=True):
-                R.p(f'    {fam:10s}: N={n:4d} mut_rate={mrate*100:>6.2f}% fit_mean={mfit:>9.1f}')
+            R.p('  By family (observed vs expected):')
+            for fam, n, mrate, expected, mfit in sorted(fam_stats, key=lambda x: x[2], reverse=True):
+                R.p(
+                    f'    {fam:10s}: N={n:4d} observed={mrate*100:>6.2f}% '
+                    f'expected={expected*100:>5.2f}% fit_mean={mfit:>9.1f}'
+                )
         spawn_mut = []
         for sp, rows_sp in spawns.items():
             if len(rows_sp) < MIN_SPAWN_N:
@@ -3053,6 +3466,8 @@ def report_quicksummary(R, rows, dbg):
         cmd_total = sum(r.get('thr_pos', 0.0) + r.get('brake_in', 0.0) for r in dbg)
         grace_cmd_total = sum(r.get('thr_grace', 0.0) + r.get('brake_grace', 0.0) for r in dbg)
         stop_cmd_total = sum(r.get('stop_brake', 0.0) + r.get('stop_throttle', 0.0) for r in dbg)
+        death_fail_n = sum(1 for r in dbg if r.get('is_test_failure_death', is_test_failure_reason(r.get('death', ''))))
+        death_fail_pct = sdiv(death_fail_n * 100.0, nd)
         R.p(f'  Fitness raw med:  {sdiv(sum(r["fit"] for r in dbg), nd):.2f}')
         R.p(f'  NetNormal med:    {sdiv(sum(r["net"] for r in dbg), nd):.4f}')
         R.p(f'  PenMuerte med:    {sdiv(sum(r["pen_m"] for r in dbg), nd):.2f}')
@@ -3093,6 +3508,7 @@ def report_quicksummary(R, rows, dbg):
         R.p(f'  Stop brake share: {sdiv(sum(r.get("stop_brake", 0.0) for r in dbg), stop_cmd_total)*100:.2f}%')
         R.p(f'  Stop ctx/tot tick:{sdiv(sum(r.get("t_stop_ctx", 0.0) for r in dbg), sum(r.get("t_tot", 0.0) for r in dbg))*100:.2f}%')
         R.p(f'  Muerte #1:        {top_death[0]} ({sdiv(top_death[1]*100,nd):.0f}%)')
+        R.p(f'  Fail por muerte:  {death_fail_pct:.2f}% ({death_fail_n}/{nd})')
         if yield_stuck.get('timefinished_rows', 0) > 0:
             R.p(
                 f'  YieldTrap(TF):    {yield_stuck.get("candidate_count", 0)}/{yield_stuck.get("timefinished_rows", 0)} '
@@ -3123,6 +3539,10 @@ def report_quicksummary(R, rows, dbg):
         R.p(f'  Errores (%):      {avg_fail:.2f}%')
         R.p(f'  Score (WilsonLB): {score_wilson:.2f}')
         R.p(f'  Aciertos P50:     {pctl([m["success_rate"] for m in derived], 50):.2f}%')
+        if dbg:
+            death_fail_n = sum(1 for r in dbg if r.get('is_test_failure_death', is_test_failure_reason(r.get('death', ''))))
+            death_fail_pct = sdiv(death_fail_n * 100.0, len(dbg))
+            R.p(f'  Fail muerte vs SummaryFail: {death_fail_pct:.2f}% vs {avg_fail:.2f}%')
 
 def report_input_quality(R, summary_meta, debug_meta):
     R.p(f'\n{"="*76}')
@@ -3157,6 +3577,11 @@ def report_debug_scope(R, info):
     R.p(f'  Modo analizado:           {info.get("mode", "")}')
     R.p(f'  Registros debug totales:  {info.get("raw_total", 0)}')
     R.p(f'  Registros seleccionados:  {info.get("selected_total", 0)}')
+    if info.get('excluded_incomplete_rows', 0):
+        R.p(
+            f'  Excluidos sin Summary:    {info.get("excluded_incomplete_rows", 0)} '
+            f'(gens {info.get("excluded_incomplete_generations", [])})'
+        )
 
     if not info.get('has_training_flag', False):
         R.p('  Campo Training/TrainingMode: no detectado (se usa debug completo).')
@@ -3180,7 +3605,13 @@ def analyze_data_coherence(mode, summary_rows, debug_rows, debug_scope=None):
     overlap_gens = sorted(set(summary_gens) & set(debug_gens))
 
     pop_est = estimate_population_size(summary_rows, default=60) if summary_rows else 60
-    expected_debug_rows = len(summary_gens) * pop_est if summary_gens else 0
+    eval_ns = [to_int(r.get('eval_n', 0)) for r in summary_rows if to_int(r.get('eval_n', 0)) > 0]
+    if eval_ns:
+        expected_debug_rows = sum(eval_ns)
+        expected_debug_source = 'sum(N)'
+    else:
+        expected_debug_rows = len(summary_gens) * pop_est if summary_gens else 0
+        expected_debug_source = 'gens*pop_est'
     debug_row_coverage = sdiv(len(debug_rows), expected_debug_rows)
     debug_gen_coverage = sdiv(len(debug_gens), len(summary_gens))
     overlap_coverage = sdiv(len(overlap_gens), len(summary_gens))
@@ -3255,6 +3686,8 @@ def analyze_data_coherence(mode, summary_rows, debug_rows, debug_scope=None):
         'debug_gen_max': debug_gens[-1] if debug_gens else 0,
         'overlap_gens': len(overlap_gens),
         'expected_debug_rows': expected_debug_rows,
+        'expected_debug_source': expected_debug_source,
+        'population_estimate': pop_est,
         'debug_row_coverage_pct': debug_row_coverage * 100.0,
         'debug_gen_coverage_pct': debug_gen_coverage * 100.0,
         'overlap_coverage_pct': overlap_coverage * 100.0,
@@ -3277,7 +3710,11 @@ def report_data_coherence(R, info):
     )
     R.p(f'  Solape de generaciones:  {info.get("overlap_gens", 0)}')
     R.p(f'  Cobertura gens Debug:    {info.get("debug_gen_coverage_pct", 0.0):.1f}%')
-    R.p(f'  Cobertura filas Debug:   {info.get("debug_row_coverage_pct", 0.0):.1f}% (esperado~{info.get("expected_debug_rows", 0)})')
+    R.p(
+        f'  Cobertura filas Debug:   {info.get("debug_row_coverage_pct", 0.0):.1f}% '
+        f'(esperado~{info.get("expected_debug_rows", 0)} via {info.get("expected_debug_source", "-")}, '
+        f'pop~{info.get("population_estimate", 0)})'
+    )
 
     warnings = info.get('warnings', [])
     if warnings:
@@ -3600,7 +4037,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         by_spawn[r['spawn']].append(r)
         by_gen[r['gen']].append(r)
         by_death[r['death']].append(r)
-        by_family[death_family(r['death'])].append(r)
+        by_family[r.get('death_family', death_family(r['death']))].append(r)
         if not r['spawn']:
             missing_spawn += 1
         if not r['death']:
@@ -3627,8 +4064,8 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
     report_stop_stuck_detection(R, stop_stuck)
 
     # Analisis LAZY
-    lazy_rows = by_death.get('LAZY', [])
-    non_lazy = [r for r in dbg if r.get('death') != 'LAZY']
+    lazy_rows = [r for r in dbg if is_lazy_reason(r.get('death', ''))]
+    non_lazy = [r for r in dbg if not is_lazy_reason(r.get('death', ''))]
     R.p(f'\n-- Diagnostico Especifico LAZY --')
     R.p(f'  LAZY total: {len(lazy_rows)}/{nd} ({sdiv(len(lazy_rows)*100, nd):.2f}%)')
 
@@ -3663,7 +4100,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         R.p(f'  {"-"*(len(hdr)-2)}')
         for sp, cnt in lazy_by_spawn.most_common(TOP_ROWS):
             all_sp = by_spawn.get(sp, [])
-            lazy_sp = [r for r in all_sp if r.get('death') == 'LAZY']
+            lazy_sp = [r for r in all_sp if is_lazy_reason(r.get('death', ''))]
             fits_lazy = [r['fit'] for r in lazy_sp]
             time_lazy = [r['time'] for r in lazy_sp]
             stop0_n = sum(1 for r in lazy_sp if r.get('t_stop_ctx', 0.0) <= 0.0)
@@ -3702,7 +4139,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
             if not sp:
                 continue
             nsp = len(rows_sp)
-            lazy_n = sum(1 for r in rows_sp if r.get('death') == 'LAZY')
+            lazy_n = sum(1 for r in rows_sp if is_lazy_reason(r.get('death', '')))
             pen_lazy_vals = [r.get('pen_lazy', 0.0) for r in rows_sp]
             pen_lazy_sum = sum(pen_lazy_vals)
             spawn_lazy_stats.append({
@@ -3830,7 +4267,15 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('t_tot', 'Ticks_Total'),
     ]
     corrs = []
+    available_fields = debug_available_fields(dbg)
+    derived_corr_fields = {
+        'time', 'steer_gap_abs', 'steer_in_avg', 'steer_abs_avg',
+        'steer_gap_avg_abs', 'stop_bonus_per', 'yield_bonus_per',
+        'stop_done_rate', 'yield_done_rate', 'fit_peak_gain',
+    }
     for key, label in corr_items:
+        if key not in available_fields and key not in derived_corr_fields:
+            continue
         if key == 'steer_gap_abs':
             vals = [abs(r.get('steer_in', 0.0) - r.get('steer_target', 0.0)) for r in dbg]
         else:
@@ -3964,7 +4409,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
     spawn_rows = []
     for sp, rows_sp in by_spawn.items():
         fits = [r['fit'] for r in rows_sp]
-        lazy_n = sum(1 for r in rows_sp if r.get('death') == 'LAZY')
+        lazy_n = sum(1 for r in rows_sp if is_lazy_reason(r.get('death', '')))
         spawn_rows.append({
             'spawn': sp,
             'n': len(rows_sp),
@@ -4019,7 +4464,7 @@ def report_session_comparison(R, summary_rows, dbg_rows, previous_sessions):
 
     cur_deaths = Counter(r.get('death', '') for r in dbg_rows)
     cur_top_death = cur_deaths.most_common(1)[0][0] if cur_deaths else ''
-    cur_lazy = sum(1 for r in dbg_rows if r.get('death') == 'LAZY')
+    cur_lazy = sum(1 for r in dbg_rows if is_lazy_reason(r.get('death', '')))
     current = summarize_session(
         summary_rows,
         dbg_rows_count=len(dbg_rows),
@@ -4092,8 +4537,12 @@ def save_json_snapshot(
     deaths = Counter(r.get('death', '') for r in dbg_rows)
     car_bounds = infer_carindex_bounds(dbg_rows)
     families = Counter(death_family(r.get('death', '')) for r in dbg_rows)
-    lazy_rows = deaths.get('LAZY', 0)
-    invalid_brain_rows = deaths.get('INVALID_BRAIN', 0)
+    lazy_rows = families.get('LAZY', 0)
+    invalid_brain_rows = families.get('INVALID_BRAIN', 0)
+    death_failure_rows = sum(
+        1 for r in dbg_rows
+        if r.get('is_test_failure_death', is_test_failure_reason(r.get('death', '')))
+    )
     cmd_total = sum(r.get('thr_pos', 0.0) + r.get('brake_in', 0.0) for r in dbg_rows)
     grace_cmd_total = sum(r.get('thr_grace', 0.0) + r.get('brake_grace', 0.0) for r in dbg_rows)
     stop_cmd_total = sum(r.get('stop_brake', 0.0) + r.get('stop_throttle', 0.0) for r in dbg_rows)
@@ -4225,6 +4674,8 @@ def save_json_snapshot(
             'stop_brake_share': sdiv(sum(r.get('stop_brake', 0.0) for r in dbg_rows), stop_cmd_total),
             'stop_ctx_tick_coverage': sdiv(stop_ticks_total, ticks_total),
             'death_families': dict(families),
+            'death_failure_rows': death_failure_rows,
+            'death_failure_pct': sdiv(death_failure_rows * 100.0, len(dbg_rows)),
         },
         'spawn_stop_percentiles': sorted(spawn_stop_stats, key=lambda x: x.get('legal_fail_pct', 0.0), reverse=True)[:20],
         'previous_sessions': previous_sessions,
@@ -4255,6 +4706,130 @@ def save_fig(fig, name):
         import traceback; traceback.print_exc()
     plt.close(fig)
     return p
+
+def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None):
+    stats = summarize_test_results(summary)
+    if not stats:
+        return []
+
+    rows = stats['rows']
+    derived = stats['derived']
+    gens = [r.get('gen_phase', r.get('gen', i + 1)) for i, r in enumerate(rows)]
+    rates = [m['success_rate'] for m in derived]
+    fitness = [r.get('mean', 0.0) for r in rows]
+    times = [r.get('time', 0.0) for r in rows]
+    window = max(2, min(5, len(rows)))
+
+    fig = plt.figure(figsize=(20, 12), facecolor='#f4f6f8')
+    grid = fig.add_gridspec(
+        3, 12,
+        height_ratios=[0.78, 2.25, 2.05],
+        hspace=0.50,
+        wspace=0.75,
+    )
+    fig.subplots_adjust(left=0.065, right=0.975, top=0.88, bottom=0.075)
+    model_text = ''
+    if model_dates:
+        model_text = ' | '.join(f'{name}: {date}' for name, date in sorted(model_dates.items()))
+    title = f'TEST - Comparativa rapida del modelo ({stats["gens"]} generaciones, N={stats["total_n"]})'
+    fig.suptitle(title, fontsize=18, fontweight='bold', y=0.985)
+    if model_text:
+        fig.text(0.5, 0.952, model_text, ha='center', fontsize=9, color='#4b5563')
+
+    cards = [
+        ('ACIERTO GLOBAL', f'{stats["success_rate"]:.1f}%', f'IC95% {stats["wilson_lo"]:.1f}-{stats["wilson_hi"]:.1f}%'),
+        ('MEDIANA / ESTABILIDAD', f'{stats["success_median"]:.1f}%', f'desv. {stats["success_std"]:.1f} pp'),
+        ('MEJOR GENERACION', f'{stats["success_max"]:.1f}%', f'generacion {stats["best_gen"]}'),
+        ('FITNESS / TIEMPO', f'{stats["fitness_mean"]:,.0f}', f'{stats["time_mean"]:.1f} s de media'),
+    ]
+    for col, (label, value, detail) in enumerate(cards):
+        ax = fig.add_subplot(grid[0, col * 3:(col + 1) * 3])
+        ax.set_facecolor('white')
+        for spine in ax.spines.values():
+            spine.set_color('#d1d5db')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.text(0.5, 0.76, label, ha='center', va='center', fontsize=9, color='#6b7280', fontweight='bold')
+        ax.text(0.5, 0.43, value, ha='center', va='center', fontsize=22, color='#111827', fontweight='bold')
+        ax.text(0.5, 0.14, detail, ha='center', va='center', fontsize=9, color='#4b5563')
+
+    ax = fig.add_subplot(grid[1, :9])
+    colors = ['#16a34a' if v >= stats['success_rate'] else '#f59e0b' for v in rates]
+    ax.bar(gens, rates, color=colors, alpha=0.78, label='Acierto por generacion')
+    ax.plot(gens, rates, color='#1f2937', marker='o', linewidth=1.4, markersize=4)
+    if len(rates) >= 2:
+        ax.plot(gens, rolling(rates, window), color='#2563eb', linewidth=2.8, label=f'Media movil {window}')
+    ax.axhline(stats['success_rate'], color='#dc2626', linestyle='--', linewidth=2,
+               label=f'Global {stats["success_rate"]:.1f}%')
+    ax.set_ylim(0, 100)
+    ax.set_title('Acierto por generacion')
+    ax.set_xlabel('Generacion de test')
+    ax.set_ylabel('Acierto (%)')
+    ax.grid(True, axis='y', alpha=0.25)
+    ax.legend(loc='upper left', ncols=3, fontsize=9, framealpha=0.92)
+
+    ax = fig.add_subplot(grid[1, 9:12])
+    ax.bar(['Aciertos', 'Fallos'], [stats['total_success'], stats['total_fail']],
+           color=['#16a34a', '#dc2626'], alpha=0.85)
+    ax.set_title('Resultado acumulado')
+    ax.set_ylabel('Evaluaciones')
+    ax.grid(True, axis='y', alpha=0.25)
+    count_max = max(stats['total_success'], stats['total_fail'], 1)
+    ax.set_ylim(0, count_max * 1.16)
+    for i, value in enumerate((stats['total_success'], stats['total_fail'])):
+        ax.text(i, value + count_max * 0.025, str(value), ha='center', va='bottom', fontweight='bold')
+
+    ax = fig.add_subplot(grid[2, :7])
+    fit_line, = ax.plot(gens, fitness, color='#7c3aed', marker='o', linewidth=2, label='Fitness medio')
+    ax.set_title('Calidad y duracion por generacion')
+    ax.set_xlabel('Generacion de test')
+    ax.set_ylabel('Fitness medio', color='#7c3aed')
+    ax.tick_params(axis='y', labelcolor='#7c3aed')
+    ax.grid(True, alpha=0.25)
+    ax2 = ax.twinx()
+    time_line, = ax2.plot(gens, times, color='#0891b2', marker='s', linewidth=1.8, label='Tiempo medio')
+    ax2.set_ylabel('Tiempo medio (s)', color='#0891b2')
+    ax2.tick_params(axis='y', labelcolor='#0891b2', pad=3)
+    ax2.yaxis.labelpad = 8
+    ax.legend(handles=[fit_line, time_line], loc='upper left', fontsize=9, framealpha=0.92)
+
+    ax = fig.add_subplot(grid[2, 8:12])
+    historical = [s for s in (previous_sessions or []) if s.get('test_evaluations', 0) > 0]
+    comparison = historical[-6:] + [{
+        'session': 'ACTUAL',
+        'success_mean': stats['success_rate'],
+        'test_evaluations': stats['total_n'],
+    }]
+
+    def compact_session_label(session):
+        if session == 'ACTUAL':
+            return session
+        match = re.search(r'(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})$', str(session))
+        if match:
+            return f'{match.group(2)}-{match.group(3)} {match.group(4)}:{match.group(5)}'
+        return str(session).replace('traintest_', '').replace('test_', '')[-14:]
+
+    labels = [compact_session_label(s.get('session', '?')) for s in comparison]
+    values = [s.get('success_mean', 0.0) for s in comparison]
+    bar_colors = ['#94a3b8'] * max(0, len(values) - 1) + ['#2563eb']
+    ax.barh(labels, values, color=bar_colors, alpha=0.9)
+    comparison_limit = min(100.0, max(40.0, max(values or [0.0]) + 15.0))
+    ax.set_xlim(0, comparison_limit)
+    ax.set_title('Comparacion con tests anteriores')
+    ax.set_xlabel('Acierto global (%)')
+    ax.tick_params(axis='y', labelsize=9, pad=4)
+    ax.grid(True, axis='x', alpha=0.25)
+    for i, value in enumerate(values):
+        label_x = min(value + comparison_limit * 0.02, comparison_limit * 0.91)
+        ax.text(label_x, i, f'{value:.1f}%', va='center', fontsize=9, fontweight='bold')
+
+    fig.text(
+        0.01, 0.008,
+        f'Rango: {stats["success_min"]:.1f}-{stats["success_max"]:.1f}% | '
+        f'Peor gen: {stats["worst_gen"]} | Fitness max: {stats["fitness_best"]:,.0f}',
+        fontsize=9, color='#4b5563'
+    )
+    return [save_fig(fig, '00_test_model_dashboard.png')]
 
 def plot_debug(dbg):
     saved = []
@@ -4320,13 +4895,17 @@ def plot_debug(dbg):
 
     # ── 7. Componentes fitness por gen ──
     if len(gens) >= 1:
-        g_a, g_e, g_f, g_pm, g_pv, g_ptv, g_pn, g_pc, g_pr, g_pl, g_ps, g_net, g_fit = [], [], [], [], [], [], [], [], [], [], [], [], []
+        g_a, g_e, g_f, g_wait, g_stop_bonus, g_yield_bonus = [], [], [], [], [], []
+        g_pm, g_pv, g_ptv, g_pn, g_pc, g_pr, g_pl, g_ps, g_net, g_fit = [], [], [], [], [], [], [], [], [], []
         for g in gens:
             gc = by_gen[g]  # O(1) lookup
             ng = len(gc)
             g_a.append(sdiv(sum(r['a'] for r in gc), ng))
             g_e.append(sdiv(sum(r['e'] for r in gc), ng))
             g_f.append(sdiv(sum(r['f'] for r in gc), ng))
+            g_wait.append(sdiv(sum(r.get('wait_bonus', 0.0) for r in gc), ng))
+            g_stop_bonus.append(sdiv(sum(r.get('stop_bonus', 0.0) for r in gc), ng))
+            g_yield_bonus.append(sdiv(sum(r.get('yield_bonus', 0.0) for r in gc), ng))
             g_pm.append(sdiv(sum(r['pen_m'] for r in gc), ng))
             g_pv.append(sdiv(sum(r['pen_v'] for r in gc), ng))
             g_ptv.append(sdiv(sum(r.get('pen_tv', 0.0) for r in gc), ng))
@@ -4345,10 +4924,20 @@ def plot_debug(dbg):
         ms = 3 if len(gens) <= 300 else 1
 
         ax = axes[0]
-        ax.plot(gens, g_a,   f'g-{mk}', markersize=ms, label='A (vel x centrado)',  linewidth=1.5)
-        ax.plot(gens, g_e,   f'b-{mk}', markersize=ms, label='E (reward centrar)',   linewidth=1.0)
-        ax.plot(gens, g_f,   f'c-{mk}', markersize=ms, label='F (vel^2 x obst^2)',   linewidth=1.0)
-        ax.plot(gens, g_net, 'k-',       linewidth=2.5, label='NetNormal (A+E+F)')
+        if debug_field_available(dbg, 'a'):
+            ax.plot(gens, g_a, f'g-{mk}', markersize=ms, label='A', linewidth=1.5)
+        if debug_field_available(dbg, 'e'):
+            ax.plot(gens, g_e, f'b-{mk}', markersize=ms, label='E (legacy)', linewidth=1.0)
+        if debug_field_available(dbg, 'f'):
+            ax.plot(gens, g_f, f'c-{mk}', markersize=ms, label='F', linewidth=1.0)
+        if debug_field_available(dbg, 'wait_bonus'):
+            ax.plot(gens, g_wait, color='tab:olive', linewidth=1.2, label='Wait bonus')
+        if debug_field_available(dbg, 'stop_bonus'):
+            ax.plot(gens, g_stop_bonus, color='tab:blue', linewidth=1.2, label='Stop bonus')
+        if debug_field_available(dbg, 'yield_bonus'):
+            ax.plot(gens, g_yield_bonus, color='tab:orange', linewidth=1.2, label='Yield bonus')
+        if debug_field_available(dbg, 'net'):
+            ax.plot(gens, g_net, 'k-', linewidth=2.5, label='NetNormal')
         ax.set_title('Componentes Positivos (media por gen)')
         ax.set_xlabel(GEN_XLABEL); ax.set_ylabel('Valor'); ax.legend(); ax.grid(True, alpha=0.3)
 
@@ -4366,7 +4955,8 @@ def plot_debug(dbg):
 
         ax = axes[2]
         ax.plot(gens, g_fit, f'k-{mk}', markersize=ms, linewidth=2,   label='Fitness Final medio')
-        ax.plot(gens, g_net, 'g--',     alpha=0.5,    linewidth=1,    label='NetNormal')
+        if debug_field_available(dbg, 'net'):
+            ax.plot(gens, g_net, 'g--', alpha=0.5, linewidth=1, label='NetNormal')
         ax.axhline(y=0, color='r', linestyle='--', alpha=0.4)
         ax.set_title('Fitness Final vs NetNormal (media por gen)')
         ax.set_xlabel(GEN_XLABEL); ax.set_ylabel('Valor'); ax.legend(); ax.grid(True, alpha=0.3)
@@ -4380,20 +4970,25 @@ def plot_debug(dbg):
         fig, ax = plt.subplots(figsize=(12, max(4, len(deaths)*0.55)))
         reasons = [k for k, _ in deaths.most_common()]
         counts = [v for _, v in deaths.most_common()]
-        colors = []
-        for r in reasons:
-            if 'LAZY' in r:         colors.append('gold')
-            elif 'COLLISION' in r:  colors.append('tomato')
-            elif is_reverse_reason(r):
-                colors.append('mediumpurple')
-            elif 'CORRECT' in r:    colors.append('orange')
-            elif 'VIOLATION' in r:  colors.append('brown')
-            else:                   colors.append('gray')
-        short = [r.replace('COLLISION_WITH_','COL_') for r in reasons]
+        colors = [death_reason_color(r) for r in reasons]
+        short = [short_death_reason(r) for r in reasons]
         ax.barh(short, counts, color=colors, alpha=0.85)
         ax.set_title(f'{LABEL} - Razones de Muerte ({len(dbg)} coches)')
         ax.set_xlabel('Cantidad'); ax.invert_yaxis()
         saved.append(save_fig(fig, '08_muertes_debug.png'))
+
+        grouped = group_death_reasons(deaths)
+        if grouped:
+            fig, ax = plt.subplots(figsize=(12, max(4, len(grouped)*0.55)))
+            reasons = [r for r, _, _ in grouped]
+            counts = [c for _, c, _ in grouped]
+            colors = [death_reason_color(r) for r in reasons]
+            short = [short_death_reason(r) for r in reasons]
+            ax.barh(short, counts, color=colors, alpha=0.85)
+            add_family_separators(ax, grouped)
+            ax.set_title(f'{LABEL} - Razones de Muerte Agrupadas por Familia')
+            ax.set_xlabel('Cantidad'); ax.invert_yaxis()
+            saved.append(save_fig(fig, '08b_muertes_debug_grupos.png'))
 
     # ── 9. Distribucion fitness (histograma) ──
     fits = [r['fit'] for r in dbg]
@@ -4716,14 +5311,14 @@ def plot_debug(dbg):
             lazy_vals = [r.get('pen_lazy', 0.0) for r in gc]
             g_lazy_mean.append(mean(lazy_vals))
             g_lazy_p90.append(pctl(lazy_vals, 90))
-            g_lazy_pct.append(sdiv(sum(1 for r in gc if r.get('death') == 'LAZY') * 100.0, len(gc)))
+            g_lazy_pct.append(sdiv(sum(1 for r in gc if is_lazy_reason(r.get('death', ''))) * 100.0, len(gc)))
 
         total_lazy_pen = sum(r.get('pen_lazy', 0.0) for r in dbg)
         spawn_lazy_stats = []
         for sp, rows_sp in spawn_rows.items():
             vals = [r.get('pen_lazy', 0.0) for r in rows_sp]
             lazy_sum = sum(vals)
-            lazy_n = sum(1 for r in rows_sp if r.get('death') == 'LAZY')
+            lazy_n = sum(1 for r in rows_sp if is_lazy_reason(r.get('death', '')))
             spawn_lazy_stats.append({
                 'spawn': sp,
                 'n': len(rows_sp),
@@ -5044,7 +5639,7 @@ def plot_debug(dbg):
 
 
     # ── 21. INVALID_BRAIN por generacion y spawn (siempre se genera, aunque esté vacío) ──
-    invalid_rows = [r for r in dbg if r.get('death') == 'INVALID_BRAIN']
+    invalid_rows = [r for r in dbg if is_invalid_brain_reason(r.get('death', ''))]
     inv_by_gen = Counter(int(r.get('gen', 0)) for r in invalid_rows) if invalid_rows else Counter()
     inv_by_spawn = Counter(r.get('spawn', '') for r in invalid_rows if r.get('spawn', '')) if invalid_rows else Counter()
     top_spawns = inv_by_spawn.most_common(20) if inv_by_spawn else []
@@ -5123,7 +5718,6 @@ def plot_convergence_charts(summary):
                     variance_vals.append(var)
             
             if variance_vals:
-                ax2_twin = ax2.twinx()
                 ax2.plot(gens, variance_vals, 'purple', marker='o', linewidth=2, label='Varianza (Best-Mean)')
                 
                 # Tendencia reciente
@@ -5269,14 +5863,12 @@ def plot_diversity_charts(debug_rows):
     
     # Panel 4: Tendencia carindex
     ax = axes[1, 1]
-    car_indices = [r.get('car_index', 0) for r in debug_rows]
-    car_families = [car_index_family(ci, bounds=bounds) for ci in car_indices]
     gens_unique = sorted(set(r['gen'] for r in debug_rows))
     
     family_counts_by_gen = defaultdict(lambda: defaultdict(int))
     for r in debug_rows:
         gen = r['gen']
-        fam = car_index_family(r.get('car_index', 0), bounds=bounds)
+        fam = car_index_family_for_row(r, bounds=bounds)
         family_counts_by_gen[gen][fam] += 1
     
     if family_counts_by_gen:
@@ -5303,10 +5895,11 @@ def plot_mutation_distributions(dbg):
     fig.suptitle(f'{LABEL} - Mutation distributions', fontsize=14, fontweight='bold')
 
     if dbg:
-        mut_changed = [r.get('mut_changed', 0.0) for r in dbg]
-        mut_rate = [r.get('mut_rate', 0.0) for r in dbg]
-        mut_large = [r.get('mut_large', 0.0) for r in dbg]
-        parent_delta = [r.get('mut_parent_delta', 0.0) for r in dbg if r.get('mut_parent_fit', 0.0) != 0.0]
+        mutation_rows = [r for r in dbg if not r.get('is_weight_initialization', False)]
+        mut_changed = [r.get('mut_changed', 0.0) for r in mutation_rows]
+        mut_rate = [r.get('mut_rate', 0.0) for r in mutation_rows]
+        mut_large = [r.get('mut_large', 0.0) for r in mutation_rows]
+        parent_delta = [r.get('mut_parent_delta', 0.0) for r in mutation_rows if r.get('mut_parent_fit', 0.0) != 0.0]
 
         def plot_hist(ax, data, title, xlabel):
             if not data:
@@ -5343,9 +5936,10 @@ def plot_mutation_fit_scatter(dbg):
     fig.suptitle(f'{LABEL} - Mutation vs fitness', fontsize=14, fontweight='bold')
 
     if dbg:
-        mut_rate = [r.get('mut_rate', 0.0) for r in dbg]
-        mut_avg = [r.get('mut_avg_mag', 0.0) for r in dbg]
-        fit_vals = [r.get('fit', 0.0) for r in dbg]
+        mutation_rows = [r for r in dbg if not r.get('is_weight_initialization', False)]
+        mut_rate = [r.get('mut_rate', 0.0) for r in mutation_rows]
+        mut_avg = [r.get('mut_avg_mag', 0.0) for r in mutation_rows]
+        fit_vals = [r.get('fit', 0.0) for r in mutation_rows]
 
         ax = axes[0]
         if any(mut_rate):
@@ -5446,11 +6040,14 @@ def plot_mutation_family_summary(dbg):
     bounds = infer_carindex_bounds(dbg)
     fam_rows = defaultdict(list)
     for r in dbg:
-        fam_rows[car_index_family(r.get('car_index', 0), bounds=bounds)].append(r)
+        if r.get('is_weight_initialization', False):
+            continue
+        fam_rows[car_index_family_for_row(r, bounds=bounds)].append(r)
 
     fams = []
     mut_rates = []
     fit_means = []
+    expected_rates = []
     for fam in sorted(fam_rows.keys()):
         rows_f = fam_rows[fam]
         if not rows_f:
@@ -5458,6 +6055,7 @@ def plot_mutation_family_summary(dbg):
         fams.append(fam)
         mut_rates.append(mean([x.get('mut_rate', 0.0) for x in rows_f]) * 100.0)
         fit_means.append(mean([x.get('fit', 0.0) for x in rows_f]))
+        expected_rates.append(mean([x.get('expected_mut_rate', 0.0) or 0.0 for x in rows_f]) * 100.0)
 
     if not fams:
         return saved
@@ -5465,9 +6063,11 @@ def plot_mutation_family_summary(dbg):
     fig, ax = plt.subplots(figsize=(12, 6))
     fig.suptitle(f'{LABEL} - Mutation by family', fontsize=14, fontweight='bold')
     ax.bar(fams, mut_rates, color='steelblue', alpha=0.8)
+    ax.plot(fams, expected_rates, color='crimson', marker='D', linewidth=1.8, label='expected')
     ax.set_ylabel('mut_rate (%)')
     ax.set_xlabel('family')
     ax.grid(True, alpha=0.3, axis='y')
+    ax.legend(fontsize=8, loc='upper left')
 
     ax2 = ax.twinx()
     ax2.plot(fams, fit_means, color='black', marker='o', linewidth=2)
@@ -5563,7 +6163,7 @@ def plot_all(summary, dbg):
     bd = Counter(r['best_death'] for r in summary)
     if bd:
         labs, vals = zip(*bd.most_common())
-        short = [l.replace('COLLISION_WITH_','COL_') for l in labs]
+        short = [short_death_reason(l) for l in labs]
         ax1.barh(short, vals, color='steelblue', alpha=0.8)
     ax1.set_title('Muerte del Mejor Coche'); ax1.set_xlabel('Frecuencia')
     ax1.invert_yaxis()
@@ -5571,13 +6171,46 @@ def plot_all(summary, dbg):
     pd = Counter(r['pop_death'] for r in summary)
     if pd:
         labs, vals = zip(*pd.most_common())
-        short = [l.replace('COLLISION_WITH_','COL_') for l in labs]
+        short = [short_death_reason(l) for l in labs]
         ax2.barh(short, vals, color='coral', alpha=0.8)
     ax2.set_title('Muerte Mas Popular (Poblacion)'); ax2.set_xlabel('Frecuencia')
     ax2.invert_yaxis()
 
     plt.tight_layout()
     saved.append(save_fig(fig, '03_muertes_summary.png'))
+
+    # ── 3b. Razones de muerte agrupadas por familia (summary) ──
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    fig.suptitle(f'{LABEL} - Razones de Muerte (agrupadas)', fontsize=13)
+
+    bd = Counter(r['best_death'] for r in summary)
+    if bd:
+        grouped = group_death_reasons(bd)
+        if grouped:
+            labs = [r for r, _, _ in grouped]
+            vals = [c for _, c, _ in grouped]
+            colors = [death_reason_color(r) for r in labs]
+            short = [short_death_reason(r) for r in labs]
+            ax1.barh(short, vals, color=colors, alpha=0.8)
+            add_family_separators(ax1, grouped)
+    ax1.set_title('Muerte del Mejor Coche'); ax1.set_xlabel('Frecuencia')
+    ax1.invert_yaxis()
+
+    pd = Counter(r['pop_death'] for r in summary)
+    if pd:
+        grouped = group_death_reasons(pd)
+        if grouped:
+            labs = [r for r, _, _ in grouped]
+            vals = [c for _, c, _ in grouped]
+            colors = [death_reason_color(r) for r in labs]
+            short = [short_death_reason(r) for r in labs]
+            ax2.barh(short, vals, color=colors, alpha=0.8)
+            add_family_separators(ax2, grouped)
+    ax2.set_title('Muerte Mas Popular (Poblacion)'); ax2.set_xlabel('Frecuencia')
+    ax2.invert_yaxis()
+
+    plt.tight_layout()
+    saved.append(save_fig(fig, '03b_muertes_summary_grupos.png'))
 
     # ── Debug plots ──
     if dbg:
@@ -5713,9 +6346,9 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
 
     if dbg_rows:
         n_dbg = len(dbg_rows)
-        lazy_rows = sum(1 for r in dbg_rows if r.get('death') == 'LAZY')
-        lazy_list = [r for r in dbg_rows if r.get('death') == 'LAZY']
-        non_lazy_list = [r for r in dbg_rows if r.get('death') != 'LAZY']
+        lazy_rows = sum(1 for r in dbg_rows if is_lazy_reason(r.get('death', '')))
+        lazy_list = [r for r in dbg_rows if is_lazy_reason(r.get('death', ''))]
+        non_lazy_list = [r for r in dbg_rows if not is_lazy_reason(r.get('death', ''))]
         lazy_pct = sdiv(lazy_rows * 100.0, n_dbg)
         if lazy_pct >= 10.0:
             insights.append(f'LAZY elevado ({lazy_pct:.2f}%). Revisar reward de avance o criterios de estancamiento.')
@@ -5752,15 +6385,12 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
             top_death, top_n = deaths.most_common(1)[0]
             insights.append(f'Razon de muerte dominante: {top_death} ({sdiv(top_n*100.0, n_dbg):.1f}%).')
 
-            invalid_brain = deaths.get('INVALID_BRAIN', 0)
+            family_counts = Counter(death_family(r.get('death', '')) for r in dbg_rows if r.get('death', ''))
+            invalid_brain = family_counts.get('INVALID_BRAIN', 0)
             if invalid_brain > 0:
                 insights.append(f'INVALID_BRAIN detectado en {invalid_brain} coches; revisar guardas de ProcessAI y longitud de entradas/pesos.')
 
-            stop_violation = deaths.get('STOP_VIOLATION', 0)
-            traffic_violation = deaths.get('TRAFFIC_VIOLATION', 0)
-            yield_violation = deaths.get('YIELD_VIOLATION', 0)
-            nav_violation = deaths.get('NAV_VIOLATION', 0)
-            legal_fail_pct = sdiv((stop_violation + traffic_violation + yield_violation + nav_violation) * 100.0, n_dbg)
+            legal_fail_pct = sdiv(family_counts.get('VIOLATION', 0) * 100.0, n_dbg)
             if legal_fail_pct > 0.0:
                 insights.append(f'Fallo legal (stop+traffic+yield+nav): {legal_fail_pct:.2f}% de coches.')
 
@@ -5839,15 +6469,15 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
         car_fams = summarize_car_index_families(dbg_rows)
         if car_fams:
             top_family = max(car_fams, key=lambda x: (x['fit_mean'], x['n']))
-            if top_family['family'] in ('MUT_LOADED', 'MUT_SESSION'):
+            if top_family['family'] in ('MUT_LOADED', 'MUT_SESSION', 'MUT_LOADED_LARGE'):
                 insights.append(
                     f'La familia CarIndex con mejor fitness medio es {top_family["family"]} '
                     f'({top_family["fit_mean"]:.2f}).'
                 )
             elif top_family['family'] == 'RANDOM':
                 insights.append(
-                    f'CarIndex RANDOM lidera el fitness medio ({top_family["fit_mean"]:.2f}); '
-                    f'la mutacion puede estar sobrerregulada.'
+                    f'Los cerebros InitializeRandomBrain lideran el fitness medio ({top_family["fit_mean"]:.2f}); '
+                    f'puede indicar que las semillas actuales limitan la exploracion.'
                 )
             elif top_family['family'] == 'SESSION':
                 insights.append(
@@ -5926,7 +6556,7 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
                     key=lambda kv: mean([x.get('pen_lazy', 0.0) for x in kv[1]]),
                 )
                 top_lazy_vals = [x.get('pen_lazy', 0.0) for x in top_rows]
-                top_lazy_n = sum(1 for x in top_rows if x.get('death') == 'LAZY')
+                top_lazy_n = sum(1 for x in top_rows if is_lazy_reason(x.get('death', '')))
                 insights.append(
                     f'Hotspot Penalty_Lazy por spawn: {top_spawn.replace("TargetPoint", "TP")} '
                     f'(media {mean(top_lazy_vals):.2f}, P90 {pctl(top_lazy_vals, 90):.2f}, '
@@ -6239,6 +6869,18 @@ def run_analysis_variant(
     else:
         SUMMARY_FILE = f'{os.path.basename(TRAIN_SUMMARY_FILE)} + {os.path.basename(TEST_SUMMARY_FILE)}'
 
+    debug_rows, completion_alignment = align_debug_to_completed_summary(summary_rows, debug_rows, mode)
+    debug_scope = dict(debug_scope)
+    debug_scope['selected_total'] = len(debug_rows)
+    debug_scope['excluded_incomplete_rows'] = completion_alignment['excluded_rows']
+    debug_scope['excluded_incomplete_generations'] = completion_alignment['excluded_generations']
+    if completion_alignment['excluded_rows']:
+        logging.warning(
+            'Se excluyen %d filas debug de generaciones sin Summary cerrado: %s',
+            completion_alignment['excluded_rows'],
+            completion_alignment['excluded_generations'],
+        )
+
     data_coherence = analyze_data_coherence(mode, summary_rows, debug_rows, debug_scope)
     summary_rows_idx, debug_rows_idx, gen_norm_info = reindex_generations_for_analysis(summary_rows, debug_rows)
     yield_stuck_info = detect_yield_stuck_candidates(debug_rows_idx)
@@ -6417,10 +7059,19 @@ def run_analysis_variant(
             stop_stuck=stop_stuck_info,
         )
 
-    # Generar graficas
-    logging.info('\n-- Generando graficas (%s) --', MODE)
-    figs = plot_all(summary_rows_idx, debug_rows_idx)
-    logging.info('  Total graficas (%s): %d', MODE, len(figs))
+    figs = []
+    if ENABLE_PLOTS:
+        logging.info('\n-- Generando graficas (%s) --', MODE)
+        if mode in ('test', 'traintest'):
+            figs += plot_test_model_dashboard(
+                summary_rows_idx,
+                previous_sessions=previous_sessions,
+                model_dates=savegame_info.get('model_dates', {}),
+            )
+        figs += plot_all(summary_rows_idx, debug_rows_idx)
+        logging.info('  Total graficas (%s): %d', MODE, len(figs))
+    else:
+        logging.info('\n-- Graficas deshabilitadas (%s) --', MODE)
 
     if os.path.exists(OUT_DIR):
         logging.info('\n-- Archivos generados en %s/ --', OUT_DIR)
@@ -6430,7 +7081,7 @@ def run_analysis_variant(
         logging.info('No se generaron archivos en %s (carpeta no creada)', OUT_DIR)
 
     deaths = Counter(r.get('death', '') for r in debug_rows_idx)
-    lazy_rows = deaths.get('LAZY', 0)
+    lazy_rows = sum(1 for r in debug_rows_idx if is_lazy_reason(r.get('death', '')))
     metrics = summarize_session(
         summary_rows_idx,
         dbg_rows_count=len(debug_rows_idx),
