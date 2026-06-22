@@ -7,8 +7,14 @@ from analyse_current import (
     WEIGHTS_TOTAL,
     align_debug_to_completed_summary,
     classify_test_outcome,
+    correlation_sample,
+    infer_label_from_debug_rows,
+    normalize_header_token,
+    metric_values,
+    metric_exposure_count,
     mutation_profile_for_row,
     parse_debug,
+    parse_summary,
     pctl,
     rolling,
     sdiv,
@@ -47,6 +53,39 @@ def test_sdiv():
 def test_rolling_matches_trailing_window_mean():
     assert rolling([], 3) == []
     assert rolling([1, 2, 3, 4, 5], 3) == [1.0, 1.5, 2.0, 3.0, 4.0]
+
+
+def test_correlation_sample_excludes_rows_without_exposure():
+    rows = [
+        {'fit': 10, 'round_exit2_count': 0, 'round_exit2_death_rate': 0},
+        {'fit': 20, 'round_exit2_count': 2, 'round_exit2_death_rate': 0.5},
+        {'fit': 30, 'round_exit2_count': 1, 'round_exit2_death_rate': 0},
+    ]
+    fits, rates = correlation_sample(rows, 'round_exit2_death_rate')
+    assert fits == [20.0, 30.0]
+    assert rates == [0.5, 0.0]
+
+
+def test_metric_values_exclude_situational_zeros_without_exposure():
+    rows = [
+        {'round_entered_n': 0, 'round_entry_front_avg': 0.0},
+        {'round_entered_n': 2, 'round_entry_front_avg': 0.75},
+        {'round_entered_n': 1, 'round_entry_front_avg': 0.0},
+    ]
+    assert metric_values(rows, 'round_entry_front_avg') == [0.75, 0.0]
+    assert metric_exposure_count(rows, 'round_entry_front_avg') == 2
+    bonus_rows = [
+        {'round_entered_n': 0, 'round_bonus_per_entry': 0.0},
+        {'round_entered_n': 2, 'round_bonus_per_entry': -15.0},
+        {'round_entered_n': 1, 'round_bonus_per_entry': 0.0},
+    ]
+    assert metric_values(bonus_rows, 'round_bonus_per_entry') == [-15.0, 0.0]
+
+
+def test_infer_label_from_debug_rows_prefers_phase_flags():
+    assert infer_label_from_debug_rows([{'training': False}], fallback='AUTO') == 'TEST'
+    assert infer_label_from_debug_rows([{'training': True}], fallback='AUTO') == 'ENTRENAMIENTO'
+    assert infer_label_from_debug_rows([{'training': True}, {'training': False}], fallback='AUTO') == 'TRAIN+TEST'
 
 
 def test_convergence_uses_every_summary_row():
@@ -94,6 +133,41 @@ def test_test_results_use_weighted_success_rate():
     assert stats['success_median'] == 70
 
 
+def test_summary_parser_handles_accented_headers_by_alias():
+    assert normalize_header_token('Raz\u00f3n_Muerte M\u00e1s Popular') == 'razonmuertemaspopular'
+
+    header = [
+        'N', 'Fracaso', 'Exito', 'FailRate', 'SuccessRate',
+        'Generaci\u00f3n', 'MejorFitnessNorm', 'FitnessMedio', 'TiempoMedio',
+        'Raz\u00f3nMuerteMejorCoche', 'Raz\u00f3nMuerteM\u00e1sPopular',
+        'MuertosPorRaz\u00f3nM\u00e1sPopular',
+    ]
+    values = [
+        54, 40, 14, 74.074074, 25.925926,
+        7, 76098.49, 30662.61, 49.98,
+        'TIMEFINISHED', 'TIMEFINISHED', 14,
+    ]
+    path = ''
+    try:
+        with tempfile.NamedTemporaryFile('w', newline='', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(header)
+            writer.writerow(values)
+            path = tmp.name
+        rows = parse_summary(path)
+    finally:
+        if path and os.path.exists(path):
+            os.unlink(path)
+
+    assert len(rows) == 1
+    assert rows[0]['gen'] == 7
+    assert rows[0]['best'] == 76098.49
+    assert rows[0]['pop_count'] == 14
+    assert rows[0]['success_count'] == 14
+    assert rows[0]['fail_count'] == 40
+    assert rows[0]['eval_n'] == 54
+
+
 def test_new_debug_schema_does_not_shift_removed_components():
     header = [
         'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
@@ -101,12 +175,25 @@ def test_new_debug_schema_does_not_shift_removed_components():
         'Acum_WaitBonus', 'Acum_NetNormal', 'Acum_PenaltyCorrectingWrong',
         'Acum_PenaltyTrafficViolation', 'Ticks_Normal', 'Ticks_Total', 'TrainingMode',
         'MutNumChanged', 'Acum_StopCompletionBonus', 'Acum_YieldCompletionBonus',
-        'Acum_NavPenalty',
+        'Acum_NavPenalty', 'NumRoundaboutsEntered', 'NumRoundaboutsCompleted',
+        'Acum_SpeedAtRoundaboutEntry', 'Acum_FrontObstAtRoundaboutEntry',
+        'Ticks_InRoundabout', 'Acum_SteeringInRoundabout',
+        'Acum_ThrottleInRoundabout', 'CollisionsInRoundabout',
+        'R_CurrentExitNumber', 'R_EntryDir_First', 'R_EntryDir_Second', 'R_EntryDir_Third',
+        'R_Exit1_Count', 'R_Exit2_Count', 'R_Exit3Plus_Count',
+        'R_Exit1_Deaths', 'R_Exit2_Deaths', 'R_Exit3Plus_Deaths',
+        'R_Exit1_Steering', 'R_Exit2_Steering', 'R_Exit3Plus_Steering',
+        'R_Exit1_Ticks', 'R_Exit2_Ticks', 'R_Exit3Plus_Ticks',
+        'R_Exit1_Throttle', 'R_Exit2_Throttle', 'R_Exit3Plus_Throttle',
+        'Acum_RoundaboutBonus', 'Acum_RndCompletionBonus',
+        'Acum_RndEntryPenalty', 'Acum_RndThrottlePenalty',
     ]
     values = [
-        1, 'Car1', 30000, 60, 'Spawn1', 'TIMEFINISHED',
+        1, 'Car1', 30000, 60.5, 'Spawn1', 'TIMEFINISHED',
         10, 20, 111, 222, 3, 336, 4, 5, 100, 110, 'false',
-        35, 7, 8, 9,
+        35, 7, 8, 9, 3, 2, 1500, 1.8, 40, 12, 20, 1,
+        2, 2, 1, 0, 3, 2, 1, 1, 1, 0, 10, 8, 6, 20, 10, 5, 12, 4, -1,
+        123.5, 200.0, 50.0, 26.5,
     ]
     path = ''
     try:
@@ -123,9 +210,36 @@ def test_new_debug_schema_does_not_shift_removed_components():
     assert len(rows) == 1
     assert rows[0]['a'] == 111
     assert rows[0]['f'] == 222
+    assert rows[0]['time'] == 60.5
     assert rows[0]['b'] == 0
     assert 'b' not in rows[0]['_available_fields']
     assert rows[0]['mut_rate'] == 35 / WEIGHTS_TOTAL
+    assert rows[0]['_schema'] == '2026-06-roundabout-bonus-breakdown'
+    assert rows[0]['round_completion_rate'] == 2 / 3
+    assert rows[0]['round_collision_rate'] == 1 / 3
+    assert rows[0]['round_entry_speed_avg'] == 500
+    assert rows[0]['round_entry_front_avg'] == 0.6
+    assert rows[0]['round_bonus'] == 123.5
+    assert rows[0]['round_bonus_per_entry'] == 123.5 / 3
+    assert rows[0]['round_bonus_per_completion'] == 123.5 / 2
+    assert rows[0]['round_bonus_per_tick'] == 123.5 / 40
+    assert rows[0]['round_completion_bonus'] == 200
+    assert rows[0]['round_entry_penalty'] == 50
+    assert rows[0]['round_throttle_penalty'] == 26.5
+    assert rows[0]['round_completion_bonus_per_completion'] == 100
+    assert rows[0]['round_entry_penalty_per_entry'] == 50 / 3
+    assert rows[0]['round_throttle_penalty_per_tick'] == 26.5 / 40
+    assert rows[0]['round_steer_avg'] == 0.3
+    assert rows[0]['round_throttle_avg'] == 0.5
+    assert rows[0]['round_tick_ratio'] == 40 / 110
+    assert rows[0]['round_dir_first_share'] == 2 / 3
+    assert rows[0]['round_dir_second_share'] == 1 / 3
+    assert rows[0]['round_exit1_death_rate'] == 1 / 3
+    assert rows[0]['round_exit2_death_rate'] == 1 / 2
+    assert rows[0]['round_exit3_death_rate'] == 0
+    assert rows[0]['round_exit1_steer_avg'] == 0.5
+    assert rows[0]['round_exit2_steer_avg'] == 0.8
+    assert rows[0]['round_exit3_throttle_avg'] == -0.2
 
 
 def test_current_network_weight_count_and_test_rules():
@@ -183,10 +297,14 @@ if __name__ == "__main__":
     test_pctl_all_nan()
     test_sdiv()
     test_rolling_matches_trailing_window_mean()
+    test_correlation_sample_excludes_rows_without_exposure()
+    test_metric_values_exclude_situational_zeros_without_exposure()
+    test_infer_label_from_debug_rows_prefers_phase_flags()
     test_convergence_uses_every_summary_row()
     test_predict_fitness_linear()
     test_select_test_rows_from_traintest()
     test_test_results_use_weighted_success_rate()
+    test_summary_parser_handles_accented_headers_by_alias()
     test_new_debug_schema_does_not_shift_removed_components()
     test_current_network_weight_count_and_test_rules()
     test_incomplete_debug_generations_are_excluded()

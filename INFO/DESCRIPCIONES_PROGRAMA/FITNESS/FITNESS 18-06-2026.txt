@@ -1,0 +1,640 @@
+BP_VehicleAI2:
+
+
+class defaults:
+
+Reverse as Brake False
+
+
+variables globales:
+
+Fitness float 0.0
+
+IsDead boolean false
+
+TimeSinceLastMove int 0
+
+LastLocation vector 0.0 0.0 0.0
+
+ActualTrafficLight BP_TrafficLight
+
+DeathReason String
+
+AiController BP_AiController
+
+GenerationCount integer 0
+
+MaxSteeringAngle float 46.0
+
+TimeAlived integer 1
+
+TimeDeath integer 0
+
+SpawnPoint BP_SpawnPoint
+
+Debug_Acum_A float 0.0
+
+Debug_Acum_F float 0.0
+
+Debug_Acum_WaitBonus float 0.0
+
+Debug_Acum_NetNormal float 0.0
+
+Debug_Acum_PenaltyVelocidad float 0.0
+
+Debug_Acum_PenaltyTrafficViolation float 0.0
+
+Debug_Acum_PenaltyCorrectingWrong float 0.0
+
+Debug_DeathPenalty float 0.0
+
+Debug_Ticks_Normal float 0.0
+
+Debug_Ticks_Total float 0.0
+
+MaxTimeAlived integer 100 editable
+
+AproachSpeed float 0.0
+
+CurrentStopWaitTime float 0.0
+
+Debug_Acum_ThrottlePositive float 0.0
+
+Debug_Acum_BrakeInput float 0.0
+
+Debug_Acum_CoastTime float 0.0
+
+Debug_Acum_StopContextBrake float 0.0
+
+Debug_Acum_StopContextThrottle float 0.0
+
+Debug_Ticks_StopContext float 0.0
+
+StopValidationTime float 0.0
+
+YieldValidationTime float 0.0
+
+WasInStopContextLastCheck boolean false
+
+Debug_Acum_CreepingPenalty float 0.0
+
+ReverseTime float 0.0
+
+Debug_Acum_ReversePenalty float 0.0
+
+Debug_Acum_LazyPenalty float 0.0
+
+StopCrossingCheckID integer 0
+
+YieldCrossingCheckID integer 0
+
+Debug_Acum_SteeringWhileStopped float 0.0
+
+ResumeGraceActive boolean false
+
+ResumeGraceTime float 0.0
+
+Debug_Acum_ThrottleDuringGraceTime float 0.0
+
+Debug_Acum_BrakeDuringGraceTime float 0.0
+
+Debug_Acum_SteeringInput float 0.0
+
+Debug_Acum_TargetSteering float 0.0
+
+Debug_CarIndex integer 0
+
+Debug_Acum_ABS_Steering float 0.0
+
+Debug_Ticks_StopContext_TrafficLight float 0.0
+
+Debug_Ticks_StopContext_Stop float 0.0
+
+Debug_Ticks_StopContext_Yield float 0.0
+
+Debug_MutNumChanged integer 0
+
+Debug_MutAvgMagnitude float 0.0
+
+Debug_MutNumLarge integer 0
+
+Debug_MutParentFitness float 0.0
+
+Debug_Acum_SteerApproachPenalty float 0.0
+
+CheckStuckTimerHandle TimerHandle
+
+Debug_NumStopZonesEntered integer 0
+
+Debug_NotNorm_PeakFitness float 0.0
+
+bIsExecutingUpdateFitness boolean false
+
+Debug_Acum_StopCompletionBonus float 0.0
+
+Debug_NumStopsCompleted integer 0
+
+Debug_Acum_YieldCompletionBonus float 0.0
+
+Debug_NumYieldsCompleted integer 0
+
+NavOverlapCount integer 0
+
+AccumNavPenalty float 0.0
+
+NavPenaltyDeathThreshold float 0.0
+
+Debug_Acum_NavPenalty float 0.0
+
+Debug_NumRoundaboutsEntered integer 0
+
+Debug_NumRoundaboutsCompleted integer 0
+
+Debug_Acum_SpeedAtRoundaboutEntry float 0.0
+
+Debug_Acum_FrontObstAtRoundaboutEntry float 0.0
+
+Debug_Ticks_InRoundabout integer 0
+
+Debug_Acum_SteeringInRoundabout float 0.0
+
+Debug_Acum_ThrottleInRoundabout float 0.0
+
+Debug_CollisionsInRoundabout integer 0
+
+Debug_R_CurrentExitNumber   integer   0
+
+Debug_R_EntryDir_First      integer   0
+Debug_R_EntryDir_Second     integer   0
+Debug_R_EntryDir_Third      integer   0
+
+Debug_R_Exit1_Count         integer   0
+Debug_R_Exit2_Count         integer   0
+Debug_R_Exit3Plus_Count     integer   0
+
+Debug_R_Exit1_Deaths        integer   0
+Debug_R_Exit2_Deaths        integer   0
+Debug_R_Exit3Plus_Deaths    integer   0
+
+Debug_R_Exit1_Steering      float     0.0
+Debug_R_Exit2_Steering      float     0.0
+Debug_R_Exit3Plus_Steering  float     0.0
+
+Debug_R_Exit1_Ticks         float     0.0
+Debug_R_Exit2_Ticks         float     0.0
+Debug_R_Exit3Plus_Ticks     float     0.0
+
+Debug_R_Exit1_Throttle      float     0.0
+Debug_R_Exit2_Throttle      float     0.0
+Debug_R_Exit3Plus_Throttle  float     0.0
+
+Debug_R_PrevTriggerWasRoundabout boolean false
+
+Debug_Acum_RoundaboutBonus float 0.0
+
+Debug_Acum_RndCompletionBonus float 0.0
+  
+Debug_Acum_RndEntryPenalty float 0.0
+
+Debug_Acum_RndThrottlePenalty float 0.0
+
+NavOutsideSeconds integer 0
+
+NavTotalOutsideSeconds integer 0
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+EventGraph:
+
+
+
+
+
+BeginPlay:
+
+lo primero hay un Parent:BeginPlay, luego hay un CasttoBP_aicontroller de GetController. Del cast lo primero hay un isvalid?, si es así se setea AiController con el cast. Luego hay un setColor. Luego hay un Casttochaoswheeledvehiclemovementcomponent de vehiclemovementcomponent. Del cast se setea AsChaosWheeledVehicleMovementComponent. Luego, se setea NavPenaltyDeathThreshold como MaxVisionDistancedelAiController^2 / MaxSpeeddelAiController. 
+
+Luego se setea LastLocation con GetActorLocation. Después de eso hay un SetTimerbyEvent, que tiene como opciones Time 1.0, y looping en True. Por último se setea CheckStuckTimerHandle como el returnvalue del SetTimerByEvent.
+
+
+
+
+EventTick:
+
+Lo primero hay un Parent:Tick de 0.0. Luego hay un SetAngularDamping cuyo target=mesh, InDamping=(SelectFloat(a=0.0, b=3.0, picka=Ismovingonground(AsChaosWheeledVehicleMovementComponent))). Luego hay un Branch cuya condition es NOT(IsDead), si es false, vacío, si es true sigue el flujo. Luego hay un Branch cuya condition es (NOT(TrainingMode de AiController)) AND (TimeAlived>MaxTimeAlived). Si es true llama a KillCar cuya razón de muerte es TIMEFINISHED, si es false, pasa a otro branch cuya condition es TimeAlived>120. Si es true, llama a KillCar cuya razón de muerte es TIMEFINISHED, si es false, llama a la función UpdateFitness.
+
+
+
+
+CheckStuck:
+
+Está conectada con el hilo rojo que sale del SetTimerbyEvent. 
+
+El flujo de este evento es: Branch cuya condition es IsDead, si es true hace un ClearandInvalidateTimerbyHandle(CheckStuckTimerHandle), si es false, time alived ++. Luego un Branch cuya condición es si time alived es mayor que 3. Si el Branch es false, setea TimeSinceLastMove como 0, setea WasInStopContextLastCheck como (ForceStopdelAiController) OR ((bIsTrafficLightActivedelAiController) AND ((TrafficLightStatedelAiController)<=0.5)), setea LastLocation como getactorlocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true). 
+
+Si es true, primero pasa a un branch cuya condition es NOT(NOT(WasInStopContextLastCheck) AND (ForceStop OR (IsTrafficLightActive AND (TrafficLightState<=0.5)))), si es true pasa al branch A, si es false, hace un ++ de Debug_NumStopZonesEntered y luego pasa al Branch A.
+
+Luego, pasa a un Branch (llamémosle A) cuya condition es NOT(NOT((ForceStop del AiController) OR ((bIsTrafficLightActivedelAiController) AND ((TrafficLightStatedelAiController)<=0.5))) AND WasInStopContextLastCheck). 
+
+Si A es false, setea ResumeGraceActive como True, setea ResumeGraceTime como ClampFloat(value=SafeDivide(a=MAX(SensorEntryDistancedelAiController, 1.0), b=MAX(AproachSpeed, 1.0)), min=1.0, max=3.0), luego setea TimeSinceLastMove, WasInStopContextLastCheck, setea LastLocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true).
+
+Si A es true, pasa a un Branch (llamémosle B) cuya condition es NOT(ResumeGraceActive). Si B es False, setea ResumeGraceTime como ResumeGraceTime - 1.0. Luego, hay Branch cuya condition es Throttledelaicontroller > 0.0, si es True, setea Debug_Acum_ThrottleDuringGraceTime como Debug_Acum_ThrottleDuringGraceTime + Throttledelaicontroller, si es false, setea Debug_Acum_BrakeDuringGraceTime como Debug_Acum_BrakeDuringGraceTime + ABS(Throttledelaicontroller). Luego pasa a un Branch (llamémosle C), cuya condition es ResumeGraceTime <= 0.0. Si es false, sigue el flujo, si es true, setea ResumeGraceActive como False. Tras ambos caminos, setea TimeSinceLastMove, WasInStopContextLastCheck, setea LastLocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true).
+
+Si B es true, primero pasa a un Branch cuya condition es: NOT(IsMovingOnGround) AND (TimeSinceLastMove >= 1), si es false sigue el flujo, si es true, llama a KillCar cuya razón de muerte es FLIPPED.
+
+Luego pasa a un Branch (llamemosle D), cuya condición es: ((DistanceVector(GetActorLocation, LastLocation)) < (selectfloat (a=(maxspeedx0.05), b=(maxspeedx0.05xfrontobstacledistance), picka=(frontobstacledistance>0.65))) AND (NOT(ForceStop del AiController)) AND (NOT((bIsTrafficLightActive del AiController) AND ((TrafficLightState del AiController)<=0.5))). 
+
+Si el branch D es True, hace un ++ de TimeSinceLastMove, y luego llama a ApplyLazyMovePenalty. 
+
+Por último hay un Branch (E) cuya condition es TimeSinceLastMove>=3, si es false setea WasInStopContextLastCheck, setea LastLocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true), si es true, setea Debug_DeathPenalty como LocalLazyPenaltydeloutput y llama a killcar cuya cause es "LAZY". 
+
+Si el branch D es false, setea TimeSinceLastMove, WasInStopContextLastCheck, setea Last Location y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true).
+
+
+
+
+EventActorBeginOverlap:
+
+Lo primero hay un isvalid? de otheractor. Luego hay un CasttoBPIntersectionBorders con el otheractor. Si el cast es válido, llama a CheckMatch del cast, luego pasa a un branch (llamemosle A), cuya condition es Matchdeloutput, si es true, primero hay un Branch cuya condition es bIsRoundabout del cast, si es false sigue el flujo, si es true, hace un ++ de Debug_CollisionsInRoundabout. Luego, se llama a ApplyCollisionDeathPenalty con CollisionCause = ("COLLISION_WITH_" + getDisplayName de otherActor).
+
+Si A es false, pasa a un branch (llamemosle B) cuya condition es ActorHasTag=Semaforo del otheractor. Si es true, hace un casttoBPTrafficLight y del cast setea ActualTrafficLight.
+
+Si el cast de intersectionBorders es false, pasa a un branch cuya condition es (ActorHasTag=Obstaculo) OR (ActorHasTag=Discontinua). Si es true llama a ApplyCollisionDeathPenalty con CollisionCause = ("COLLISION_WITH_" + getDisplayName de otherActor).
+
+si es false, primero pasa a un Branch cuya condition es ActorHasTag=FueraDeCalle, si es true, hace un ++ de NavOverlapCount, si es false, pasa al branch B.
+
+
+
+
+EventActorEndOverlap:
+
+Lo primero hay un CastToTrafficLight(OtherActor). Si el Cast es fallido, pasa al Branch de FueraDeCalle. Si el Cast es válido, pasa a un Branch cuya condition es casttotrafficlight == ActualTrafficLight. Si es true setea ActualTrafficLight como vacío y setea ForceStopdelAiController como False. 
+
+Ambos caminos del Branch, dan al Branch de FueraDeCalle, cuya condition es ActorHasTag("FueraDeCalle", OtherActor). Si el Branch es false, vacio, si es true setea NavOverlapCount como MAX(0, NavOverlapCount - 1).
+
+Por último hay otro Branch cuya condition es NavOverlapCount == 0. Si es false vacío, si es true setea AccumNavPenalty como 0.0.
+
+
+
+
+KillCar:
+
+input:
+
+Cause String 
+
+
+Lo primero hay un ++ de TimeDeath. Luego hay un Branch cuya condition es TimeDeath > 1. Si es true vacío, si es false, hay un -- de Time alived, setea IsDead como true y se setea bIsExecutingUpdateFitness como false. Luego setea DeathReason con Cause. Luego hay un SetSimulatePhysics cuyo target es Mesh y lo setea en False. Luego hace un SetActorHiddenInGame(self, true). 
+
+Luego, hay un IsValid? de CurrentTrigger de AiController, si es valido, pasa a un Branch cuya condition es IsRoundabout de CurrentTrigger del AiController, si true llama a TrackRoundaboutExitDeath, si es false pasa directamente al SaveStringTexttoFile.
+
+
+
+Por último hace un SaveStringTexttoFile, con filename=Fitness_Debug.csv, savetext que guarda GenerationCount, GetDisplayName(self), Fitness, TimeAlived, SpawnPoint, DeathReason, DebugDeathPenalty, DebugAcumPenaltyVelocidad, DebugAcumA, DebugAcumF, DebugAcumWaitBonus, DebugAcumNetNormal, DebugAcumPenaltyCorrectingWrong, DebugAcumPenaltyTrafficViolation, DebugTicksNormal, DebugTicksTotal, TrainingModedelAicontroller, Debug_Acum_ThrottlePositive, Debug_Acum_BrakeInput, Debug_Acum_CoastTime, Debug_Acum_StopContextBrake, Debug_Acum_StopContextThrottle ,Debug_Ticks_StopContext, Debug_Acum_CreepingPenalty, Debug_Acum_ReversePenalty, Debug_Acum_LazyPenalty, Debug_Acum_SteeringWhileStopped, Debug_Acum_ThrottleDuringGraceTime, Debug_Acum_BrakeDuringGraceTime, YieldValidationTime, StopValidationTime, Debug_Acum_SteeringInput, Debug_Acum_TargetSteering, Debug_CarIndex, Debug_Acum_ABS_Steering, Debug_Ticks_StopContext_TrafficLight, Debug_Ticks_StopContext_Stop, Debug_Ticks_StopContext_Yield, Debug_MutNumChanged, Debug_MutAvgMagnitude, Debug_MutNumLarge, Debug_MutParentFitness, Debug_Acum_SteerApproachPenalty, Debug_NumStopZonesEntered, Debug_NotNorm_PeakFitness, Debug_Acum_StopCompletionBonus, Debug_NumStopsCompleted, Debug_Acum_YieldCompletionBonus, Debug_NumYieldsCompleted, Debug_Acum_NavPenalty, Debug_NumRoundaboutsEntered, Debug_NumRoundaboutsCompleted, Debug_Acum_SpeedAtRoundaboutEntry, Debug_Acum_FrontObstAtRoundaboutEntry, Debug_Ticks_InRoundabout, Debug_Acum_SteeringInRoundabout, Debug_Acum_ThrottleInRoundabout, Debug_CollisionsInRoundabout, Debug_R_CurrentExitNumber, Debug_R_EntryDir_First, Debug_R_EntryDir_Second, Debug_R_EntryDir_Third, Debug_R_Exit1_Count, Debug_R_Exit2_Count, Debug_R_Exit3Plus_Count, Debug_R_Exit1_Deaths, Debug_R_Exit2_Deaths, Debug_R_Exit3Plus_Deaths, Debug_R_Exit1_Steering, Debug_R_Exit2_Steering, Debug_R_Exit3Plus_Steering, Debug_R_Exit1_Ticks, Debug_R_Exit2_Ticks, Debug_R_Exit3Plus_Ticks, Debug_R_Exit1_Throttle, Debug_R_Exit2_Throttle, Debug_R_Exit3Plus_Throttle, Debug_Acum_RoundaboutBonus, Debug_Acum_RndCompletionBonus, Debug_Acum_RndEntryPenalty, Debug_Acum_RndThrottlePenalty. Allowoverwritting=false
+
+ 
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+TrackRoundaboutExitDeath
+
+
+flujo:
+
+lo primero hay un Branch cuya condition es Debug_R_CurrentExitNumber == 1. si es true, hace un ++ de Debug_R_Exit1_Deaths. 
+
+Si es false, pasa a otro Branch cuya condition es Debug_R_CurrentExitNumber == 2. Si es true, hace un ++ de Debug_R_Exit2_Deaths y si es false hace un ++ de Debug_R_Exit3Plus_Deaths.
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+ApplyLazyMovePenalty
+
+
+outputs:
+
+LocalLazyPenalty float
+
+
+
+variables locales:
+
+DeltaLazyPenalty float
+
+
+
+
+flujo:
+
+lo primero setea DeltaLazyPenalty como MAX(0.0, (selectfloat (a=(maxspeedx0.05), b=(maxspeedx0.05xfrontobstacledistance), picka=(frontobstacledistance>0.65)) - DistanceVector(GetActorLocation, LastLocation))). 
+
+luego setea Fitness como Fitness - DeltaLazyPenalty.
+
+luego setea Debug_Acum_LazyPenalty como Debug_Acum_LazyPenalty + DeltaLazyPenalty.
+
+por último está el ReturnNode(LocalLazyPenalty = DeltaLazyPenalty).
+
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+ApplyCollisionDeathPenalty
+
+
+inputs:
+
+CollisionCause String
+
+
+
+variables locales:
+
+DeltaCollisionDeathPenalty float
+
+
+
+
+flujo:
+
+lo primero setea DeltaCollisionDeathPenalty como ((getforwardspeed^2 / (maxspeed del aicontroller)) x (1 - (frontobstacledistnace del aicontroller))). 
+
+Luego se setea Fitness como fitness - DeltaCollisionDeathPenalty. 
+
+Luego se setea DebugDeathPenalty como DeltaCollisionDeathPenalty. 
+
+Luego se llama a KillCar cuya Cause es CollisionCause.
+
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+CheckNavViolation
+
+inputs:
+
+SafeDelta float
+
+bCountSeconds boolean
+
+
+variables locales:
+
+DeltaNavPenalty float
+
+
+
+flujo:
+
+lo primero hay un Branch cuya condition es NavOverlapCount > 0:
+
+si es false, setea NavOutsideSeconds como 0 y AccumNavPenalty como 0.0.
+
+si es true, pasa a otro Branch cuya condition es bCountSeconds.
+
+si bCountSeconds es true, hace un ++ de NavOutsideSeconds, luego pasa a otro Branch cuya condtion es NavOutsideSeconds >= Truncate(NavPenaltyDeathThreshold / MaxVisionDistancedelAicontroller). 
+
+si es true setea Debug_DeathPenalty como AccumNavPenalty y llama a KillCar(Cause = "NAV_VIOLATION"). 
+
+si este branch es false, hace un ++ de NavTotalOutsideSeconds, luego pasa a otro Branch cuya condtion es NavTotalOutsideSeconds >= Truncate(NavPenaltyDeathThreshold / MaxSpeeddelAicontroller), que si es false vacío y si es true setea Debug_DeathPenalty como AccumNavPenalty y llama a KillCar(Cause = "NAV_VIOLATION").
+
+
+si bCountSeconds es false, se setea DeltaNavPenalty como MAX(Clamp((ForwardSpeed/MaxSpeed), 0, 1), SafeDivide(MaxVisionDistance, NavPenaltyDeathThreshold))^2 × MaxVisionDistance × SafeDelta. 
+
+Luego se setea Fitness como Fitness - DeltaNavPenalty. Luego se setea AccumNavPenalty como AccumNavPenalty + DeltaNavPenalty. 
+
+Luego se setea Debug_Acum_NavPenalty como Debug_Acum_NavPenalty + DeltaNavPenalty. 
+
+Luego pasa a un Branch cuya condition es AccumNavPenalty >= NavPenaltyDeathThreshold, si es false sigue el flujo, si es true setea Debug_DeathPenalty como AccumNavPenalty y llama a KillCar, esta razón de muerte es NAV_VIOLATION.
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+UpdateRoundaboutStats
+
+
+inputs:
+
+SafeDelta float
+
+
+
+variables locales:
+
+DeltaRndThrottlePenalty float
+
+
+
+
+flujo:
+
+lo primero hay un IsValid? de CurrentTrigger de AiController, si es válido, hay un Branch cuya condition es bIsRoundabout de CurrentTrigger, si es false vacio. 
+
+si es true, hace un ++ de Debug_Ticks_InRoundabout, luego setea Debug_Acum_SteeringInRoundabout como Debug_Acum_SteeringInRoundabout + ABS(Steering del AiController), luego setea Debug_Acum_ThrottleInRoundabout como Debug_Acum_ThrottleInRoundabout + Throttle del AiController.
+
+Luego, se setea DeltaRndThrottlePenalty como MAX(0.0, (Clamp(value=Throttle(AiController), min=0.0, max=1.0) - FrontObstacleDistance(AiController)))^2 * MaxSpeed(AiController) * SafeDelta.
+
+Luego, se setea Fitness como Fitness - DeltaRndThrottlePenalty. Luego se setea Debug_Acum_RoundaboutBonus como Debug_Acum_RoundaboutBonus - DeltaRndThrottlePenalty. Luego, se setea Debug_Acum_RndThrottlePenalty como Debug_Acum_RndThrottlePenalty + DeltaRndThrottlePenalty.
+
+
+Tras eso, hay un Branch, cuya condition es Debug_R_CurrentExitNumber == 1. Si es true, hace un ++ de Debug_R_Exit1_Ticks, luego setea Debug_R_Exit1_Steering como Debug_R_Exit1_Steering + ABS(Steering del AiController), y setea Debug_R_Exit1_Throttle como Debug_R_Exit1_Throttle + Throttle del AiController.
+
+Si es false el Branch, pasa a otro Branch cuya condition es Debug_R_CurrentExitNumber == 2.
+
+si es true, hace un ++ de Debug_R_Exit2_Ticks, luego setea Debug_R_Exit2_Steering como Debug_R_Exit2_Steering + ABS(Steering del AiController), y setea Debug_R_Exit2_Throttle como Debug_R_Exit2_Throttle + Throttle del AiController.
+
+si es false, hace un ++ de Debug_R_Exit3Plus_Ticks, luego setea Debug_R_Exit3Plus_Steering como Debug_R_Exit3Plus_Steering + ABS(Steering del AiController), y setea Debug_R_Exit3Plus_Throttle como Debug_R_Exit3Plus_Throttle + Throttle del AiController.
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+AccumulateStopContextStats
+
+
+inputs:
+
+SafeDelta float
+
+
+
+flujo:
+
+lo primero hay un Branch cuya condition es (ForceStopdeaicontroller OR (IsTrafficLightActivedelaicontroller AND TrafficLightStatedelaicontroller<=0.5)), si es false vacio. 
+
+Si es true, pasa a otro Branch cuya condition es TrafficControlTypedelaicontroller == 0, si es true hace un ++ de Debug_Ticks_StopContext_TrafficLight. si es false pasa a otro Branch cuya condition es TrafficControlTypedelaicontroller == 1, si es true hace un ++ de Debug_Ticks_StopContext_Stop, si es false, hace un ++ de Debug_Ticks_StopContext_Yield.
+
+Después de setear el tipo de StopContext, hace un ++ de Debug_Ticks_StopContext y pasa a otro Branch, cuya condition es Throttle>0.0. Si es true, setea Debug_Acum_StopContextThrottle como Debug_Acum_StopContextThrottle + Throttle*SafeDelta. Si es false, setea Debug_Acum_StopContextBrake como Debug_Acum_StopContextBrake + ABS(Throttle)*SafeDelta.
+
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+AccumulateDebugStats
+
+
+inputs:
+
+SafeDelta float
+
+
+
+flujo:
+
+lo primero se setea Debug_Acum_SteeringInput como Debug_Acum_SteeringInput + Steeringdelaicontroller. 
+
+Luego, se setea Debug_Acum_ABS_Steering como Debug_Acum_ABS_Steering + ABS(Steeringdelaicontroller). 
+
+Luego, se setea Debug_Acum_TargetSteering como Debug_Acum_TargetSteering + TargetSteeringdelAicontroller. 
+
+Luego, hay un Branch cuya condition es Throttle>0.0. 
+
+si es true setea Debug_Acum_ThrottlePositive como Debug_Acum_ThrottlePositive + Throttle*SafeDelta. 
+
+Si es false, setea Debug_Acum_BrakeInput como Debug_Acum_BrakeInput + ABS(Throttle)*SafeDelta. 
+
+Tras ambos caminos, hay un Branch cuya condition es ABS(Throttle)<=0.05. Si es false vacio, si es true setea Debug_Acum_CoastTime como Debug_Acum_CoastTime + SafeDelta.
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+UpdateFitness: 
+
+variables locales:
+
+DeltaPenaltyVelocidad float
+
+DeltaReversePenalty float
+
+DeltaDeathPenalty float
+
+DeltaPenaltyCorrectingWrong float
+
+DeltaPenaltyTrafficViolation float
+
+DeltaSteeringWhileStopped float
+
+DeltaSteerApproachPenalty float
+
+DeltaCreepingPenalty float
+
+DeltaWaitBonus float
+
+DeltaA float
+
+DeltaF float
+
+DeltaNetNormal float
+
+SafeDelta float
+
+SignedDistanceToStopLine float
+
+
+
+flujo:
+
+Lo primero hay un Branch cuya condition es NOT(bIsExecutingUpdateFitness OR IsDead), si es false vacío, si es true, setea bIsExecutingUpdateFitness como True, y luego setea SafeDelta como Clamp(value=GetWorldDeltaSeconds, min=0.001, max=0.1). 
+
+
+Luego pasa a un Branch cuya condition es NavOverlapCount > 0. Si es false, sigue el flujo. Si es true, llama a CheckNavViolation(SafeDelta = SafeDelta, bCountSeconds = false). 
+
+
+Luego, pasa a un Branch cuya condition es getforwardspeed >= (maxspeed(1000)*frontobstacledistance(1 lejos, 0 cerca)), si es false sigue el flujo, si es true se setea DeltaPenaltyVelocidad como (MAX(0.0, (ClampFloat(value=(forwardspeed/maxspeed), min=0.0, max=1.0) - FrontObstacleDistance)))^2 * SafeDelta * maxspeed, luego se setea el fitness como fitness - DeltaPenaltyVelocidad, y luego se setea DebugAcumPenaltyVelocidad como DebugAcumPenaltyVelocidad + DeltaPenaltyVelocidad, y sigue el flujo.
+
+
+Luego, hay un Branch cuya condition es forwardspeed < 0.0, si es false, setea ReverseTime como 0.0 y sigue el flujo. Si es true, setea ReverseTime como ReverseTime + SafeDelta, luego setea DeltaReversePenalty como ((Clamp(value=(ABS(forwardspeed)/maxspeed),min=0.0,max=1.0))^2)*SafeDelta*maxspeed), luego setea Fitness como Fitness - DeltaReversePenalty, y setea Debug_Acum_ReversePenalty como Debug_Acum_ReversePenalty + DeltaReversePenalty.
+
+
+tras ambos caminos, luego está el Branch cuya condición es si (frontobstacledistance>=0.99 AND steering*horizontaldistdiff(que es distsensordcha-distsensorizda)<0.0 AND ABS(horizontaldistdiff) > 0.075) OR ((forwardspeed < -5.0) AND (SafeDivide(A=(ABS(ForwardSpeed)*ReverseTime), B=MAX(FrontObstacleDistance*MaxVisionDistance, 1.0)) > Clamp(SafeDivide(A=ABS(ForwardSpeed), B=MAX(AproachSpeed, 1.0)), 0.0, 1.0))). 
+
+si es true, hay otro Branch cuya condición es si (frontobstacledistance>=0.99 AND steering*horizontaldistdiff(que es distsensordcha-distsensorizda)<0.0 AND ABS(horizontaldistdiff) > 0.075) AND ((forwardspeed < -5.0) AND (SafeDivide(A=(ABS(ForwardSpeed)*ReverseTime), B=MAX(FrontObstacleDistance*MaxVisionDistance, 1.0)) > Clamp(SafeDivide(A=ABS(ForwardSpeed), B=MAX(AproachSpeed, 1.0)), 0.0, 1.0))). 
+
+si es true, setea DeltaDeathPenalty como (ABS(forwardspeed)+(maxvisiondistance(3000.0)*ABS(steering)*ABS(horizontaldistancediff))), luego seteea fitness como fitness - DeltaDeathPenalty, setea DebugDeathPenalty como DeltaDeathPenalty y llama a KillCar, esta razón de muerte es REVERSING_WRONG.
+
+Si el Branch es false, pasa a otro Branch cuya condición es (forwardspeed < -5.0) AND (SafeDivide(A=(ABS(ForwardSpeed)*ReverseTime), B=MAX(FrontObstacleDistance*MaxVisionDistance, 1.0)) > Clamp(SafeDivide(A=ABS(ForwardSpeed), B=MAX(AproachSpeed, 1.0)), 0.0, 1.0)). Si es true, setea DeltaDeathPenalty como ABS(forwardspeed), fitness como fitness - DeltaDeathPenalty, setea DebugDeathPenalty como DeltaDeathPenalty y llama a killcar, esta razón de muerte es REVERSE. 
+
+Si el Branch es false, setea DeltaPenaltyCorrectingWrong como maxvisiondistance*ABS(steering)*ABS(horizontaldistancediff)*SafeDelta, luego setea fitness como fitness - DeltaPenaltyCorrectingWrong. Luego setea DebugAcumPenaltyCorrectingWrong como DebugAcumPenaltyCorrectingWrong + DeltaPenaltyCorrectingWrong y pasa al flujo de ++ de DebugTicksTotal, Debug_Acum_SteeringInput... 
+
+
+
+
+
+En caso de que el Branch de (frontobstacledistance>=0.99 AND steering*horizontaldistdiff(que es distsensordcha-distsensorizda)<0.0 AND ABS(horizontaldistdiff) > 0.075) OR ((forwardspeed < -5.0) AND (SafeDivide(A=(ABS(ForwardSpeed)*ReverseTime), B=MAX(FrontObstacleDistance*MaxVisionDistance, 1.0)) > Clamp(SafeDivide(A=ABS(ForwardSpeed), B=MAX(AproachSpeed, 1.0)), 0.0, 1.0))) salga false, se pasa a otro Branch, dentro ya del cálculo normal del fitness:
+
+
+hay un Branch (A) cuya condition es ForceStopdeaicontroller OR (IsTrafficLightActivedelaicontroller AND (TrafficLightStatedelaicontroller<=0.5)), si es false sigue el flujo (el Branch de waitbonus), si es true, pasa a otro Branch (B).
+
+Branch (B) cuya condition es ((bIsTrafficLightActive del aicontroller) AND ((TrafficLightState del aicontroller)<=0.5), si es false sigue el flujo, si es true, setea DeltaPenaltyTrafficViolation como (((Clamp(value=(forwardspeed/maxspeed),min=0.0,max=1.0))^2)*SafeDelta*maxspeed*SelectFloat(a=0.3, b=1.0, picka=(TrafficLightState==0.5), luego setea Fitness como Fitness - DeltaPenaltyTrafficViolation y setea Debug_Acum_PenaltyTrafficViolation como Debug_Acum_PenaltyTrafficViolation + DeltaPenaltyTrafficViolation.
+
+tras ambos caminos del branch B, hay un branch (C), cuya condition es (steering * horizontaldistdiff) < 0.0. Si es false pasa al Branch D, si es true, setea DeltaSteeringWhileStopped como (1- ClampFloat(value=SafeDivide(a=DistanceVector(GetActorLocation(Self), StopTargetLocationdeaicontroller), b=SensorEntryDistancedeaicontroller)), min=0.0, max=1.0)) * ClampFloat(value=ABS(ForwardSpeed), min=0.0, max=MaxSpeeddeaicontroller) * ABS(HorizontalDistDiffdeaicontroller) * ABS(Steeringdeaicontroller) * SafeDelta.
+Luego setea Fitness como Fitness - DeltaSteeringWhileStopped, y setea Debug_Acum_SteeringWhileStopped como Debug_Acum_SteeringWhileStopped + DeltaSteeringWhileStopped. 
+
+tras ambos caminos del branch C, se setea DeltaSteerApproachPenalty como (ClampFloat(value=(ForwardSpeed/MaxSpeed), min=0.0, max=1.0) x MaxSpeed x ClampFloat(value=(AproachSpeed/MaxSpeed), min=0.0, max=1.0) x ABS(Steering) x SafeDelta), luego se setea Fitness como Fitness - DeltaSteerApproachPenalty, luego se setea Debug_Acum_SteerApproachPenalty como Debug_Acum_SteerApproachPenalty + DeltaSteerApproachPenalty. 
+
+Luego, primero se setea SignedDistanceToStopLine como dot((GetActorLocation(Self) - StopTargetLocationdelAiController), StopLineForwardVectordelAiController).
+
+Luego, pasa a un branch (D), cuya condition es TrafficControlTypedelaicontroller<=1 AND (ForceStop OR (IsTrafficLightActive AND TrafficLightState <= 0.5)) AND SignedDistanceToStopLine<=0.0. si es false sigue el flujo (el Branch de waitbonus).
+
+Si es true, se setea DeltaCreepingPenalty como Clamp(value=SafeDivide(a=ABS(GetForwardSpeed), b=MAX(AproachSpeed, 1.0)), min=0.0, max=1.0) x MAX(AproachSpeed, 0.0) x SafeDelta x (1- ClampFloat(value=SafeDivide(a= Distance(GetActorLocation, StopTargetLocationdelAiController), b=MAX(Sensorentrydistancedeaicontroller, 1.0)), min=0.0, max=1.0)). Luego hay un set Fitness como Fitness - DeltaCreepingPenalty. tras eso se setea Debug_Acum_CreepingPenalty como Debug_Acum_CreepingPenalty + DeltaCreepingPenalty.
+
+Luego hay otro Branch cuya condition es (ForceStopdeaicontroller OR (IsTrafficLightActivedelaicontroller AND TrafficLightStatedelaicontroller<=0.5)) AND (ABS(getfordwardspeed)<(Maxspeeddelaicontroller*0.005)), si es false sigue el flujo. 
+si es true setea DeltaWaitBonus como (((LERP(A=1.0, B=(1-(ABS(distsensordcha-distsensorizda))), alpha=frontobstacledistance) x SafeDelta x AproachSpeed x frontobstacledistance)+(((Clamp(value=(aproachspeed/maxspeed),min=0.0,max=1.0)^2)*maxspeed*frontobsacledistance^2*SafeDelta))) x (1-ClampFloat(value=SafeDivide(Distance(GetActorLocation, StopTargetLocationdelaicontroller), MAX(SensorEntryDistancedelacontroller, 1.0)), min=0.0, max=1.0)). Luego setea fitness como Fitness + DeltaWaitBonus. Luego setea Debug_Acum_WaitBonus como Debug_Acum_WaitBonus + DeltaWaitBonus. Ahora, se pasa al calculo del fitness:
+
+
+
+primero se setea DeltaA como getforwardspeed x LERP(A=1.0, B=(1-(ABS(distsensordcha-distsensorizda))), alpha=frontobstacledistance) x frontobstacledistance x SafeDelta.
+
+luego se setea DeltaF como (1 - (ClampFloat(value=ABS(ClampFloat(value=(forwardspeed/maxspeed), min=0.0, max=1.0) - FrontObstacleDistance), min=0.0, max=1.0))) * ClampFloat(value=(forwardspeed/maxspeed), min=0.0, max=1.0) * maxspeed * frontobsacledistance^2 * SafeDelta * MAX(Clamp(value=(ForwardSpeed/Maxspeeddelaicontroller), min=0.0, max=1.0), Clamp(value=Throttledelaicontroller, min=0.0, max=1.0)).
+
+luego se setea DeltaNetNormal como DeltaA + DeltaF.
+
+luego se setea Fitness como Fitness + DeltaNetNormal. 
+
+Después se setea Debug_Acum_A como Debug_Acum_A + DeltaA, se setea Debug_Acum_F como Debug_Acum_F + DeltaF, se setea Debug_Acum_NetNormal como Debug_Acum_NetNormal + DeltaNetNormal.
+
+Después hay un ++ DebugTicksNormal. Luego, hay un ++ DebugTicksTotal. 
+
+Luego se llama a AccumulateDebugStats con SafeDelta = SafeDelta.
+
+Tras eso, se llama a AccumulateStopContextStats con SafeDelta = SafeDelta.
+
+luego se setea Debug_NotNorm_PeakFitness como MAX(Debug_NotNorm_PeakFitness Fitness).
+
+luego se llama a UpdateRoundaboutStats con  SafeDelta = SafeDelta.
+
+Y por último, se setea bIsExecutingUpdateFitness como false.
+
+
+
+
+

@@ -4,21 +4,30 @@
 Analisis completo de entrenamiento/testing para cognitive-car.
 Genera informe de texto + graficas en una carpeta con fecha.
 """
-import os, shutil, csv
+import os, shutil, csv, sys
 import json, math, copy, re
+import unicodedata
 from datetime import datetime
 from collections import defaultdict, Counter
+from functools import lru_cache
 
 import numpy as np
 import argparse
 import logging
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-try:
-    import seaborn as sns  # pyright: ignore[reportMissingModuleSource]
-    _HAVE_SEABORN = True
-except Exception:
+_CLI_NO_PLOTS = __name__ == '__main__' and '--no-plots' in sys.argv
+if not _CLI_NO_PLOTS:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    try:
+        import seaborn as sns  # pyright: ignore[reportMissingModuleSource]
+        _HAVE_SEABORN = True
+    except Exception:
+        sns = None
+        _HAVE_SEABORN = False
+else:
+    matplotlib = None
+    plt = None
     sns = None
     _HAVE_SEABORN = False
 
@@ -76,7 +85,7 @@ CARINDEX_MUT_SESSION_END = max(
 )
 
 # Control de graficas (permitir deshabilitar desde CLI)
-ENABLE_PLOTS = True
+ENABLE_PLOTS = not _CLI_NO_PLOTS
 
 SUMMARY_ALIASES = {
     # esquema base
@@ -182,6 +191,77 @@ DEBUG_ALIASES = {
     'numyieldscompleted': 'yield_done_n',
     'acumnavpenalty': 'pen_nav',
     'navpenalty': 'pen_nav',
+    # roundabout metrics (11-06-2026+)
+    'numroundaboutsentered': 'round_entered_n',
+    'debugnumroundaboutsentered': 'round_entered_n',
+    'numroundaboutscompleted': 'round_completed_n',
+    'debugnumroundaboutscompleted': 'round_completed_n',
+    'acumspeedatroundaboutentry': 'round_entry_speed',
+    'debugacumspeedatroundaboutentry': 'round_entry_speed',
+    'acumfrontobstatroundaboutentry': 'round_entry_front',
+    'debugacumfrontobstatroundaboutentry': 'round_entry_front',
+    'ticksinroundabout': 'round_ticks',
+    'debugticksinroundabout': 'round_ticks',
+    'acumsteeringinroundabout': 'round_steer',
+    'debugacumsteeringinroundabout': 'round_steer',
+    'acumthrottleinroundabout': 'round_throttle',
+    'debugacumthrottleinroundabout': 'round_throttle',
+    'collisionsinroundabout': 'round_collisions',
+    'debugcollisionsinroundabout': 'round_collisions',
+    'acumroundaboutbonus': 'round_bonus',
+    'debugacumroundaboutbonus': 'round_bonus',
+    'roundaboutbonus': 'round_bonus',
+    'acumrndcompletionbonus': 'round_completion_bonus',
+    'debugacumrndcompletionbonus': 'round_completion_bonus',
+    'rndcompletionbonus': 'round_completion_bonus',
+    'roundaboutcompletionbonus': 'round_completion_bonus',
+    'acumrndentrypenalty': 'round_entry_penalty',
+    'debugacumrndentrypenalty': 'round_entry_penalty',
+    'rndentrypenalty': 'round_entry_penalty',
+    'roundaboutentrypenalty': 'round_entry_penalty',
+    'acumrndthrottlepenalty': 'round_throttle_penalty',
+    'debugacumrndthrottlepenalty': 'round_throttle_penalty',
+    'rndthrottlepenalty': 'round_throttle_penalty',
+    'roundaboutthrottlepenalty': 'round_throttle_penalty',
+    # roundabout exit diagnostics (12-06-2026+)
+    'rcurrentexitnumber': 'round_current_exit',
+    'debugrcurrentexitnumber': 'round_current_exit',
+    'rentrydirfirst': 'round_dir_first',
+    'debugrentrydirfirst': 'round_dir_first',
+    'rentrydirsecond': 'round_dir_second',
+    'debugrentrydirsecond': 'round_dir_second',
+    'rentrydirthird': 'round_dir_third',
+    'debugrentrydirthird': 'round_dir_third',
+    'rexit1count': 'round_exit1_count',
+    'debugrexit1count': 'round_exit1_count',
+    'rexit2count': 'round_exit2_count',
+    'debugrexit2count': 'round_exit2_count',
+    'rexit3pluscount': 'round_exit3_count',
+    'debugrexit3pluscount': 'round_exit3_count',
+    'rexit1deaths': 'round_exit1_deaths',
+    'debugrexit1deaths': 'round_exit1_deaths',
+    'rexit2deaths': 'round_exit2_deaths',
+    'debugrexit2deaths': 'round_exit2_deaths',
+    'rexit3plusdeaths': 'round_exit3_deaths',
+    'debugrexit3plusdeaths': 'round_exit3_deaths',
+    'rexit1steering': 'round_exit1_steer',
+    'debugrexit1steering': 'round_exit1_steer',
+    'rexit2steering': 'round_exit2_steer',
+    'debugrexit2steering': 'round_exit2_steer',
+    'rexit3plussteering': 'round_exit3_steer',
+    'debugrexit3plussteering': 'round_exit3_steer',
+    'rexit1ticks': 'round_exit1_ticks',
+    'debugrexit1ticks': 'round_exit1_ticks',
+    'rexit2ticks': 'round_exit2_ticks',
+    'debugrexit2ticks': 'round_exit2_ticks',
+    'rexit3plusticks': 'round_exit3_ticks',
+    'debugrexit3plusticks': 'round_exit3_ticks',
+    'rexit1throttle': 'round_exit1_throttle',
+    'debugrexit1throttle': 'round_exit1_throttle',
+    'rexit2throttle': 'round_exit2_throttle',
+    'debugrexit2throttle': 'round_exit2_throttle',
+    'rexit3plusthrottle': 'round_exit3_throttle',
+    'debugrexit3plusthrottle': 'round_exit3_throttle',
     # metricas nuevas 24-04-2026: validacion legal y reanudacion tras parada
     'yieldvalidationtime': 'yield_val_t',
     'yieldvalidation': 'yield_val_t',
@@ -214,17 +294,18 @@ def clean(s):
     return s.replace('\ufeff', '').strip()
 
 def normalize_header_token(s):
-    norm = (
-        clean(s)
-        .lower()
-        .replace('ó', 'o')
-        .replace('á', 'a')
-        .replace('é', 'e')
-        .replace('í', 'i')
-        .replace('ú', 'u')
-        .replace('_', '')
-        .replace(' ', '')
+    norm = clean(s).lower()
+    for bad, good in (
+        ('Ã¡', 'a'), ('Ã©', 'e'), ('Ã­', 'i'), ('Ã³', 'o'), ('Ãº', 'u'),
+        ('Ã±', 'n'), ('á', 'a'), ('é', 'e'), ('í', 'i'), ('ó', 'o'),
+        ('ú', 'u'), ('ñ', 'n'),
+    ):
+        norm = norm.replace(bad, good)
+    norm = ''.join(
+        ch for ch in unicodedata.normalize('NFKD', norm)
+        if not unicodedata.combining(ch)
     )
+    norm = re.sub(r'[^a-z0-9]+', '', norm)
     # Tolera cabeceras fusionadas con la primera fila (p.ej. "Acum_ReversePenalty1").
     norm = re.sub(r'(?<=[a-z])\d+$', '', norm)
     return norm
@@ -283,6 +364,14 @@ def detect_debug_schema(mapped_keys):
     keys = set(mapped_keys or [])
     if {'b', 'c', 'd', 'e'} & keys:
         return 'legacy-components'
+    if {'round_completion_bonus', 'round_entry_penalty', 'round_throttle_penalty'} & keys:
+        return '2026-06-roundabout-bonus-breakdown'
+    if 'round_bonus' in keys and {'round_exit1_count', 'round_exit2_count', 'round_exit3_count'} <= keys:
+        return '2026-06-roundabout-bonus'
+    if {'round_exit1_count', 'round_exit2_count', 'round_exit3_count'} <= keys:
+        return '2026-06-roundabout-exits'
+    if {'round_entered_n', 'round_completed_n', 'round_ticks', 'round_collisions'} <= keys:
+        return '2026-06-roundabout'
     if {'a', 'f', 'net', 'stop_bonus', 'yield_bonus', 'pen_nav'} <= keys:
         return '2026-06'
     return 'partial'
@@ -532,6 +621,86 @@ def pearson_corr(xs, ys):
     den = math.sqrt(max(denx * deny, 0.0))
     return sdiv(num, den)
 
+CORRELATION_EXPOSURE_FIELDS = {
+    'stop_bonus_per': 'stop_done_n',
+    'yield_bonus_per': 'yield_done_n',
+    'stop_done_rate': 'stop_zones_n',
+    'yield_done_rate': 'stop_zones_n',
+    'round_completion_rate': 'round_entered_n',
+    'round_collision_rate': 'round_entered_n',
+    'round_entry_speed_avg': 'round_entered_n',
+    'round_entry_front_avg': 'round_entered_n',
+    'round_bonus': 'round_entered_n',
+    'round_bonus_per_entry': 'round_entered_n',
+    'round_bonus_per_completion': 'round_completed_n',
+    'round_bonus_per_tick': 'round_ticks',
+    'round_bonus_fit_share': 'round_entered_n',
+    'round_completion_bonus_per_completion': 'round_completed_n',
+    'round_entry_penalty_per_entry': 'round_entered_n',
+    'round_throttle_penalty_per_tick': 'round_ticks',
+    'round_tick_ratio': 't_tot',
+    'round_steer_avg': 'round_ticks',
+    'round_throttle_avg': 'round_ticks',
+    'round_exit1_death_rate': 'round_exit1_count',
+    'round_exit2_death_rate': 'round_exit2_count',
+    'round_exit3_death_rate': 'round_exit3_count',
+    'round_exit1_steer_avg': 'round_exit1_ticks',
+    'round_exit2_steer_avg': 'round_exit2_ticks',
+    'round_exit3_steer_avg': 'round_exit3_ticks',
+    'round_exit1_throttle_avg': 'round_exit1_ticks',
+    'round_exit2_throttle_avg': 'round_exit2_ticks',
+    'round_exit3_throttle_avg': 'round_exit3_ticks',
+}
+
+METRIC_REQUIRED_FIELDS = {
+    'round_completion_bonus_per_completion': 'round_completion_bonus',
+    'round_entry_penalty_per_entry': 'round_entry_penalty',
+    'round_throttle_penalty_per_tick': 'round_throttle_penalty',
+}
+
+def correlation_sample(rows, key):
+    """Fitness y metrica solo donde esta ultima tiene exposicion real."""
+    xs, ys = [], []
+    for row in rows:
+        fit = num(row.get('fit', 0.0), 0.0)
+        value = metric_value_for_row(row, key)
+        if value is not None and math.isfinite(fit) and math.isfinite(value):
+            xs.append(fit)
+            ys.append(value)
+    return xs, ys
+
+def metric_value_for_row(row, key):
+    """Valor por fila, devolviendo None cuando la metrica no aplica."""
+    exposure_key = CORRELATION_EXPOSURE_FIELDS.get(key)
+    if exposure_key and num(row.get(exposure_key, 0.0), 0.0) <= 0.0:
+        return None
+    if key == 'steer_gap_abs':
+        return abs(num(row.get('steer_in', 0.0), 0.0) - num(row.get('steer_target', 0.0), 0.0))
+    return num(row.get(key, 0.0), 0.0)
+
+def metric_values(rows, key):
+    vals = []
+    for row in rows:
+        value = metric_value_for_row(row, key)
+        if value is not None and math.isfinite(value):
+            vals.append(value)
+    return vals
+
+def metric_exposure_count(rows, key):
+    exposure_key = CORRELATION_EXPOSURE_FIELDS.get(key)
+    if not exposure_key:
+        return len(rows)
+    return sum(1 for row in rows if num(row.get(exposure_key, 0.0), 0.0) > 0.0)
+
+def exposed_mean(rows, key):
+    vals = metric_values(rows, key)
+    return mean(vals), len(vals)
+
+def ratio_or_nan(numer, denom, scale=1.0):
+    if denom <= 0:
+        return np.nan
+    return sdiv(numer * scale, denom)
+
 def longest_streak(values, predicate):
     best = 0
     cur = 0
@@ -685,6 +854,20 @@ def mode_label(mode):
         return 'TRAIN+TEST'
     return 'AUTO'
 
+def infer_label_from_debug_rows(rows, fallback=None):
+    if fallback is None:
+        fallback = LABEL
+    train_rows, test_rows, _, has_flag = split_debug_by_phase(rows or [])
+    if not has_flag:
+        return fallback
+    if train_rows and test_rows:
+        return mode_label('traintest')
+    if train_rows:
+        return mode_label('train')
+    if test_rows:
+        return mode_label('test')
+    return fallback
+
 def inspect_csv_layout(path, aliases, required_keys, min_cols=0):
     meta = {
         'path': path,
@@ -758,8 +941,8 @@ def quick_debug_snapshot(path, target_training=None):
     with open(path, encoding='utf-8-sig', newline='') as f:
         reader = csv.reader(f)
         for i, row in enumerate(reader):
-            p = [clean(x) for x in row]
             if i == 0:
+                p = [clean(x) for x in row]
                 norm = [normalize_header_token(x) for x in p]
                 for idx, h in enumerate(norm):
                     mapped = alias_lookup(h, DEBUG_ALIASES)
@@ -768,18 +951,18 @@ def quick_debug_snapshot(path, target_training=None):
                     elif mapped == 'training':
                         training_idx = idx
                 continue
-            if not p or not any(p):
+            if not row or not any(row):
                 continue
 
-            if target_training is not None and training_idx is not None and training_idx < len(p):
-                row_training = parse_bool_token(p[training_idx])
+            if target_training is not None and training_idx is not None and training_idx < len(row):
+                row_training = parse_bool_token(row[training_idx])
                 if row_training is not None and row_training != target_training:
                     continue
 
             out['rows'] += 1
-            if death_idx is None or death_idx >= len(p):
+            if death_idx is None or death_idx >= len(row):
                 continue
-            reason = p[death_idx].strip()
+            reason = row[death_idx].strip()
             if not reason:
                 continue
             deaths[reason] += 1
@@ -915,12 +1098,15 @@ def estimate_population_size(summary_rows, default=60):
     # Mediana para robustez ante filas sueltas con N anomalo.
     return max(1, int(round(pctl(ns, 50))))
 
+@lru_cache(maxsize=4096)
 def normalize_reason(reason):
     return clean(str(reason or '')).upper()
 
+@lru_cache(maxsize=4096)
 def compact_reason(reason):
     return re.sub(r'[^A-Z0-9]+', '', normalize_reason(reason))
 
+@lru_cache(maxsize=4096)
 def canonical_death_reason(reason):
     r = normalize_reason(reason)
     r_compact = compact_reason(r)
@@ -955,6 +1141,7 @@ def canonical_death_reason(reason):
 def is_reverse_reason(reason):
     return 'REVERS' in compact_reason(reason)
 
+@lru_cache(maxsize=4096)
 def death_family(reason):
     r = normalize_reason(reason)
     r_compact = compact_reason(reason)
@@ -1031,9 +1218,6 @@ def short_death_reason(reason):
         return r
     return (reason or '').replace('COLLISION_WITH_', 'COL_') or 'UNKNOWN'
 
-def is_death_family(reason, family):
-    return death_family(reason) == family
-
 def is_lazy_reason(reason):
     return canonical_death_reason(reason) == 'LAZY'
 
@@ -1042,7 +1226,7 @@ def is_invalid_brain_reason(reason):
 
 def is_test_failure_reason(reason):
     # Mirrors BP_EvolutionManager CalculateAndExport death-based fail rules
-    # from the latest local description (01-06-2026). Fitness/time thresholds
+    # from the latest local description (17-06-2026). Fitness/time thresholds
     # are handled in Unreal and are not inferable from DeathReason alone.
     canon = canonical_death_reason(reason)
     if canon in {
@@ -2283,6 +2467,7 @@ def analyze_fitness_components_correlation(debug_rows):
         'wait_bonus': 'Wait bonus',
         'stop_bonus': 'Stop completion bonus',
         'yield_bonus': 'Yield completion bonus',
+        'round_bonus': 'Roundabout bonus neto',
         'net': 'Net normal',
     }
     fit_vals = [r.get('fit', 0.0) for r in debug_rows]
@@ -2290,12 +2475,17 @@ def analyze_fitness_components_correlation(debug_rows):
     correlations = {}
     contributions = {}
     component_means = {}
+    component_counts = {}
     for key in labels:
         if key not in available:
             continue
-        vals = [r.get(key, 0.0) for r in debug_rows]
-        correlations[key] = pearson_corr(vals, fit_vals)
+        corr_fit_vals, vals = correlation_sample(debug_rows, key)
+        if len(vals) >= 5 and stdev(corr_fit_vals) > 1e-12 and stdev(vals) > 1e-12:
+            correlations[key] = pearson_corr(vals, corr_fit_vals)
+        else:
+            correlations[key] = 0.0
         component_means[key] = mean(vals)
+        component_counts[key] = len(vals)
         contributions[key] = sdiv(component_means[key], fit_mean) if fit_mean != 0 else 0.0
 
     penalty_keys = ('pen_m', 'pen_v', 'pen_tv', 'pen_nav', 'pen_lazy', 'pen_steer_app')
@@ -2311,6 +2501,7 @@ def analyze_fitness_components_correlation(debug_rows):
         'component_fitness_correlations': correlations,
         'component_contributions': contributions,
         'component_means': component_means,
+        'component_counts': component_counts,
         'top_penalties': pen_means[:3],
     }
 
@@ -2443,7 +2634,7 @@ def parse_debug(path):
             'gen': to_num(parts, header_map.get('gen', 0), int),
             'car': parts[header_map.get('car', 1)].strip() if len(parts) > header_map.get('car', 1) else '',
             'fit': to_num(parts, header_map.get('fit', 2), float),
-            'time': to_num(parts, header_map.get('time', 3), int),
+            'time': to_num(parts, header_map.get('time', 3), float),
             'spawn': parts[header_map.get('spawn', 4)].strip() if len(parts) > header_map.get('spawn', 4) else '',
             'death': death_raw,
             'death_norm': normalize_reason(death_raw),
@@ -2497,6 +2688,37 @@ def parse_debug(path):
             'stop_done_n': to_num(parts, header_map.get('stop_done_n'), int),
             'yield_bonus': to_num(parts, header_map.get('yield_bonus'), float),
             'yield_done_n': to_num(parts, header_map.get('yield_done_n'), int),
+            'round_entered_n': to_num(parts, header_map.get('round_entered_n'), int),
+            'round_completed_n': to_num(parts, header_map.get('round_completed_n'), int),
+            'round_entry_speed': to_num(parts, header_map.get('round_entry_speed'), float),
+            'round_entry_front': to_num(parts, header_map.get('round_entry_front'), float),
+            'round_ticks': to_num(parts, header_map.get('round_ticks'), int),
+            'round_steer': to_num(parts, header_map.get('round_steer'), float),
+            'round_throttle': to_num(parts, header_map.get('round_throttle'), float),
+            'round_collisions': to_num(parts, header_map.get('round_collisions'), int),
+            'round_bonus': to_num(parts, header_map.get('round_bonus'), float),
+            'round_completion_bonus': to_num(parts, header_map.get('round_completion_bonus'), float),
+            'round_entry_penalty': to_num(parts, header_map.get('round_entry_penalty'), float),
+            'round_throttle_penalty': to_num(parts, header_map.get('round_throttle_penalty'), float),
+            'round_current_exit': to_num(parts, header_map.get('round_current_exit'), int),
+            'round_dir_first': to_num(parts, header_map.get('round_dir_first'), int),
+            'round_dir_second': to_num(parts, header_map.get('round_dir_second'), int),
+            'round_dir_third': to_num(parts, header_map.get('round_dir_third'), int),
+            'round_exit1_count': to_num(parts, header_map.get('round_exit1_count'), int),
+            'round_exit2_count': to_num(parts, header_map.get('round_exit2_count'), int),
+            'round_exit3_count': to_num(parts, header_map.get('round_exit3_count'), int),
+            'round_exit1_deaths': to_num(parts, header_map.get('round_exit1_deaths'), int),
+            'round_exit2_deaths': to_num(parts, header_map.get('round_exit2_deaths'), int),
+            'round_exit3_deaths': to_num(parts, header_map.get('round_exit3_deaths'), int),
+            'round_exit1_steer': to_num(parts, header_map.get('round_exit1_steer'), float),
+            'round_exit2_steer': to_num(parts, header_map.get('round_exit2_steer'), float),
+            'round_exit3_steer': to_num(parts, header_map.get('round_exit3_steer'), float),
+            'round_exit1_ticks': to_num(parts, header_map.get('round_exit1_ticks'), float),
+            'round_exit2_ticks': to_num(parts, header_map.get('round_exit2_ticks'), float),
+            'round_exit3_ticks': to_num(parts, header_map.get('round_exit3_ticks'), float),
+            'round_exit1_throttle': to_num(parts, header_map.get('round_exit1_throttle'), float),
+            'round_exit2_throttle': to_num(parts, header_map.get('round_exit2_throttle'), float),
+            'round_exit3_throttle': to_num(parts, header_map.get('round_exit3_throttle'), float),
             'training': parse_bool_token(parts[t_idx]) if t_idx is not None and t_idx < len(parts) else None,
         }
         return row
@@ -2590,6 +2812,48 @@ def parse_debug(path):
         stop_zone_den = max(r.get('stop_zones_n', 0.0), 1.0)
         r['stop_done_rate'] = sdiv(stop_done_n, stop_zone_den)
         r['yield_done_rate'] = sdiv(yield_done_n, stop_zone_den)
+        round_entered = r.get('round_entered_n', 0.0)
+        round_ticks = r.get('round_ticks', 0.0)
+        r['round_completion_rate'] = sdiv(r.get('round_completed_n', 0.0), max(round_entered, 1.0))
+        r['round_collision_rate'] = sdiv(r.get('round_collisions', 0.0), max(round_entered, 1.0))
+        r['round_entry_speed_avg'] = sdiv(r.get('round_entry_speed', 0.0), max(round_entered, 1.0))
+        r['round_entry_front_avg'] = sdiv(r.get('round_entry_front', 0.0), max(round_entered, 1.0))
+        r['round_steer_avg'] = sdiv(r.get('round_steer', 0.0), max(round_ticks, 1.0))
+        r['round_throttle_avg'] = sdiv(r.get('round_throttle', 0.0), max(round_ticks, 1.0))
+        r['round_bonus_per_entry'] = sdiv(r.get('round_bonus', 0.0), max(round_entered, 1.0))
+        r['round_bonus_per_completion'] = sdiv(r.get('round_bonus', 0.0), max(r.get('round_completed_n', 0.0), 1.0))
+        r['round_bonus_per_tick'] = sdiv(r.get('round_bonus', 0.0), max(round_ticks, 1.0))
+        r['round_bonus_fit_share'] = sdiv(r.get('round_bonus', 0.0) * 100.0, max(abs(r.get('fit', 0.0)), 1.0))
+        r['round_completion_bonus_per_completion'] = sdiv(
+            r.get('round_completion_bonus', 0.0),
+            max(r.get('round_completed_n', 0.0), 1.0),
+        )
+        r['round_entry_penalty_per_entry'] = sdiv(r.get('round_entry_penalty', 0.0), max(round_entered, 1.0))
+        r['round_throttle_penalty_per_tick'] = sdiv(r.get('round_throttle_penalty', 0.0), max(round_ticks, 1.0))
+        r['round_tick_ratio'] = sdiv(round_ticks, t_tot)
+        round_dir_total = (
+            r.get('round_dir_first', 0.0)
+            + r.get('round_dir_second', 0.0)
+            + r.get('round_dir_third', 0.0)
+        )
+        r['round_dir_first_share'] = sdiv(r.get('round_dir_first', 0.0), round_dir_total)
+        r['round_dir_second_share'] = sdiv(r.get('round_dir_second', 0.0), round_dir_total)
+        r['round_dir_third_share'] = sdiv(r.get('round_dir_third', 0.0), round_dir_total)
+        for exit_num in (1, 2, 3):
+            count = r.get(f'round_exit{exit_num}_count', 0.0)
+            ticks = r.get(f'round_exit{exit_num}_ticks', 0.0)
+            r[f'round_exit{exit_num}_death_rate'] = sdiv(
+                r.get(f'round_exit{exit_num}_deaths', 0.0),
+                max(count, 1.0),
+            )
+            r[f'round_exit{exit_num}_steer_avg'] = sdiv(
+                r.get(f'round_exit{exit_num}_steer', 0.0),
+                max(ticks, 1.0),
+            )
+            r[f'round_exit{exit_num}_throttle_avg'] = sdiv(
+                r.get(f'round_exit{exit_num}_throttle', 0.0),
+                max(ticks, 1.0),
+            )
     rows.sort(key=lambda r: (r.get('gen', 0), r.get('car_index', 0), r.get('car', '')))
     return rows
 
@@ -2891,13 +3155,14 @@ def report_components_correlation(R, debug_rows):
     corr = comp_info['component_fitness_correlations']
     contrib = comp_info['component_contributions']
     means = comp_info['component_means']
+    counts = comp_info.get('component_counts', {})
     R.p('\n-- Correlacion Componentes vs Fitness Final --')
     for key, value in corr.items():
-        R.p(f'  {labels.get(key, key):30s}: {value:>7.4f}')
+        R.p(f'  {labels.get(key, key):30s}: {value:>7.4f} (N={counts.get(key, 0)})')
 
     R.p('\n-- Media y proporcion sobre Fitness medio --')
     for key, value in means.items():
-        R.p(f'  {labels.get(key, key):30s}: media={value:>11.4f}  ratio={contrib.get(key, 0.0):>8.4f}')
+        R.p(f'  {labels.get(key, key):30s}: media={value:>11.4f}  ratio={contrib.get(key, 0.0):>8.4f}  N={counts.get(key, 0)}')
 
     R.p('\n-- Top 3 Penalizaciones --')
     for name, value in comp_info['top_penalties']:
@@ -2924,6 +3189,17 @@ def compute_debug_aggregates(dbg):
         'yield_val_t': 0.0, 'stop_val_t': 0.0,
         'stop_zones_n': 0.0, 'fit_peak_raw': 0.0, 'fit_peak_gain': 0.0,
         'stop_bonus': 0.0, 'stop_done_n': 0.0, 'yield_bonus': 0.0, 'yield_done_n': 0.0,
+        'round_entered_n': 0.0, 'round_completed_n': 0.0,
+        'round_entry_speed': 0.0, 'round_entry_front': 0.0, 'round_ticks': 0.0,
+        'round_steer': 0.0, 'round_throttle': 0.0, 'round_collisions': 0.0,
+        'round_bonus': 0.0,
+        'round_completion_bonus': 0.0, 'round_entry_penalty': 0.0, 'round_throttle_penalty': 0.0,
+        'round_dir_first': 0.0, 'round_dir_second': 0.0, 'round_dir_third': 0.0,
+        'round_exit1_count': 0.0, 'round_exit2_count': 0.0, 'round_exit3_count': 0.0,
+        'round_exit1_deaths': 0.0, 'round_exit2_deaths': 0.0, 'round_exit3_deaths': 0.0,
+        'round_exit1_steer': 0.0, 'round_exit2_steer': 0.0, 'round_exit3_steer': 0.0,
+        'round_exit1_ticks': 0.0, 'round_exit2_ticks': 0.0, 'round_exit3_ticks': 0.0,
+        'round_exit1_throttle': 0.0, 'round_exit2_throttle': 0.0, 'round_exit3_throttle': 0.0,
         'steer_in': 0.0, 'steer_target': 0.0, 'steer_abs': 0.0, 'steer_abs_avg': 0.0,
         'steer_gap_avg_abs': 0.0, 'steer_gap_total': 0.0,
         'cmd_total': 0.0, 'grace_cmd_total': 0.0, 'stop_cmd_total': 0.0,
@@ -2978,6 +3254,27 @@ def compute_debug_aggregates(dbg):
         agg['stop_done_n'] += r.get('stop_done_n', 0.0)
         agg['yield_bonus'] += r.get('yield_bonus', 0.0)
         agg['yield_done_n'] += r.get('yield_done_n', 0.0)
+        agg['round_entered_n'] += r.get('round_entered_n', 0.0)
+        agg['round_completed_n'] += r.get('round_completed_n', 0.0)
+        agg['round_entry_speed'] += r.get('round_entry_speed', 0.0)
+        agg['round_entry_front'] += r.get('round_entry_front', 0.0)
+        agg['round_ticks'] += r.get('round_ticks', 0.0)
+        agg['round_steer'] += r.get('round_steer', 0.0)
+        agg['round_throttle'] += r.get('round_throttle', 0.0)
+        agg['round_collisions'] += r.get('round_collisions', 0.0)
+        agg['round_bonus'] += r.get('round_bonus', 0.0)
+        agg['round_completion_bonus'] += r.get('round_completion_bonus', 0.0)
+        agg['round_entry_penalty'] += r.get('round_entry_penalty', 0.0)
+        agg['round_throttle_penalty'] += r.get('round_throttle_penalty', 0.0)
+        for key in (
+            'round_dir_first', 'round_dir_second', 'round_dir_third',
+            'round_exit1_count', 'round_exit2_count', 'round_exit3_count',
+            'round_exit1_deaths', 'round_exit2_deaths', 'round_exit3_deaths',
+            'round_exit1_steer', 'round_exit2_steer', 'round_exit3_steer',
+            'round_exit1_ticks', 'round_exit2_ticks', 'round_exit3_ticks',
+            'round_exit1_throttle', 'round_exit2_throttle', 'round_exit3_throttle',
+        ):
+            agg[key] += r.get(key, 0.0)
         agg['steer_in'] += r.get('steer_in', 0.0)
         agg['steer_target'] += r.get('steer_target', 0.0)
         agg['steer_abs'] += r.get('steer_abs', 0.0)
@@ -3150,6 +3447,17 @@ def report_debug(R, dbg):
     R.p(f'  YieldCompletionBonus:            {sdiv(agg["yield_bonus"], nd):>10.4f}')
     R.p(f'  NumYieldsCompleted:              {sdiv(agg["yield_done_n"], nd):>10.4f}')
     R.p(f'  NumStopZonesEntered:             {sdiv(agg["stop_zones_n"], nd):>10.4f}')
+    if debug_field_available(dbg, 'round_entered_n'):
+        R.p(f'  NumRoundaboutsEntered:           {sdiv(agg["round_entered_n"], nd):>10.4f}')
+        R.p(f'  NumRoundaboutsCompleted:         {sdiv(agg["round_completed_n"], nd):>10.4f}')
+        R.p(f'  CollisionsInRoundabout:          {sdiv(agg["round_collisions"], nd):>10.4f}')
+        R.p(f'  Ticks_InRoundabout:              {sdiv(agg["round_ticks"], nd):>10.4f}')
+        if debug_field_available(dbg, 'round_bonus'):
+            R.p(f'  Acum_RoundaboutBonus:            {sdiv(agg["round_bonus"], nd):>10.4f}')
+        if debug_field_available(dbg, 'round_completion_bonus'):
+            R.p(f'  RndCompletionBonus:              {sdiv(agg["round_completion_bonus"], nd):>10.4f}')
+            R.p(f'  RndEntryPenalty:                 {sdiv(agg["round_entry_penalty"], nd):>10.4f}')
+            R.p(f'  RndThrottlePenalty:              {sdiv(agg["round_throttle_penalty"], nd):>10.4f}')
     R.p(f'  NotNorm_PeakFitness:             {sdiv(agg["fit_peak_raw"], nd):>10.4f}')
     R.p(f'  PeakGain (Peak - Final):         {sdiv(agg["fit_peak_gain"], nd):>10.4f}')
     R.p(f'  Acum_SteeringInput:              {sdiv(agg["steer_in"], nd):>10.4f}')
@@ -3186,6 +3494,91 @@ def report_debug(R, dbg):
     R.p(f'  YieldBonus P50/P90:              {pctl(yield_bonus_vals, 50):>10.2f} / {pctl(yield_bonus_vals, 90):>10.2f}')
     R.p(f'  StopBonus/Stop P50/P90:          {pctl(stop_bonus_per_vals, 50):>10.2f} / {pctl(stop_bonus_per_vals, 90):>10.2f} (N={len(stop_bonus_per_vals)})')
     R.p(f'  YieldBonus/Yield P50/P90:        {pctl(yield_bonus_per_vals, 50):>10.2f} / {pctl(yield_bonus_per_vals, 90):>10.2f} (N={len(yield_bonus_per_vals)})')
+    if debug_field_available(dbg, 'round_entered_n'):
+        round_rows = [r for r in dbg if r.get('round_entered_n', 0.0) > 0.0]
+        round_completion = [r.get('round_completion_rate', 0.0) * 100.0 for r in round_rows]
+        round_collision = [r.get('round_collision_rate', 0.0) * 100.0 for r in round_rows]
+        round_speed = [r.get('round_entry_speed_avg', 0.0) for r in round_rows]
+        round_front = [r.get('round_entry_front_avg', 0.0) for r in round_rows]
+        round_steer = [r.get('round_steer_avg', 0.0) for r in round_rows]
+        round_throttle = [r.get('round_throttle_avg', 0.0) for r in round_rows]
+        round_bonus_entry = metric_values(dbg, 'round_bonus_per_entry')
+        round_bonus_tick = metric_values(dbg, 'round_bonus_per_tick')
+        round_bonus_rows = [
+            r for r in dbg
+            if r.get('round_entered_n', 0.0) > 0.0
+            or r.get('round_ticks', 0.0) > 0.0
+            or abs(r.get('round_bonus', 0.0)) > 1e-12
+        ]
+        round_bonus_pos = sum(1 for r in round_bonus_rows if r.get('round_bonus', 0.0) > 1e-12)
+        round_bonus_neg = sum(1 for r in round_bonus_rows if r.get('round_bonus', 0.0) < -1e-12)
+        completion_ci = wilson_ci(agg['round_completed_n'], agg['round_entered_n'])
+        collision_ci = wilson_ci(agg['round_collisions'], agg['round_entered_n'])
+        R.p(f'\n-- Rotondas --')
+        R.p(f'  Coches con entrada:              {len(round_rows):>6d}/{nd} ({sdiv(len(round_rows)*100.0, nd):.2f}%)')
+        R.p(f'  Entradas / compl. confirm. / col.: {agg["round_entered_n"]:.0f} / {agg["round_completed_n"]:.0f} / {agg["round_collisions"]:.0f}')
+        R.p(
+            f'  Compl. confirmada global*:       {sdiv(agg["round_completed_n"]*100.0, agg["round_entered_n"]):>9.2f}% '
+            f'(IC95 {completion_ci[0]*100:.2f}-{completion_ci[1]*100:.2f}%)'
+        )
+        R.p(
+            f'  CollisionRate global:            {sdiv(agg["round_collisions"]*100.0, agg["round_entered_n"]):>9.2f}% '
+            f'(IC95 {collision_ci[0]*100:.2f}-{collision_ci[1]*100:.2f}%)'
+        )
+        R.p(f'  Compl. confirmada P50/P90 coche: {pctl(round_completion, 50):>9.2f}% / {pctl(round_completion, 90):>9.2f}%')
+        R.p(f'  CollisionRate P50/P90 coche:     {pctl(round_collision, 50):>9.2f}% / {pctl(round_collision, 90):>9.2f}%')
+        R.p(f'  Velocidad entrada P50/P90:       {pctl(round_speed, 50):>10.2f} / {pctl(round_speed, 90):>10.2f}')
+        R.p(f'  Obstaculo frontal entrada P50:   {pctl(round_front, 50):>10.4f}')
+        R.p(f'  Steering/tick P50/P90:           {pctl(round_steer, 50):>10.4f} / {pctl(round_steer, 90):>10.4f}')
+        R.p(f'  Throttle/tick P50/P90:           {pctl(round_throttle, 50):>10.4f} / {pctl(round_throttle, 90):>10.4f}')
+        R.p(f'  Cobertura ticks rotonda:         {sdiv(agg["round_ticks"]*100.0, agg["t_tot"]):>9.2f}%')
+        if debug_field_available(dbg, 'round_bonus'):
+            R.p(f'  RoundaboutBonus neto:            {agg["round_bonus"]:>10.2f}')
+            if debug_field_available(dbg, 'round_completion_bonus'):
+                expected_net = (
+                    agg['round_completion_bonus']
+                    - agg['round_entry_penalty']
+                    - agg['round_throttle_penalty']
+                )
+                R.p(
+                    f'  Desglose bonus C/E/T/neto:      {agg["round_completion_bonus"]:>10.2f} / '
+                    f'-{agg["round_entry_penalty"]:>9.2f} / -{agg["round_throttle_penalty"]:>9.2f} / '
+                    f'{expected_net:>10.2f}'
+                )
+            R.p(
+                f'  Bonus/entrada P50/P90:           {pctl(round_bonus_entry, 50):>10.2f} / '
+                f'{pctl(round_bonus_entry, 90):>10.2f} (N={len(round_bonus_entry)})'
+            )
+            R.p(
+                f'  Bonus/tick rotonda P50/P90:      {pctl(round_bonus_tick, 50):>10.4f} / '
+                f'{pctl(round_bonus_tick, 90):>10.4f} (N={len(round_bonus_tick)})'
+            )
+            R.p(f'  Coches bonus + / - / expuestos:  {round_bonus_pos:d} / {round_bonus_neg:d} / {len(round_bonus_rows):d}')
+        R.p('  * NumRoundaboutsCompleted se confirma en la siguiente entrada; es un limite inferior y puede omitir la ultima travesia.')
+        if debug_field_available(dbg, 'round_exit1_count'):
+            dir_total = agg['round_dir_first'] + agg['round_dir_second'] + agg['round_dir_third']
+            R.p(f'\n-- Rotondas por Direccion y Salida --')
+            R.p(
+                f'  Direccion entrada First/Second/Third: '
+                f'{agg["round_dir_first"]:.0f} ({sdiv(agg["round_dir_first"]*100.0, dir_total):.1f}%) / '
+                f'{agg["round_dir_second"]:.0f} ({sdiv(agg["round_dir_second"]*100.0, dir_total):.1f}%) / '
+                f'{agg["round_dir_third"]:.0f} ({sdiv(agg["round_dir_third"]*100.0, dir_total):.1f}%)'
+            )
+            hdr_round = f'  {"Tramo":>8s} | {"Expos.":>7s} | {"Muertes":>7s} | {"Death%":>7s} | {"IC95":>15s} | {"Ticks":>9s} | {"Steer/t":>9s} | {"Thr/t":>9s}'
+            R.p(hdr_round)
+            R.p(f'  {"-"*(len(hdr_round)-2)}')
+            for exit_num, label in ((1, 'Exit1'), (2, 'Exit2'), (3, 'Exit3+')):
+                count = agg[f'round_exit{exit_num}_count']
+                deaths = agg[f'round_exit{exit_num}_deaths']
+                ticks = agg[f'round_exit{exit_num}_ticks']
+                death_ci = wilson_ci(deaths, count)
+                ci_text = f'{death_ci[0]*100:.1f}-{death_ci[1]*100:.1f}%' if count > 0 else 'sin datos'
+                R.p(
+                    f'  {label:>8s} | {count:7.0f} | {deaths:7.0f} | '
+                    f'{sdiv(deaths*100.0, count):6.2f}% | {ci_text:>15s} | {ticks:9.0f} | '
+                    f'{sdiv(agg[f"round_exit{exit_num}_steer"], ticks):9.4f} | '
+                    f'{sdiv(agg[f"round_exit{exit_num}_throttle"], ticks):9.4f}'
+                )
     R.p(f'\n-- Estabilidad Fitness (Peak vs Final) --')
     R.p(f'  PeakGain P50/P90:                {pctl(peak_gain_vals, 50):>10.2f} / {pctl(peak_gain_vals, 90):>10.2f}')
     R.p(f'  PeakGain% P50/P90:               {pctl(peak_gain_pct_vals, 50):>9.2f}% / {pctl(peak_gain_pct_vals, 90):>9.2f}%')
@@ -3485,6 +3878,35 @@ def report_quicksummary(R, rows, dbg):
         R.p(f'  YieldDone med:    {sdiv(sum(r.get("yield_done_n", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  StopBonus med:    {sdiv(sum(r.get("stop_bonus", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  YieldBonus med:   {sdiv(sum(r.get("yield_bonus", 0.0) for r in dbg), nd):.2f}')
+        if debug_field_available(dbg, 'round_entered_n'):
+            round_entered = sum(r.get('round_entered_n', 0.0) for r in dbg)
+            round_completed = sum(r.get('round_completed_n', 0.0) for r in dbg)
+            round_collisions = sum(r.get('round_collisions', 0.0) for r in dbg)
+            round_ticks = sum(r.get('round_ticks', 0.0) for r in dbg)
+            round_bonus = sum(r.get('round_bonus', 0.0) for r in dbg)
+            round_completion_bonus = sum(r.get('round_completion_bonus', 0.0) for r in dbg)
+            round_entry_penalty = sum(r.get('round_entry_penalty', 0.0) for r in dbg)
+            round_throttle_penalty = sum(r.get('round_throttle_penalty', 0.0) for r in dbg)
+            total_ticks = sum(r.get('t_tot', 0.0) for r in dbg)
+            R.p(f'  Round entered:    {round_entered:.0f}')
+            R.p(f'  Round compl. conf.: {round_completed:.0f} ({sdiv(round_completed*100.0, round_entered):.2f}%)*')
+            R.p(f'  Round collisions: {round_collisions:.0f} ({sdiv(round_collisions*100.0, round_entered):.2f}%)')
+            R.p(f'  Round tick share: {sdiv(round_ticks*100.0, total_ticks):.2f}%')
+            if debug_field_available(dbg, 'round_bonus'):
+                R.p(f'  Round bonus net:  {round_bonus:.2f} ({sdiv(round_bonus, round_entered):.2f}/entry, {sdiv(round_bonus, round_ticks):.4f}/tick)')
+                if debug_field_available(dbg, 'round_completion_bonus'):
+                    R.p(
+                        f'  Round C/E/T:      +{round_completion_bonus:.2f} / '
+                        f'-{round_entry_penalty:.2f} / -{round_throttle_penalty:.2f}'
+                    )
+            R.p('  * Confirmada al registrar la siguiente entrada; limite inferior.')
+            if debug_field_available(dbg, 'round_exit1_count'):
+                exit_rates = []
+                for exit_num in (1, 2, 3):
+                    count = sum(r.get(f'round_exit{exit_num}_count', 0.0) for r in dbg)
+                    deaths = sum(r.get(f'round_exit{exit_num}_deaths', 0.0) for r in dbg)
+                    exit_rates.append(sdiv(deaths * 100.0, count))
+                R.p(f'  Round death E1/E2/E3+: {exit_rates[0]:.2f}% / {exit_rates[1]:.2f}% / {exit_rates[2]:.2f}%')
         R.p(f'  SteerIn med:      {sdiv(sum(r.get("steer_in", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  SteerTgt med:     {sdiv(sum(r.get("steer_target", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  SteerAbs/tick med:{sdiv(sum(r.get("steer_abs_avg", 0.0) for r in dbg), nd):.4f}')
@@ -4212,8 +4634,46 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
                 f'{st["time_med"]:>6.2f}s | {st["yield_val_med"]:>6.2f}s | {st["stop_val_med"]:>6.2f}s'
             )
 
+    situational_items = [
+        ('stop_bonus_per', 'StopBonus/Stop', 'stop_done_n'),
+        ('yield_bonus_per', 'YieldBonus/Yield', 'yield_done_n'),
+        ('stop_done_rate', 'StopDone/StopZone', 'stop_zones_n'),
+        ('yield_done_rate', 'YieldDone/StopZone', 'stop_zones_n'),
+        ('round_completion_rate', 'RoundCompletionRate', 'round_entered_n'),
+        ('round_collision_rate', 'RoundCollisionRate', 'round_entered_n'),
+        ('round_entry_speed_avg', 'RoundEntrySpeedAvg', 'round_entered_n'),
+        ('round_entry_front_avg', 'RoundEntryFrontObstAvg', 'round_entered_n'),
+        ('round_bonus_per_entry', 'RoundBonus/Entry', 'round_entered_n'),
+        ('round_bonus_per_tick', 'RoundBonus/RoundTick', 'round_ticks'),
+        ('round_completion_bonus_per_completion', 'RndCompletionBonus/Completion', 'round_completed_n'),
+        ('round_entry_penalty_per_entry', 'RndEntryPenalty/Entry', 'round_entered_n'),
+        ('round_throttle_penalty_per_tick', 'RndThrottlePenalty/RoundTick', 'round_ticks'),
+        ('round_steer_avg', 'RoundSteeringAvg', 'round_ticks'),
+        ('round_throttle_avg', 'RoundThrottleAvg', 'round_ticks'),
+        ('round_exit1_death_rate', 'RoundExit1DeathRate', 'round_exit1_count'),
+        ('round_exit2_death_rate', 'RoundExit2DeathRate', 'round_exit2_count'),
+        ('round_exit3_death_rate', 'RoundExit3PlusDeathRate', 'round_exit3_count'),
+    ]
+    available_fields = debug_available_fields(dbg)
+    coverage_rows = []
+    for key, label, exposure_key in situational_items:
+        required_key = METRIC_REQUIRED_FIELDS.get(key)
+        if required_key and required_key not in available_fields:
+            continue
+        if key not in available_fields and exposure_key not in available_fields:
+            continue
+        n_exp = metric_exposure_count(dbg, key)
+        if n_exp > 0:
+            coverage_rows.append((label, exposure_key, n_exp))
+    if coverage_rows:
+        R.p(f'\n-- Cobertura de Metricas Situacionales --')
+        hdr_cov = f'  {"Metrica":>26s} | {"Denominador":>18s} | {"N":>7s} | {"Pct":>7s}'
+        R.p(hdr_cov)
+        R.p(f'  {"-"*(len(hdr_cov)-2)}')
+        for label, exposure_key, n_exp in coverage_rows:
+            R.p(f'  {label:>26s} | {exposure_key:>18s} | {n_exp:>7d} | {sdiv(n_exp*100.0, nd):>6.2f}%')
+
     # Correlaciones de componentes con fitness
-    fit_vals = [r['fit'] for r in dbg]
     corr_items = [
         ('time', 'Tiempo'),
         ('a', 'Acum_A'),
@@ -4244,6 +4704,36 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('yield_bonus_per', 'YieldBonus/Yield'),
         ('stop_done_rate', 'StopDone/StopZone'),
         ('yield_done_rate', 'YieldDone/StopZone'),
+        ('round_entered_n', 'NumRoundaboutsEntered'),
+        ('round_completed_n', 'NumRoundaboutsCompleted'),
+        ('round_completion_rate', 'RoundaboutCompletionRate'),
+        ('round_collision_rate', 'RoundaboutCollisionRate'),
+        ('round_entry_speed_avg', 'RoundaboutEntrySpeedAvg'),
+        ('round_entry_front_avg', 'RoundaboutEntryFrontObstAvg'),
+        ('round_bonus', 'RoundaboutBonusNet'),
+        ('round_bonus_per_entry', 'RoundaboutBonusPerEntry'),
+        ('round_bonus_per_completion', 'RoundaboutBonusPerCompletion'),
+        ('round_bonus_per_tick', 'RoundaboutBonusPerTick'),
+        ('round_bonus_fit_share', 'RoundaboutBonusFitShare'),
+        ('round_completion_bonus', 'RoundCompletionBonus'),
+        ('round_entry_penalty', 'RoundEntryPenalty'),
+        ('round_throttle_penalty', 'RoundThrottlePenalty'),
+        ('round_completion_bonus_per_completion', 'RoundCompletionBonusPerCompletion'),
+        ('round_entry_penalty_per_entry', 'RoundEntryPenaltyPerEntry'),
+        ('round_throttle_penalty_per_tick', 'RoundThrottlePenaltyPerTick'),
+        ('round_tick_ratio', 'RoundaboutTickRatio'),
+        ('round_steer_avg', 'RoundaboutSteeringAvg'),
+        ('round_throttle_avg', 'RoundaboutThrottleAvg'),
+        ('round_collisions', 'CollisionsInRoundabout'),
+        ('round_exit1_death_rate', 'RoundExit1DeathRate'),
+        ('round_exit2_death_rate', 'RoundExit2DeathRate'),
+        ('round_exit3_death_rate', 'RoundExit3PlusDeathRate'),
+        ('round_exit1_steer_avg', 'RoundExit1SteeringAvg'),
+        ('round_exit2_steer_avg', 'RoundExit2SteeringAvg'),
+        ('round_exit3_steer_avg', 'RoundExit3PlusSteeringAvg'),
+        ('round_exit1_throttle_avg', 'RoundExit1ThrottleAvg'),
+        ('round_exit2_throttle_avg', 'RoundExit2ThrottleAvg'),
+        ('round_exit3_throttle_avg', 'RoundExit3PlusThrottleAvg'),
         ('stop_zones_n', 'NumStopZonesEntered'),
         ('fit_peak_raw', 'NotNorm_PeakFitness'),
         ('fit_peak_gain', 'PeakGain(Peak-Final)'),
@@ -4267,26 +4757,37 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('t_tot', 'Ticks_Total'),
     ]
     corrs = []
-    available_fields = debug_available_fields(dbg)
     derived_corr_fields = {
         'time', 'steer_gap_abs', 'steer_in_avg', 'steer_abs_avg',
         'steer_gap_avg_abs', 'stop_bonus_per', 'yield_bonus_per',
         'stop_done_rate', 'yield_done_rate', 'fit_peak_gain',
+        'round_completion_rate', 'round_collision_rate', 'round_entry_speed_avg',
+        'round_entry_front_avg', 'round_bonus', 'round_bonus_per_entry',
+        'round_bonus_per_completion', 'round_bonus_per_tick', 'round_bonus_fit_share',
+        'round_completion_bonus_per_completion', 'round_entry_penalty_per_entry',
+        'round_throttle_penalty_per_tick',
+        'round_tick_ratio', 'round_steer_avg', 'round_throttle_avg',
+        'round_exit1_death_rate', 'round_exit2_death_rate', 'round_exit3_death_rate',
+        'round_exit1_steer_avg', 'round_exit2_steer_avg', 'round_exit3_steer_avg',
+        'round_exit1_throttle_avg', 'round_exit2_throttle_avg', 'round_exit3_throttle_avg',
     }
     for key, label in corr_items:
+        required_key = METRIC_REQUIRED_FIELDS.get(key)
+        if required_key and required_key not in available_fields:
+            continue
         if key not in available_fields and key not in derived_corr_fields:
             continue
-        if key == 'steer_gap_abs':
-            vals = [abs(r.get('steer_in', 0.0) - r.get('steer_target', 0.0)) for r in dbg]
-        else:
-            vals = [r.get(key, 0.0) for r in dbg]
+        fit_vals, vals = correlation_sample(dbg, key)
+        if len(vals) < 5 or stdev(fit_vals) <= 1e-12 or stdev(vals) <= 1e-12:
+            continue
         c = pearson_corr(fit_vals, vals)
-        corrs.append((abs(c), c, label))
+        corrs.append((abs(c), c, label, len(vals)))
     corrs.sort(reverse=True)
 
     R.p(f'\n-- Correlaciones con Fitness (Pearson) --')
-    for _, c, label in corrs:
-        R.p(f'  {label:28s}: {c:+.4f}')
+    R.p('  Solo se muestran metricas variables con N>=5 y exposicion real cuando requieren denominador.')
+    for _, c, label, sample_n in corrs:
+        R.p(f'  {label:28s}: {c:+.4f} (N={sample_n})')
 
     R.p(f'\n-- Conduccion en Contexto Stop/Semaforo por Familia --')
     hdr_stop = f'  {"Familia":>10s} | {"N":>7s} | {"StopTicks":>10s} | {"StopTL":>8s} | {"StopSt":>8s} | {"StopYld":>8s} | {"StopBrake":>10s} | {"StopThr":>10s} | {"StopBrake%":>10s} | {"Brake%":>8s} | {"GraceThr":>9s} | {"GraceBr":>9s} | {"YldVal":>8s} | {"StopVal":>8s} | {"StIn":>7s} | {"StTgt":>7s} | {"GapAbs":>8s} | {"SteerStop":>10s}'
@@ -4446,14 +4947,14 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
     for r in sorted(dbg, key=lambda x: x['fit'])[:top_n]:
         R.p(
             f'  Gen {r["gen"]:>5d} | {r["spawn"].replace("TargetPoint","TP"):>15s} | '
-            f'fit={r["fit"]:>10.2f} | t={r["time"]:>4d}s | death={r["death"]}'
+            f'fit={r["fit"]:>10.2f} | t={r["time"]:>5.1f}s | death={r["death"]}'
         )
 
     R.p(f'\n-- Mejores {top_n} Coches (raw fitness) --')
     for r in sorted(dbg, key=lambda x: -x['fit'])[:top_n]:
         R.p(
             f'  Gen {r["gen"]:>5d} | {r["spawn"].replace("TargetPoint","TP"):>15s} | '
-            f'fit={r["fit"]:>10.2f} | t={r["time"]:>4d}s | death={r["death"]}'
+            f'fit={r["fit"]:>10.2f} | t={r["time"]:>5.1f}s | death={r["death"]}'
         )
 
 def report_session_comparison(R, summary_rows, dbg_rows, previous_sessions):
@@ -4559,13 +5060,35 @@ def save_json_snapshot(
     yield_bonus_total = sum(r.get('yield_bonus', 0.0) for r in dbg_rows)
     stop_done_total = sum(r.get('stop_done_n', 0.0) for r in dbg_rows)
     yield_done_total = sum(r.get('yield_done_n', 0.0) for r in dbg_rows)
-    stop_bonus_per_total = sum(r.get('stop_bonus_per', 0.0) for r in dbg_rows)
-    yield_bonus_per_total = sum(r.get('yield_bonus_per', 0.0) for r in dbg_rows)
-    stop_done_rate_total = sum(r.get('stop_done_rate', 0.0) for r in dbg_rows)
-    yield_done_rate_total = sum(r.get('yield_done_rate', 0.0) for r in dbg_rows)
+    stop_bonus_per_avg, stop_bonus_per_n = exposed_mean(dbg_rows, 'stop_bonus_per')
+    yield_bonus_per_avg, yield_bonus_per_n = exposed_mean(dbg_rows, 'yield_bonus_per')
+    stop_done_rate_avg, stop_done_rate_n = exposed_mean(dbg_rows, 'stop_done_rate')
+    yield_done_rate_avg, yield_done_rate_n = exposed_mean(dbg_rows, 'yield_done_rate')
+    round_entry_speed_avg, round_entry_speed_n = exposed_mean(dbg_rows, 'round_entry_speed_avg')
+    round_entry_front_avg, round_entry_front_n = exposed_mean(dbg_rows, 'round_entry_front_avg')
+    round_steer_avg, round_steer_n = exposed_mean(dbg_rows, 'round_steer_avg')
+    round_throttle_avg, round_throttle_n = exposed_mean(dbg_rows, 'round_throttle_avg')
+    round_bonus_total = sum(r.get('round_bonus', 0.0) for r in dbg_rows)
+    round_completion_bonus_total = sum(r.get('round_completion_bonus', 0.0) for r in dbg_rows)
+    round_entry_penalty_total = sum(r.get('round_entry_penalty', 0.0) for r in dbg_rows)
+    round_throttle_penalty_total = sum(r.get('round_throttle_penalty', 0.0) for r in dbg_rows)
+    round_bonus_breakdown_available = debug_field_available(dbg_rows, 'round_completion_bonus')
+    round_bonus_entry_avg, round_bonus_entry_n = exposed_mean(dbg_rows, 'round_bonus_per_entry')
+    round_bonus_completion_avg, round_bonus_completion_n = exposed_mean(dbg_rows, 'round_bonus_per_completion')
+    round_bonus_tick_avg, round_bonus_tick_n = exposed_mean(dbg_rows, 'round_bonus_per_tick')
+    round_completion_bonus_avg, round_completion_bonus_n = exposed_mean(dbg_rows, 'round_completion_bonus_per_completion')
+    round_entry_penalty_avg, round_entry_penalty_n = exposed_mean(dbg_rows, 'round_entry_penalty_per_entry')
+    round_throttle_penalty_avg, round_throttle_penalty_n = exposed_mean(dbg_rows, 'round_throttle_penalty_per_tick')
+    if not round_bonus_breakdown_available:
+        round_completion_bonus_avg = round_entry_penalty_avg = round_throttle_penalty_avg = 0.0
+        round_completion_bonus_n = round_entry_penalty_n = round_throttle_penalty_n = 0
     steer_in_total = sum(r.get('steer_in', 0.0) for r in dbg_rows)
     steer_target_total = sum(r.get('steer_target', 0.0) for r in dbg_rows)
     steer_gap_total = sum(abs(r.get('steer_in', 0.0) - r.get('steer_target', 0.0)) for r in dbg_rows)
+    round_entered_total = sum(r.get('round_entered_n', 0.0) for r in dbg_rows)
+    round_completed_total = sum(r.get('round_completed_n', 0.0) for r in dbg_rows)
+    round_collisions_total = sum(r.get('round_collisions', 0.0) for r in dbg_rows)
+    round_ticks_total = sum(r.get('round_ticks', 0.0) for r in dbg_rows)
 
     by_spawn = defaultdict(list)
     for r in dbg_rows:
@@ -4654,10 +5177,14 @@ def save_json_snapshot(
             'avg_yield_bonus': sdiv(yield_bonus_total, len(dbg_rows)),
             'avg_stop_done_n': sdiv(stop_done_total, len(dbg_rows)),
             'avg_yield_done_n': sdiv(yield_done_total, len(dbg_rows)),
-            'avg_stop_bonus_per': sdiv(stop_bonus_per_total, len(dbg_rows)),
-            'avg_yield_bonus_per': sdiv(yield_bonus_per_total, len(dbg_rows)),
-            'avg_stop_done_rate': sdiv(stop_done_rate_total, len(dbg_rows)),
-            'avg_yield_done_rate': sdiv(yield_done_rate_total, len(dbg_rows)),
+            'avg_stop_bonus_per': stop_bonus_per_avg,
+            'avg_stop_bonus_per_n': stop_bonus_per_n,
+            'avg_yield_bonus_per': yield_bonus_per_avg,
+            'avg_yield_bonus_per_n': yield_bonus_per_n,
+            'avg_stop_done_rate': stop_done_rate_avg,
+            'avg_stop_done_rate_n': stop_done_rate_n,
+            'avg_yield_done_rate': yield_done_rate_avg,
+            'avg_yield_done_rate_n': yield_done_rate_n,
             'avg_stop_zones_n': sdiv(sum(r.get('stop_zones_n', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_fit_peak_raw': sdiv(sum(r.get('fit_peak_raw', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_fit_peak_gain': sdiv(sum(r.get('fit_peak_gain', 0.0) for r in dbg_rows), len(dbg_rows)),
@@ -4668,6 +5195,62 @@ def save_json_snapshot(
             'avg_steer_abs_avg': sdiv(sum(r.get('steer_abs_avg', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_steer_gap_avg_abs': sdiv(sum(r.get('steer_gap_avg_abs', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_stop_ticks': sdiv(stop_ticks_total, len(dbg_rows)),
+            'roundabout_entries': round_entered_total,
+            'roundabout_completed': round_completed_total,
+            'roundabout_collisions': round_collisions_total,
+            'roundabout_bonus_breakdown_available': round_bonus_breakdown_available,
+            'roundabout_bonus_net': round_bonus_total,
+            'roundabout_completion_bonus': round_completion_bonus_total,
+            'roundabout_entry_penalty': round_entry_penalty_total,
+            'roundabout_throttle_penalty': round_throttle_penalty_total,
+            'roundabout_completion_rate': sdiv(round_completed_total, round_entered_total),
+            'roundabout_collision_rate': sdiv(round_collisions_total, round_entered_total),
+            'roundabout_tick_share': sdiv(round_ticks_total, ticks_total),
+            'avg_roundabout_entry_speed': round_entry_speed_avg,
+            'avg_roundabout_entry_speed_n': round_entry_speed_n,
+            'avg_roundabout_entry_front_obstacle': round_entry_front_avg,
+            'avg_roundabout_entry_front_obstacle_n': round_entry_front_n,
+            'avg_roundabout_steering': round_steer_avg,
+            'avg_roundabout_steering_n': round_steer_n,
+            'avg_roundabout_throttle': round_throttle_avg,
+            'avg_roundabout_throttle_n': round_throttle_n,
+            'avg_roundabout_bonus_per_entry': round_bonus_entry_avg,
+            'avg_roundabout_bonus_per_entry_n': round_bonus_entry_n,
+            'avg_roundabout_bonus_per_completion': round_bonus_completion_avg,
+            'avg_roundabout_bonus_per_completion_n': round_bonus_completion_n,
+            'avg_roundabout_bonus_per_tick': round_bonus_tick_avg,
+            'avg_roundabout_bonus_per_tick_n': round_bonus_tick_n,
+            'avg_roundabout_completion_bonus_per_completion': round_completion_bonus_avg,
+            'avg_roundabout_completion_bonus_per_completion_n': round_completion_bonus_n,
+            'avg_roundabout_entry_penalty_per_entry': round_entry_penalty_avg,
+            'avg_roundabout_entry_penalty_per_entry_n': round_entry_penalty_n,
+            'avg_roundabout_throttle_penalty_per_tick': round_throttle_penalty_avg,
+            'avg_roundabout_throttle_penalty_per_tick_n': round_throttle_penalty_n,
+            'roundabout_entry_directions': {
+                'first': sum(r.get('round_dir_first', 0.0) for r in dbg_rows),
+                'second': sum(r.get('round_dir_second', 0.0) for r in dbg_rows),
+                'third': sum(r.get('round_dir_third', 0.0) for r in dbg_rows),
+            },
+            'roundabout_exit_metrics': {
+                str(exit_num): {
+                    'exposures': sum(r.get(f'round_exit{exit_num}_count', 0.0) for r in dbg_rows),
+                    'deaths': sum(r.get(f'round_exit{exit_num}_deaths', 0.0) for r in dbg_rows),
+                    'ticks': sum(r.get(f'round_exit{exit_num}_ticks', 0.0) for r in dbg_rows),
+                    'death_rate': sdiv(
+                        sum(r.get(f'round_exit{exit_num}_deaths', 0.0) for r in dbg_rows),
+                        sum(r.get(f'round_exit{exit_num}_count', 0.0) for r in dbg_rows),
+                    ),
+                    'avg_steering': sdiv(
+                        sum(r.get(f'round_exit{exit_num}_steer', 0.0) for r in dbg_rows),
+                        sum(r.get(f'round_exit{exit_num}_ticks', 0.0) for r in dbg_rows),
+                    ),
+                    'avg_throttle': sdiv(
+                        sum(r.get(f'round_exit{exit_num}_throttle', 0.0) for r in dbg_rows),
+                        sum(r.get(f'round_exit{exit_num}_ticks', 0.0) for r in dbg_rows),
+                    ),
+                }
+                for exit_num in (1, 2, 3)
+            },
             'car_index_families': summarize_car_index_families(dbg_rows),
             'brake_share': sdiv(sum(r.get('brake_in', 0.0) for r in dbg_rows), cmd_total),
             'grace_brake_share': sdiv(sum(r.get('brake_grace', 0.0) for r in dbg_rows), grace_cmd_total),
@@ -6077,6 +6660,220 @@ def plot_mutation_family_summary(dbg):
     saved.append(save_fig(fig, '28_mutation_family.png'))
     return saved
 
+def plot_roundabout_summary(dbg):
+    saved = []
+    if not dbg or not debug_field_available(dbg, 'round_entered_n'):
+        return saved
+    plot_label = infer_label_from_debug_rows(dbg)
+
+    by_gen = defaultdict(list)
+    for row in dbg:
+        by_gen[row.get('gen', 0)].append(row)
+    gens = sorted(by_gen)
+    if not gens:
+        return saved
+
+    entered = [sum(r.get('round_entered_n', 0.0) for r in by_gen[g]) for g in gens]
+    completed = [sum(r.get('round_completed_n', 0.0) for r in by_gen[g]) for g in gens]
+    collisions = [sum(r.get('round_collisions', 0.0) for r in by_gen[g]) for g in gens]
+    completion_pct = [ratio_or_nan(c, e, 100.0) for c, e in zip(completed, entered)]
+    collision_pct = [ratio_or_nan(c, e, 100.0) for c, e in zip(collisions, entered)]
+    entry_speed = [
+        ratio_or_nan(
+            sum(r.get('round_entry_speed', 0.0) for r in by_gen[g]),
+            sum(r.get('round_entered_n', 0.0) for r in by_gen[g]),
+        )
+        for g in gens
+    ]
+    entry_front = [
+        ratio_or_nan(
+            sum(r.get('round_entry_front', 0.0) for r in by_gen[g]),
+            sum(r.get('round_entered_n', 0.0) for r in by_gen[g]),
+        )
+        for g in gens
+    ]
+    steer_avg = [
+        ratio_or_nan(
+            sum(r.get('round_steer', 0.0) for r in by_gen[g]),
+            sum(r.get('round_ticks', 0.0) for r in by_gen[g]),
+        )
+        for g in gens
+    ]
+    throttle_avg = [
+        ratio_or_nan(
+            sum(r.get('round_throttle', 0.0) for r in by_gen[g]),
+            sum(r.get('round_ticks', 0.0) for r in by_gen[g]),
+        )
+        for g in gens
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle(f'{plot_label} - Diagnostico de Rotondas', fontsize=14, fontweight='bold')
+
+    axes[0, 0].plot(gens, entered, label='Entradas', color='tab:blue')
+    axes[0, 0].plot(gens, completed, label='Completadas', color='tab:green')
+    axes[0, 0].set_title('Entradas y completadas')
+    axes[0, 0].legend()
+
+    axes[0, 1].plot(gens, completion_pct, label='Completion %', color='tab:green')
+    axes[0, 1].plot(gens, collision_pct, label='Collision %', color='tab:red')
+    axes[0, 1].set_title('Resultado por entrada (huecos = sin entrada)')
+    axes[0, 1].set_ylabel('Porcentaje')
+    axes[0, 1].legend()
+
+    axes[1, 0].plot(gens, entry_speed, label='Velocidad entrada', color='tab:orange')
+    axes[1, 0].set_title('Contexto de entrada (solo generaciones con entrada)')
+    axes[1, 0].set_ylabel('Velocidad entrada')
+    axes[1, 0].tick_params(axis='y', labelcolor='tab:orange')
+    ax_front = axes[1, 0].twinx()
+    ax_front.plot(gens, entry_front, label='Obstaculo frontal entrada', color='tab:purple', marker='o')
+    ax_front.set_ylabel('Obstaculo frontal entrada')
+    ax_front.tick_params(axis='y', labelcolor='tab:purple')
+    lines = axes[1, 0].get_lines() + ax_front.get_lines()
+    axes[1, 0].legend(lines, [line.get_label() for line in lines], loc='best')
+
+    axes[1, 1].plot(gens, steer_avg, label='ABS steering/tick', color='tab:blue')
+    axes[1, 1].plot(gens, throttle_avg, label='Throttle/tick', color='tab:brown')
+    axes[1, 1].set_title('Control dentro de la rotonda (solo ticks en rotonda)')
+    axes[1, 1].legend()
+
+    for ax in axes.flat:
+        ax.set_xlabel(GEN_XLABEL)
+        ax.grid(True, alpha=0.3)
+    ax_front.grid(False)
+
+    plt.tight_layout()
+    saved.append(save_fig(fig, '29_roundabout.png'))
+    return saved
+
+def plot_roundabout_exit_summary(dbg):
+    saved = []
+    if not dbg or not debug_field_available(dbg, 'round_exit1_count'):
+        return saved
+    plot_label = infer_label_from_debug_rows(dbg)
+
+    labels = ['Exit1', 'Exit2', 'Exit3+']
+    counts = [
+        sum(r.get(f'round_exit{i}_count', 0.0) for r in dbg)
+        for i in (1, 2, 3)
+    ]
+    deaths = [
+        sum(r.get(f'round_exit{i}_deaths', 0.0) for r in dbg)
+        for i in (1, 2, 3)
+    ]
+    ticks = [
+        sum(r.get(f'round_exit{i}_ticks', 0.0) for r in dbg)
+        for i in (1, 2, 3)
+    ]
+    death_rates = [sdiv(d * 100.0, c) for d, c in zip(deaths, counts)]
+    steer_avg = [
+        sdiv(sum(r.get(f'round_exit{i}_steer', 0.0) for r in dbg), tick)
+        for i, tick in zip((1, 2, 3), ticks)
+    ]
+    throttle_avg = [
+        sdiv(sum(r.get(f'round_exit{i}_throttle', 0.0) for r in dbg), tick)
+        for i, tick in zip((1, 2, 3), ticks)
+    ]
+    directions = [
+        sum(r.get('round_dir_first', 0.0) for r in dbg),
+        sum(r.get('round_dir_second', 0.0) for r in dbg),
+        sum(r.get('round_dir_third', 0.0) for r in dbg),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle(f'{plot_label} - Rotondas por Salida', fontsize=14, fontweight='bold')
+
+    axes[0, 0].bar(labels, directions, color=['tab:blue', 'tab:orange', 'tab:green'])
+    axes[0, 0].set_title('Direcciones asignadas al entrar')
+    axes[0, 0].set_ylabel('Cantidad')
+
+    x = np.arange(len(labels))
+    axes[0, 1].bar(x - 0.18, counts, width=0.36, label='Exposiciones', color='steelblue')
+    axes[0, 1].bar(x + 0.18, deaths, width=0.36, label='Muertes', color='tomato')
+    axes[0, 1].set_xticks(x)
+    axes[0, 1].set_xticklabels(labels)
+    axes[0, 1].set_title('Exposicion y muertes')
+    axes[0, 1].legend()
+
+    axes[1, 0].bar(labels, death_rates, color='crimson', alpha=0.8)
+    axes[1, 0].set_title('Muertes por exposicion')
+    axes[1, 0].set_ylabel('Porcentaje')
+
+    axes[1, 1].plot(labels, steer_avg, marker='o', label='ABS steering/tick')
+    axes[1, 1].plot(labels, throttle_avg, marker='o', label='Throttle/tick')
+    axes[1, 1].set_title('Control medio por tramo')
+    axes[1, 1].legend()
+
+    for ax in axes.flat:
+        ax.grid(True, alpha=0.3, axis='y')
+
+    plt.tight_layout()
+    saved.append(save_fig(fig, '30_roundabout_exits.png'))
+    return saved
+
+def plot_roundabout_bonus(dbg):
+    saved = []
+    if not dbg or not debug_field_available(dbg, 'round_bonus'):
+        return saved
+    plot_label = infer_label_from_debug_rows(dbg)
+
+    by_gen = defaultdict(list)
+    for row in dbg:
+        by_gen[row.get('gen', 0)].append(row)
+    gens = sorted(by_gen)
+    if not gens:
+        return saved
+
+    bonus = [sum(r.get('round_bonus', 0.0) for r in by_gen[g]) for g in gens]
+    completion_bonus = [sum(r.get('round_completion_bonus', 0.0) for r in by_gen[g]) for g in gens]
+    entry_penalty = [sum(r.get('round_entry_penalty', 0.0) for r in by_gen[g]) for g in gens]
+    throttle_penalty = [sum(r.get('round_throttle_penalty', 0.0) for r in by_gen[g]) for g in gens]
+    entered = [sum(r.get('round_entered_n', 0.0) for r in by_gen[g]) for g in gens]
+    completed = [sum(r.get('round_completed_n', 0.0) for r in by_gen[g]) for g in gens]
+    ticks = [sum(r.get('round_ticks', 0.0) for r in by_gen[g]) for g in gens]
+    collisions = [sum(r.get('round_collisions', 0.0) for r in by_gen[g]) for g in gens]
+    bonus_per_entry = [ratio_or_nan(b, e) for b, e in zip(bonus, entered)]
+    bonus_per_tick = [ratio_or_nan(b, t) for b, t in zip(bonus, ticks)]
+    completion_pct = [ratio_or_nan(c, e, 100.0) for c, e in zip(completed, entered)]
+    collision_pct = [ratio_or_nan(c, e, 100.0) for c, e in zip(collisions, entered)]
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle(f'{plot_label} - RoundaboutBonus', fontsize=14, fontweight='bold')
+
+    axes[0, 0].axhline(0.0, color='black', linewidth=0.8, alpha=0.4)
+    axes[0, 0].plot(gens, bonus, label='Bonus neto', color='tab:green', marker='o')
+    if debug_field_available(dbg, 'round_completion_bonus'):
+        axes[0, 0].plot(gens, completion_bonus, label='Completion bonus', color='tab:blue', alpha=0.8)
+        axes[0, 0].plot(gens, [-v for v in entry_penalty], label='-Entry penalty', color='tab:red', alpha=0.8)
+        axes[0, 0].plot(gens, [-v for v in throttle_penalty], label='-Throttle penalty', color='tab:orange', alpha=0.8)
+    axes[0, 0].set_title('Bonus neto y contribuciones')
+    axes[0, 0].set_ylabel('Fitness')
+    axes[0, 0].legend()
+
+    axes[0, 1].axhline(0.0, color='black', linewidth=0.8, alpha=0.4)
+    axes[0, 1].plot(gens, bonus_per_entry, label='Bonus/entrada', color='tab:blue', marker='o')
+    axes[0, 1].set_title('Bonus por entrada')
+    axes[0, 1].legend()
+
+    axes[1, 0].axhline(0.0, color='black', linewidth=0.8, alpha=0.4)
+    axes[1, 0].plot(gens, bonus_per_tick, label='Bonus/tick rotonda', color='tab:purple', marker='o')
+    axes[1, 0].set_title('Bonus por tick dentro de rotonda')
+    axes[1, 0].legend()
+
+    axes[1, 1].plot(gens, completion_pct, label='Completion %', color='tab:green')
+    axes[1, 1].plot(gens, collision_pct, label='Collision %', color='tab:red')
+    axes[1, 1].set_title('Resultado por entrada')
+    axes[1, 1].set_ylabel('Porcentaje')
+    axes[1, 1].legend()
+
+    for ax in axes.flat:
+        ax.set_xlabel(GEN_XLABEL)
+        ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    saved.append(save_fig(fig, '31_roundabout_bonus.png'))
+    return saved
+
 def plot_all(summary, dbg):
     saved = []
 
@@ -6223,6 +7020,9 @@ def plot_all(summary, dbg):
         saved += plot_mutation_fit_scatter(dbg)
         saved += plot_correlation_heatmap(dbg)
         saved += plot_mutation_family_summary(dbg)
+        saved += plot_roundabout_summary(dbg)
+        saved += plot_roundabout_exit_summary(dbg)
+        saved += plot_roundabout_bonus(dbg)
 
     return saved
 
@@ -6409,6 +7209,14 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
         stop_done_total = sum(r.get('stop_done_n', 0.0) for r in dbg_rows)
         yield_done_total = sum(r.get('yield_done_n', 0.0) for r in dbg_rows)
         stop_zones_total = sum(r.get('stop_zones_n', 0.0) for r in dbg_rows)
+        round_entered_total = sum(r.get('round_entered_n', 0.0) for r in dbg_rows)
+        round_completed_total = sum(r.get('round_completed_n', 0.0) for r in dbg_rows)
+        round_collisions_total = sum(r.get('round_collisions', 0.0) for r in dbg_rows)
+        round_ticks_total = sum(r.get('round_ticks', 0.0) for r in dbg_rows)
+        round_bonus_total = sum(r.get('round_bonus', 0.0) for r in dbg_rows)
+        round_completion_bonus_total = sum(r.get('round_completion_bonus', 0.0) for r in dbg_rows)
+        round_entry_penalty_total = sum(r.get('round_entry_penalty', 0.0) for r in dbg_rows)
+        round_throttle_penalty_total = sum(r.get('round_throttle_penalty', 0.0) for r in dbg_rows)
         steer_in_total = sum(r.get('steer_in', 0.0) for r in dbg_rows)
         steer_target_total = sum(r.get('steer_target', 0.0) for r in dbg_rows)
         steer_gap_total = sum(abs(r.get('steer_in', 0.0) - r.get('steer_target', 0.0)) for r in dbg_rows)
@@ -6448,6 +7256,71 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
                 insights.append('No hay yields completados pese a validacion de ceda; revisar ApplyYieldCompletionBonus y liberacion de cruce.')
             elif yield_done_rate < 0.10 and yield_done_total > 0:
                 insights.append(f'Baja finalizacion de yield (YieldDone/StopZones={yield_done_rate*100:.1f}%).')
+
+        if round_entered_total > 0:
+            round_completion_rate = sdiv(round_completed_total, round_entered_total)
+            round_collision_rate = sdiv(round_collisions_total, round_entered_total)
+            insights.append(
+                f'Rotondas: {round_entered_total:.0f} entradas, {round_completed_total:.0f} completaciones '
+                f'confirmadas por reentrada ({round_completion_rate*100:.1f}%, limite inferior), '
+                f'{round_collisions_total:.0f} colisiones '
+                f'({round_collision_rate*100:.1f}% por entrada).'
+            )
+            if total_ticks > 0:
+                insights.append(f'Cobertura en rotonda: {sdiv(round_ticks_total*100.0, total_ticks):.2f}% de ticks.')
+            if debug_field_available(dbg_rows, 'round_bonus'):
+                bonus_per_entry = sdiv(round_bonus_total, round_entered_total)
+                bonus_per_tick = sdiv(round_bonus_total, round_ticks_total)
+                insights.append(
+                    f'RoundaboutBonus neto: {round_bonus_total:.2f} '
+                    f'({bonus_per_entry:.2f}/entrada, {bonus_per_tick:.4f}/tick en rotonda).'
+                )
+                if debug_field_available(dbg_rows, 'round_completion_bonus'):
+                    insights.append(
+                        f'Desglose RoundaboutBonus: +{round_completion_bonus_total:.2f} completado, '
+                        f'-{round_entry_penalty_total:.2f} entrada, -{round_throttle_penalty_total:.2f} throttle.'
+                    )
+                    if round_throttle_penalty_total > round_completion_bonus_total * 0.5:
+                        insights.append('El penalty de throttle en rotonda pesa mucho frente al bonus de completado; revisar aceleracion dentro de rotonda.')
+                    if round_entry_penalty_total > round_completion_bonus_total * 0.5:
+                        insights.append('El penalty de entrada a rotonda pesa mucho frente al bonus de completado; revisar velocidad/distancia al entrar.')
+                if round_bonus_total < 0.0:
+                    insights.append('RoundaboutBonus neto negativo; el castigo de throttle en rotonda esta superando los bonus de entrada/completado.')
+            if round_collision_rate >= 0.20:
+                insights.append('Tasa alta de colision en rotonda (>=20% por entrada); revisar velocidad de entrada y steering dentro de la rotonda.')
+            if round_completed_total == 0:
+                insights.append(
+                    'No hay completaciones de rotonda confirmadas por una entrada posterior; '
+                    'puede faltar una segunda entrada o existir un problema en el registro.'
+                )
+            if debug_field_available(dbg_rows, 'round_exit1_count'):
+                exit_stats = []
+                for exit_num, label in ((1, 'Exit1'), (2, 'Exit2'), (3, 'Exit3+')):
+                    count = sum(r.get(f'round_exit{exit_num}_count', 0.0) for r in dbg_rows)
+                    deaths = sum(r.get(f'round_exit{exit_num}_deaths', 0.0) for r in dbg_rows)
+                    ticks = sum(r.get(f'round_exit{exit_num}_ticks', 0.0) for r in dbg_rows)
+                    exit_stats.append({
+                        'label': label,
+                        'count': count,
+                        'deaths': deaths,
+                        'death_rate': sdiv(deaths, count),
+                        'steer': sdiv(sum(r.get(f'round_exit{exit_num}_steer', 0.0) for r in dbg_rows), ticks),
+                        'throttle': sdiv(sum(r.get(f'round_exit{exit_num}_throttle', 0.0) for r in dbg_rows), ticks),
+                    })
+                exposed = [x for x in exit_stats if x['count'] > 0]
+                if exposed:
+                    worst = max(exposed, key=lambda x: x['death_rate'])
+                    insights.append(
+                        f'Tramo de rotonda mas critico: {worst["label"]} con '
+                        f'{worst["deaths"]:.0f}/{worst["count"]:.0f} muertes '
+                        f'({worst["death_rate"]*100:.1f}%), steering/tick={worst["steer"]:.3f}, '
+                        f'throttle/tick={worst["throttle"]:.3f}.'
+                    )
+                if len(exposed) < 2:
+                    insights.append(
+                        'Solo hay exposicion registrada en un tramo de salida de rotonda; '
+                        'todavia no se pueden comparar Exit1, Exit2 y Exit3+.'
+                    )
 
         if (steer_in_total + steer_target_total) > 0.0:
             avg_steer_gap = sdiv(steer_gap_total, n_dbg)
