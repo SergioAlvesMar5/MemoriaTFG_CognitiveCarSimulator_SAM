@@ -2,7 +2,7 @@
 
 \section{Datos analizados}
 
-La evaluación de referencia utiliza la sesión de entrenamiento iniciada el 8 de junio de 2026 a las 12:16, con 2067 generaciones y 66144 registros de vehículos. Para test no se selecciona una única ejecución favorable: se agregan las seis sesiones realizadas ese mismo día entre las 12:41 y las 13:43. En conjunto contienen 30 ejecuciones, 1560 evaluaciones y 30 observaciones de cada uno de los 52 puntos de aparición.
+La evaluación de referencia utiliza la sesión \texttt{train\_2026-06-08\_12-16}, con 2067 generaciones y 66144 registros de vehículos. La hora incluida en el nombre sirve únicamente para identificar la carpeta y ordenar las ejecuciones; no se considera una variable experimental. Para test no se selecciona una única sesión favorable, sino que se agregan las seis realizadas el 8 de junio con el mismo modelo y la misma configuración. En conjunto contienen 30 ejecuciones, 1560 evaluaciones y 30 observaciones de cada uno de los 52 puntos de aparición.
 
 Todos los informes automáticos del bloque principal califican la calidad de los datos como correcta y no muestran alertas fuertes de desalineación entre \texttt{Summary} y \texttt{Debug}. Las sesiones de test cargan modelos persistidos, tienen la mutación desactivada y mantienen el mismo tamaño de población, por lo que se analizan como repeticiones bajo una configuración común. Para contextualizar su evolución, también se agregan los ocho tests disponibles del 2 de junio y los ocho del 5 de junio.
 
@@ -10,7 +10,7 @@ Todos los informes automáticos del bloque principal califican la calidad de los
 
 \begin{table}[htbp]
 \centering
-\caption{Resultados principales del entrenamiento y del bloque de test del 8 de junio de 2026. Fuente: elaboración propia a partir de los CSV del proyecto.}
+\caption{Resultados principales del entrenamiento y del bloque de test del 8 de junio de 2026.}
 \label{tab:resultados-principales}
 \begin{tabular}{lrr}
 \toprule
@@ -29,6 +29,7 @@ Fallos legales & 0.29\% & 0.06\%\\
 Tasa de acierto & -- & 25.19\%\\
 \bottomrule
 \end{tabular}
+\caption*{\textit{Fuente: elaboración propia a partir de los CSV del proyecto.}}
 \end{table}
 
 La tabla~\ref{tab:resultados-principales} confirma la ausencia de fitness medio negativo y de muertes \texttt{LAZY}, así como una incidencia legal baja. No obstante, las colisiones constituyen aproximadamente siete de cada diez finalizaciones tanto durante el aprendizaje como en test. El mayor \textit{MeanFit} de test respecto al entrenamiento no implica que el modelo mejore durante la evaluación: responde a que ambos modos utilizan poblaciones, condiciones de ejecución y objetivos de medición diferentes.
@@ -39,13 +40,14 @@ El mejor fitness de la sesión se alcanza en la generación 117, con 112447.60, 
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.92\textwidth]{../INFO/ANALISIS_DATOS/Analisis/train_2026-06-08_12-16/02_tendencia.png}
-\caption{Tendencia de fitness y tiempo medio en el entrenamiento del 8 de junio de 2026. Fuente: análisis generado a partir de los CSV del proyecto.}
+\includegraphics[width=0.92\textwidth]{assets/tendencia_entrenamiento_2026-06-08.pdf}
+\caption[Tendencia del fitness en el entrenamiento del 8 de junio de 2026.]{Tendencia del fitness en el entrenamiento del 8 de junio de 2026. Fuente: análisis generado a partir de los CSV del proyecto.}
 \label{fig:tendencia-entrenamiento}
 \end{figure}
 
-La figura~\ref{fig:tendencia-entrenamiento} obliga a matizar esos máximos. Entre las primeras y las últimas 50 generaciones, el fitness medio desciende un 27.5\%, de 21239.35 a 15406.23, mientras el tiempo medio de vida aumenta un 26.8\%, de 36.35 a 46.10 segundos. El informe detecta una tendencia reciente positiva, pero no convergencia clara. Por tanto, el entrenamiento prolonga la supervivencia y mantiene estabilidad frente a penalizaciones extremas, aunque no produce una mejora monótona de la función de aptitud.
+El análisis conjunto de la figura~\ref{fig:tendencia-entrenamiento} y de la serie temporal de los CSV obliga a matizar esos máximos. Entre las primeras y las últimas 50 generaciones, el fitness medio desciende un 27.5\%, de 21239.35 a 15406.23, mientras el tiempo medio de vida aumenta un 26.8\%, de 36.35 a 46.10 segundos. El informe detecta una tendencia reciente positiva, pero no convergencia clara. Por tanto, el entrenamiento prolonga la supervivencia y mantiene estabilidad frente a penalizaciones extremas, aunque no produce una mejora monótona de la función de aptitud.
 
+\Needspace{8\baselineskip}
 La causa \texttt{LAZY} desaparece por completo en los 66144 registros. Los fallos legales bajan al 0.29\%, frente al 6.82\% de la sesión de referencia del 2 de junio. Sin embargo, el analizador identifica 8691 posibles atascos ante stop entre 19697 finalizaciones por tiempo, un 44.12\%. Se trata de una heurística y no de 8691 infracciones confirmadas, pero su magnitud aconseja revisar los umbrales de detección y realizar tests dirigidos sobre esos puntos.
 
 \section{Evaluación de test}
@@ -56,7 +58,7 @@ Para comparar fechas se recalculan todos los indicadores directamente desde \tex
 
 \begin{table}[htbp]
 \centering
-\caption{Evolución de los bloques de test disponibles en junio de 2026. Fuente: elaboración propia a partir de \texttt{Fitness\_Debug.csv}.}
+\caption{Evolución de los bloques de test disponibles en junio de 2026.}
 \label{tab:comparacion-bloques-test}
 \begin{tabular}{lrrrr}
 \toprule
@@ -67,13 +69,14 @@ Para comparar fechas se recalculan todos los indicadores directamente desde \tex
 8 de junio & 1560 & 25.19\% & 31295.04 & 53.13 s\\
 \bottomrule
 \end{tabular}
+\caption*{\textit{Fuente: elaboración propia a partir de \texttt{Fitness\_Debug.csv}.}}
 \end{table}
 
 Respecto al bloque del 5 de junio, el resultado más reciente mejora 6.68 puntos porcentuales en acierto, un 17.7\% en fitness medio y un 18.1\% en tiempo de vida. Frente al bloque del 2 de junio, la mejora de acierto es de 8.69 puntos. Esta comparación es más robusta que la tasa del 30\% anteriormente documentada, que procedía de una sola sesión de 260 evaluaciones.
 
 \section{Razones de finalización}
 
-De las 1560 evaluaciones, 1164 terminan en colisión (74.62\%) y 393 por tiempo (25.19\%). También se observan dos vuelcos (0.13\%) y una violación normativa (0.06\%). Los focos de colisión más frecuentes son \texttt{NavModifierVolume19}, con 163 casos; \texttt{NavModifierVolume53}, con 124; y \texttt{BP\_IntersectionBorder203}, con 117. Representan respectivamente el 10.45\%, 7.95\% y 7.50\% del total de evaluaciones.
+De las 1560 evaluaciones, 1164 terminan en colisión, el 74.62\%, y 393 alcanzan el límite de tiempo, el 25.19\%. También se observan dos vuelcos, que suponen el 0.13\%, y una violación normativa, el 0.06\%. El foco de colisión más frecuente es \texttt{NavModifierVolume19}, con 163 casos y un 10.45\% del total de evaluaciones. Le siguen \texttt{NavModifierVolume53}, con 124 casos y un 7.95\%, y \texttt{BP\_IntersectionBorder203}, con 117 casos y un 7.50\%.
 
 La concentración en actores y bordes concretos indica que la principal limitación ya no es un fallo general de movimiento, sino la robustez geométrica en determinadas aproximaciones e intersecciones. Esta evidencia permite priorizar la inspección de esos elementos del mapa, los sensores locales y la cobertura de sus spawns asociados.
 
@@ -85,9 +88,12 @@ Los informes detectan cinco candidatos fuertes de atasco en stop y dos en ceda e
 
 \section{Dificultad por puntos de aparición}
 
-Cada spawn dispone de 30 observaciones en el bloque más reciente. Los mejores valores medios corresponden a los puntos 9 (61384.0), 26 (60802.3) y 25 (60615.0). En el extremo opuesto aparecen los puntos 5 (2048.0), 39 (5509.5), 23 (5732.5) y 2 (5920.7). En los CSV, estos identificadores siguen el patrón \texttt{BP\_SpawnPointN}.
+El diseño del bloque de test asigna 30 observaciones a cada punto de aparición. Mantener el mismo número evita que un spawn utilizado con mayor frecuencia tenga más peso en el resultado agregado. En los CSV, los identificadores siguen el patrón \texttt{BP\_SpawnPointN}; el número permite volver desde el informe al actor concreto del mapa y revisar su orientación, la carretera inicial y la primera intersección que encuentra el vehículo.
 
-La diferencia entre extremos supera los 59000 puntos de fitness medio. Por ello, la tasa agregada debe acompañarse siempre de resultados por spawn: un modelo puede mejorar globalmente y conservar fallos sistemáticos en una parte del mapa. Los puntos 5, 39, 23 y 2 son candidatos prioritarios para entrenamiento dirigido y revisión de geometría, mientras los puntos de mejor rendimiento pueden servir como control al modificar sensores o recompensas.
+\Needspace{8\baselineskip}
+Los puntos 9, 26 y 25 obtienen los mayores fitness medios, con 61384.0, 60802.3 y 60615.0 respectivamente. En el extremo inferior se encuentran los puntos 5, 39, 23 y 2, cuyos valores son 2048.0, 5509.5, 5732.5 y 5920.7. La separación entre el mejor y el peor supera los 59000 puntos, una diferencia demasiado grande para interpretar la tasa global sin estudiar también la localización de inicio.
+
+Este resultado no permite concluir por sí solo que la red haya aprendido unas zonas y no otras. Parte de la diferencia puede proceder de la geometría inmediata, de un borde de intersección mal configurado o de que el tiempo disponible favorezca recorridos más largos. Por ello, los puntos de menor rendimiento se utilizarán para pruebas dirigidas en las que se revisen colisiones, distancia recorrida y primera maniobra. Los puntos 9, 26 y 25 servirán como control para comprobar que una corrección local no introduce una regresión en recorridos que ahora funcionan mejor.
 
 \section{Conclusión experimental}
 

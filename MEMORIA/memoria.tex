@@ -19,7 +19,6 @@
 \usepackage{needspace}
 \usepackage{etoolbox}
 \usepackage{fancyhdr}
-\usepackage{lastpage}
 \usepackage[hidelinks,hypertexnames=false]{hyperref}
 
 \geometry{
@@ -70,19 +69,48 @@
 \titlespacing*{\subsection}{0pt}{12pt}{6pt}
 \pretocmd{\subsection}{\Needspace{5\baselineskip}}{}{}
 
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[R]{\thepage/\pageref{LastPage}}
-\fancyfoot[L]{Sergio Alves Martín}
-\renewcommand{\headrulewidth}{0.4pt}
-\renewcommand{\footrulewidth}{0.4pt}
-\fancypagestyle{plain}{%
+\fancypagestyle{frontmatter}{%
   \fancyhf{}%
-  \fancyhead[R]{\thepage/\pageref{LastPage}}%
+  \fancyhead[R]{\thepage}%
   \fancyfoot[L]{Sergio Alves Martín}%
   \renewcommand{\headrulewidth}{0.4pt}%
   \renewcommand{\footrulewidth}{0.4pt}%
 }
+
+\fancypagestyle{mainmatter}{%
+  \fancyhf{}%
+  \fancyhead[R]{\thepage/\pageref{LastMainPage}}%
+  \fancyfoot[L]{Sergio Alves Martín}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \renewcommand{\footrulewidth}{0.4pt}%
+}
+
+\fancypagestyle{appendixmatter}{%
+  \fancyhf{}%
+  \fancyhead[R]{\thepage}%
+  \fancyfoot[L]{Sergio Alves Martín}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \renewcommand{\footrulewidth}{0.4pt}%
+}
+
+\makeatletter
+\newcommand{\listoffigureswithprefix}{%
+  \begingroup
+  \renewcommand*\l@figure{\@dottedtocline{1}{1.5em}{5.6em}}%
+  \let\originalnumberline\numberline
+  \renewcommand{\numberline}[1]{\originalnumberline{Figura~##1}}%
+  \listoffigures
+  \endgroup
+}
+\newcommand{\listoftableswithprefix}{%
+  \begingroup
+  \renewcommand*\l@table{\@dottedtocline{1}{1.5em}{5.2em}}%
+  \let\originalnumberline\numberline
+  \renewcommand{\numberline}[1]{\originalnumberline{Tabla~##1}}%
+  \listoftables
+  \endgroup
+}
+\makeatother
 
 \newcommand{\universidad}{UNIVERSIDAD DE LEÓN}
 \newcommand{\escuela}{Escuela de Ingenierías Industrial, Informática y Aeroespacial}
@@ -109,12 +137,12 @@
   \vspace*{-0.6cm}
   \noindent
   \begin{minipage}[t]{0.55\textwidth}
-    \includegraphics[width=4.8cm]{assets/logo_unileon.png}
+    \includegraphics[width=4.8cm]{assets/logo_unileon_hq.png}
   \end{minipage}
   \hfill
   \begin{minipage}[t]{0.25\textwidth}
     \raggedleft%
-    \includegraphics[height=2.8cm]{assets/escudo_escuela.png}
+    \includegraphics[height=2.8cm]{assets/escudo_escuela_300dpi.jpg}
   \end{minipage}
 
   \vspace{3.25cm}
@@ -136,7 +164,7 @@
   \begin{flushright}
     \begin{tabular}{rl}
       Autor: & \autor\\
-      Tutor/es: & \tutores\\
+      Tutor@s: & \tutores\\
     \end{tabular}
   \end{flushright}
 
@@ -148,6 +176,10 @@
 \end{titlepage}
 
 \pagenumbering{roman}
+\pagestyle{frontmatter}
+\makeatletter
+\let\ps@plain\ps@frontmatter
+\makeatother
 \input{capitulos/00_resumen}
 \cleardoublepage%
 
@@ -156,14 +188,18 @@
 \tableofcontents
 \endgroup
 \cleardoublepage%
-\listoffigures
+\listoffigureswithprefix
 \cleardoublepage%
-\listoftables
+\listoftableswithprefix
 \cleardoublepage%
 \input{capitulos/00_glosario}
 
 \cleardoublepage%
 \pagenumbering{arabic}
+\pagestyle{mainmatter}
+\makeatletter
+\let\ps@plain\ps@mainmatter
+\makeatother
 \input{capitulos/01_estudio_problema}
 \cleardoublepage%
 \input{capitulos/02_estado_arte}
@@ -181,9 +217,16 @@
 \input{capitulos/08_conclusiones}
 \cleardoublepage%
 \input{capitulos/09_referencias}
+\label{LastMainPage}
 
 \cleardoublepage%
 \appendix
+\renewcommand{\thepage}{A-\arabic{page}}
+\setcounter{page}{1}
+\pagestyle{appendixmatter}
+\makeatletter
+\let\ps@plain\ps@appendixmatter
+\makeatother
 \input{anexos/anexo_fuentes}
 
 \end{document}

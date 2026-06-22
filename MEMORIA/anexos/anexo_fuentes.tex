@@ -22,25 +22,14 @@ Se han analizado ocho actas de seguimiento, comprendidas entre el 27/11/2025 y e
 \Needspace{16\baselineskip}
 \section{Descripciones del programa}
 
-Se han revisado descripciones fechadas de los módulos, incluyendo las actualizaciones de red neuronal e intersecciones del 5 de junio de 2026:
+Las descripciones fechadas de los Blueprints se utilizaron para reconstruir el estado de la implementación sin depender únicamente de la versión abierta en el editor. Para el gestor se revisó la carpeta \texttt{EVOLUTIONMANAGER}, donde se documentan la creación de generaciones, la asignación de modelos, la mutación, la persistencia y el cambio al modo de test. La carpeta \texttt{REDNEURONAL} permitió comprobar la composición de las entradas, las dimensiones de \texttt{WeightsIH} y \texttt{WeightsHO}, la inferencia y las guardas frente a modelos incompatibles.
 
-\begin{itemize}[leftmargin=*]
-  \item \texttt{EVOLUTIONMANAGER}, con el gestor de generaciones, selección, mutación, persistencia y test;
-  \item \texttt{REDNEURONAL}, con entradas, arquitectura de red, sensores, inicialización, mutación e inferencia;
-  \item \texttt{FITNESS}, con cálculo de aptitud, penalizaciones, bonus y exportación de métricas;
-  \item \texttt{INTERSECTIONS}, con semáforos, stops, cedas, zonas de cruce y validación normativa;
-  \item \texttt{OTROS}, con macros auxiliares, raytracing, detección de estancamiento y backlog.
-\end{itemize}
+El cálculo de aptitud y su instrumentación proceden de \texttt{FITNESS}. Estas descripciones detallan las recompensas, las penalizaciones y los campos exportados a CSV. Para la señalización se consultó \texttt{INTERSECTIONS}, incluidas las actualizaciones del 5 de junio de 2026 sobre semáforos, stops, cedas, zonas de cruce y validación normativa. Por último, \texttt{OTROS} reúne macros auxiliares, trazas, detección de estancamiento y tareas pendientes que ayudan a interpretar dependencias entre módulos.
 
 \section{Resultados experimentales}
 
-Los resultados documentados proceden de la carpeta \path{INFO/ANALISIS_DATOS/Analisis}. Para esta primera redacción se han tomado como referencia principal:
+Los resultados documentados proceden de \path{INFO/ANALISIS_DATOS/Analisis}. La referencia de entrenamiento es \texttt{train\_2026-06-08\_12-16}, que contiene 2067 generaciones y 66144 registros de vehículos. La marca horaria forma parte del identificador de la carpeta y no se utiliza como variable en el análisis. La sesión se eligió porque es la asociada al modelo evaluado y dispone de los CSV e informes necesarios para reproducir los indicadores del capítulo 6.
 
-\begin{itemize}[leftmargin=*]
-  \item \texttt{train\_2026-06-08\_12-16}, con 2067 generaciones y 66144 registros;
-  \item seis sesiones de test del 8 de junio, realizadas entre las 12:41 y las 13:43, con 30 ejecuciones y 1560 registros en total;
-  \item los ocho tests del 2 de junio y los ocho del 5 de junio, con 1975 y 2080 registros debug respectivamente, empleados como bloques de comparación;
-  \item \texttt{train\_2026-06-02\_12-00} y \texttt{train\_2026-06-05\_11-47}, empleados para contextualizar la evolución del entrenamiento.
-\end{itemize}
+La evaluación principal reúne las seis carpetas de test del 8 de junio. En total contienen 30 ejecuciones y 1560 registros, con la misma cantidad de observaciones para cada uno de los 52 puntos de aparición. No se eligió la sesión con mejor tasa, sino que se agregaron las seis para reducir el efecto de una ejecución aislada. Como referencia histórica se utilizaron también los ocho tests del 2 de junio y los ocho del 5 de junio, con 1975 y 2080 registros de detalle respectivamente.
 
-Los informes automáticos de las sesiones principales indican calidad de datos correcta y ausencia de alertas fuertes entre los CSV \texttt{Summary} y \texttt{Debug}. La figura del capítulo de resultados procede del script de análisis del proyecto. El texto identifica la sesión representada y diferencia sus métricas de los agregados de test.
+Los entrenamientos \texttt{train\_2026-06-02\_12-00} y \texttt{train\_2026-06-05\_11-47} se consultaron para contextualizar la evolución anterior. Los informes automáticos califican como correctos los datos del bloque principal y no detectan desalineaciones fuertes entre \texttt{Summary} y \texttt{Debug}. La figura del capítulo de resultados se ha regenerado en formato PDF vectorial a partir del \texttt{Training\_Summary.csv} archivado de la sesión del 8 de junio.

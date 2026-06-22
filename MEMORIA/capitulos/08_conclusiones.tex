@@ -2,65 +2,50 @@
 
 \section{Conclusiones}
 
-El trabajo realizado demuestra la viabilidad de integrar movilidad autónoma basada en redes neuronales y algoritmos evolutivos dentro de un simulador urbano en Unreal Engine 5. La solución actual supera las limitaciones iniciales de navegación determinista y proporciona una arquitectura capaz de percibir el entorno, actuar sobre un vehículo físico, aprender mediante generaciones y producir datos analizables.
+El punto de partida del trabajo era una ciudad preparada para la conducción del usuario, pero sin un sistema de tráfico capaz de recorrerla de forma autónoma. Las primeras pruebas confirmaron que trasladar soluciones habituales de navegación de personajes a un coche con físicas producía recorridos rígidos y problemas en los cruces. La decisión de sustituir las rutas cerradas por percepción local y una política neuronal permitió avanzar, aunque el resultado no debe interpretarse como un controlador ya resuelto.
 
-La principal aportación técnica es la combinación de cuatro piezas: percepción local por raycasting, red neuronal ligera, gestor evolutivo con persistencia de modelos y función de fitness instrumentada. Esta combinación permite entrenar agentes sin disponer de un dataset previo de conducción humana y, al mismo tiempo, analizar con detalle por qué cada iteración mejora o falla.
+La arquitectura implementada conecta once sensores, variables dinámicas y contexto de señalización con una red de 22 entradas, 16 neuronas ocultas y dos salidas. Las consignas obtenidas se aplican al componente físico del vehículo, mientras el gestor evolutivo se ocupa de crear poblaciones, seleccionar modelos y conservar pesos entre sesiones. Esta integración funciona dentro del escenario real del simulador y no en una prueba aislada, que era una de las dificultades principales del proyecto.
 
-También se ha demostrado la importancia de la trazabilidad. Las decisiones más relevantes del proyecto no surgieron de una única implementación, sino de iteraciones documentadas: descarte de mallas dinámicas, prueba y abandono de Path Finding como solución principal, introducción de bordes dinámicos, reformulación del fitness tras una demo fallida y separación entre entrenamiento y test.
+El desarrollo también ha puesto de manifiesto que la función de fitness y el registro de datos forman parte de la solución, no son tareas posteriores. Una demostración visual podía parecer correcta y ocultar estancamientos, penalizaciones mal equilibradas o resultados concentrados en unos pocos puntos del mapa. La exportación por vehículo permitió revisar esas situaciones y motivó cambios concretos en el fitness, en los bordes de intersección y en la separación entre entrenamiento y test.
 
-Los resultados disponibles son prometedores pero no definitivos. La sesión de entrenamiento del 8 de junio evita generaciones con fitness medio negativo, erradica el estancamiento tipo \texttt{LAZY} y reduce los fallos legales, aunque no muestra convergencia clara y conserva posibles atascos ante señales. Las seis sesiones de test asociadas suman 1560 evaluaciones y alcanzan un 25.19\% de acierto, con un intervalo de confianza del 95\% entre el 23.10\% y el 27.41\%. Este bloque mejora los resultados agregados de los días 2 y 5 de junio, pero las colisiones continúan siendo la familia de finalización dominante. Por ello, la IA todavía requiere mejoras antes de considerarse tráfico autónomo plenamente robusto para sesiones clínicas.
+Los resultados del 8 de junio muestran una mejora respecto a los bloques del 2 y del 5 de junio. Las seis sesiones de test reúnen 1560 evaluaciones y alcanzan un 25.19\% de acierto, con un intervalo de confianza del 95\% entre el 23.10\% y el 27.41\%. En entrenamiento desaparece la causa de muerte \texttt{LAZY} y disminuyen los fallos legales. Sin embargo, el 74.62\% de las evaluaciones de test termina en colisión y el rendimiento cambia de forma notable entre puntos de aparición. Además, la evolución del fitness no presenta una convergencia clara.
+
+\Needspace{8\baselineskip}
+Por tanto, se ha obtenido una base funcional para generar, entrenar y medir tráfico autónomo, pero todavía no un sistema suficientemente robusto para una sesión clínica. La utilidad inmediata del trabajo reside en que los fallos ya pueden localizarse y compararse con un protocolo común. Las siguientes iteraciones deberán demostrar que las mejoras se mantienen en intersecciones y puntos de inicio distintos antes de aumentar la densidad de tráfico o incorporar nuevos tipos de agentes.
 
 \Needspace{16\baselineskip}
 \section{Aportaciones realizadas}
 
-Las aportaciones principales son:
+La primera aportación es el controlador neuronal integrado en el vehículo de Unreal Engine. El trabajo incluye la construcción del vector de 22 entradas, la inferencia de la red y la aplicación suavizada de las dos salidas al sistema Chaos Vehicle. Los sensores no se limitan a detectar obstáculos: en las intersecciones filtran los bordes según la maniobra elegida y combinan esa geometría con el estado de semáforos, stops y cedas.
 
-\begin{itemize}[leftmargin=*]
-  \item diseño de una arquitectura de IA vehicular cuya configuración actual utiliza 22 entradas y dos salidas continuas;
-  \item sensores por raycasting adaptados a límites, obstáculos e intersecciones;
-  \item selección de trayectoria mediante intenciones de dirección, triggers diferenciados para entrenamiento y test, y bordes virtuales asociados a cada maniobra;
-  \item entrenamiento evolutivo con población, mutación, elitismo, pesos cargados y pesos de sesión;
-  \item normalización de fitness por punto de aparición;
-  \item integración de semáforos, stops y cedas con contexto de parada y validación;
-  \item función de fitness con componentes de avance, centrado, velocidad, señales, penalizaciones y bonus;
-  \item persistencia de modelos entrenados;
-  \item pipeline de análisis con informes, gráficas y comparación entre sesiones;
-  \item documentación cronológica de decisiones técnicas.
-\end{itemize}
+La segunda aportación es el proceso de aprendizaje dentro del propio simulador. El gestor crea poblaciones, conserva individuos, aplica mutaciones y guarda por separado el mejor modelo histórico y el mejor de la sesión. La normalización por punto de aparición intenta reducir la ventaja de comenzar en una zona sencilla, y el uso de spawns distintos en test permite evaluar el modelo fuera del conjunto que condicionó su entrenamiento.
 
-Estas aportaciones no deben entenderse solo como funcionalidades aisladas, sino como una infraestructura de experimentación. El proyecto deja conectados simulación, entrenamiento, persistencia y análisis, de manera que cada nueva iteración puede evaluarse con criterios comparables y no únicamente mediante observación visual dentro del editor.
+La tercera aportación es la infraestructura de evaluación. Los Blueprints exportan el resultado de cada vehículo y los resúmenes de generación; posteriormente, los scripts comprueban la calidad de los CSV, agrupan razones de muerte y producen comparaciones por sesión y por spawn. Esta conexión entre simulación y análisis permite justificar una modificación con datos y comprobar si corrige el problema sin introducir una regresión en otras zonas.
 
+Finalmente, las actas y descripciones fechadas conservan la evolución técnica del proyecto. Gracias a ellas puede reconstruirse por qué se abandonó \textit{Path Finding}, cuándo se reformuló el fitness o cómo se introdujeron los bordes dependientes de la trayectoria. Esta trazabilidad resulta especialmente útil en un desarrollo compartido que deberá continuar después del TFG.
+
+\Needspace{7\baselineskip}
 \section{Problemas encontrados}
 
-Los problemas más relevantes fueron:
+El primer problema fue adaptar la navegación de Unreal Engine a un vehículo con inercia y radio de giro. NavMesh y \textit{Path Finding} encontraban un destino, pero no producían una conducción natural. Abandonar esa vía obligó a trabajar conjuntamente con Chaos Vehicle, el control mediante Blueprints y los sensores de calzada.
 
-\begin{itemize}[leftmargin=*]
-  \item curva de aprendizaje de Unreal Engine 5 y del sistema Chaos Vehicle;
-  \item rigidez de soluciones basadas en NavMesh para vehículos físicos;
-  \item complejidad de intersecciones, cruces y bordes de calzada;
-  \item dificultad para diseñar un fitness que premie conducción útil sin favorecer atajos;
-  \item coste computacional de entrenar poblaciones con renderizado y física activa;
-  \item necesidad de depurar comportamientos emergentes no previstos, como estancamiento, marcha atrás o correcciones incorrectas.
-\end{itemize}
+Las intersecciones concentraron buena parte de los fallos posteriores. Un mismo cruce debía ofrecer límites distintos según la salida elegida, y esos límites tenían que coincidir con el trigger que había originado la decisión. Un borde mal asociado podía desviar los rayos o provocar una colisión repetida. La introducción de intenciones de dirección resolvió parte del problema, pero los resultados por spawn muestran que la geometría todavía necesita revisión local.
 
-\Needspace{6\baselineskip}
-La resolución de estos problemas exigió combinar depuración técnica y análisis de datos. En varias fases, el comportamiento observado en pantalla no era suficiente para explicar los fallos, por lo que fue necesario revisar métricas exportadas, razones de muerte, penalizaciones acumuladas y diferencias entre puntos de aparición.
+El ajuste del fitness fue otra dificultad importante. Premiar avance y supervivencia generó estrategias no previstas, entre ellas permanecer detenido o compensar una colisión con recompensas acumuladas. Para distinguir estos casos fue necesario exportar penalizaciones, contexto de parada y razones de muerte. Esta instrumentación aumentó el tamaño y la complejidad de los datos, pero evitó continuar ajustando el modelo únicamente a partir de la impresión visual.
+
+Por último, cada entrenamiento exige ejecutar física y renderizado para una población completa. Este coste limita la velocidad con la que pueden probarse cambios y hace especialmente caro descubrir tarde un error de configuración. La persistencia de modelos, la validación de los CSV y los bloques de test repetidos reducen ese riesgo, aunque sigue pendiente un modo de entrenamiento más rápido.
 
 \Needspace{14\baselineskip}
 \section{Líneas futuras}
 
-Las líneas futuras recomendadas son:
+La siguiente iteración debería comenzar por los puntos 5, 39, 23 y 2 y por los actores que concentran más colisiones. En cada caso conviene separar un posible error de geometría de un fallo del controlador: revisar orientación y bordes del spawn, repetir la primera maniobra con el mismo modelo y comparar distancia recorrida, tiempo detenido y causa de finalización. Solo después tendría sentido incorporar esos puntos a un entrenamiento dirigido.
 
-\begin{itemize}[leftmargin=*]
-  \item ampliar el entrenamiento específico en spawns problemáticos, especialmente aquellos con colisiones recurrentes;
-  \item mejorar la percepción en intersecciones y la semántica de bordes;
-  \item implementar perfiles de conductor normal, inseguro y agresivo;
-  \item añadir interacción entre vehículos y reglas de prioridad más completas;
-  \item extender el sistema a peatones, bicicletas y otros agentes autónomos;
-  \item crear un modo de entrenamiento sin renderizado o desacoplado para acelerar generaciones;
-  \item mantener bloques de test repetidos y comparables para estimar el acierto con confianza estadística;
-  \item preparar un protocolo de validación con profesionales de ASPAYM antes de su uso con pacientes.
-\end{itemize}
+En paralelo debe mejorarse la evaluación de paradas. Alcanzar el límite de tiempo puede significar que el coche ha sobrevivido o que ha quedado inmóvil ante una señal. Registrar progreso de ruta y duración continua del atasco permitiría separar ambos casos y ajustar el fitness sin penalizar una espera correcta. Los bloques de test deberán conservar el mismo tamaño, modelo y conjunto de spawns para que los intervalos de confianza sigan siendo comparables.
+
+Para reducir el tiempo entre iteraciones se plantea un modo sin renderizado o con la simulación desacoplada de la presentación. Esta mejora permitiría entrenar más generaciones y reservar la ejecución completa para validar física, señalización y comportamiento visual. También sería conveniente automatizar pruebas sobre intersecciones concretas antes de lanzar una sesión larga.
+
+\Needspace{8\baselineskip}
+Los perfiles de conductor normal, inseguro y agresivo, la interacción entre vehículos y la incorporación de peatones o bicicletas deben abordarse cuando la base vehicular sea estable. Añadir agentes antes de resolver las colisiones actuales dificultaría atribuir cada fallo a su causa. Finalmente, cualquier uso con pacientes requerirá definir con ASPAYM un protocolo de sesión, criterios de accesibilidad e indicadores comprensibles para los profesionales.
 
 \chapter*{Agradecimientos}
 \phantomsection

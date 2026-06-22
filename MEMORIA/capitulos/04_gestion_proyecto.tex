@@ -10,43 +10,40 @@ La planificación inicial contemplaba una progresión amplia: semáforos y seña
 
 La tabla~\ref{tab:cronologia} sintetiza los principales hitos recogidos en las actas de seguimiento.
 
-\begin{longtable}{L{3cm}L{11cm}}
-\caption{Principales hitos y decisiones documentadas en reuniones. Fuente: elaboración propia a partir de las actas de seguimiento.}\label{tab:cronologia}\\
+\begin{longtable}{L{2.2cm}L{4.4cm}L{7.2cm}}
+\caption{Principales hitos y decisiones documentadas en reuniones.}\label{tab:cronologia}\\
 \toprule
-\textbf{Fecha} & \textbf{Hito o decisión}\\
+\textbf{Fecha} & \textbf{Situación revisada} & \textbf{Decisión y consecuencia}\\
 \midrule
 \endfirsthead
 \caption[]{Principales hitos y decisiones documentadas en reuniones (continuación).}\\
 \toprule
-\textbf{Fecha} & \textbf{Hito o decisión}\\
+\textbf{Fecha} & \textbf{Situación revisada} & \textbf{Decisión y consecuencia}\\
 \midrule
 \endhead
-27/11/2025 & Se revisa la integración de semáforos dinámicos y se fija como objetivo la IA vehicular. Se descarta una malla dinámica para reconocer caminos por los problemas previsibles de desarrollo.\\
-11/12/2025 & Se descarta el mapeo completo con splines como opción principal y se considera Path Finding de Unreal. Se decide que el modelo analice entorno y contexto, y que Unreal aplique físicamente la acción.\\
-17/12/2025 & Se revisan perfiles de conductor y se fijan provisionalmente dos salidas del modelo: rotación y velocidad, ambas en rango \([-1,1]\).\\
-08/01/2026 & Se descarta Path Finding para vehículos y se valida la idea de entrenamiento evolutivo por prueba-error. El objetivo prioritario pasa a ser aprender básicos de conducción.\\
-05/02/2026 & Se discuten problemas en curvas e intersecciones. Se acepta temporalmente el etiquetado dinámico de bordes y se plantea la posibilidad de coordinar más de un modelo.\\
-19/02/2026 & Se fija como prioridad una demo técnica en dos semanas que demuestre red neuronal, sensores y bordes funcionando por todo el mapa.\\
-05/03/2026 & La demostración se clasifica como fallida y no concluyente. Se acuerda analizar exhaustivamente la función de fitness y sesgar escenarios complejos para facilitar aprendizaje.\\
-19/03/2026 & La nueva demostración se considera aceptable: el modelo recorre casi la totalidad de la mayoría de la ciudad y cerca de un 50\% sobrevive más de 100 segundos. Se planifica reorganización en GitLab, build Windows y siguientes mejoras.\\
+27/11/2025 & Integración de tráfico y elección de la primera IA. & Se prioriza la IA vehicular y se revisan semáforos dinámicos. Se descarta una malla dinámica para reconocer caminos por su coste de desarrollo.\\
+11/12/2025 & Representación de las rutas de la ciudad. & Se descarta mapear todo el escenario con splines y se prueba el \textit{Path Finding} de Unreal. Se separan la decisión del modelo y la aplicación física del control.\\
+17/12/2025 & Interfaz entre la red y el vehículo. & Se fijan dos salidas continuas, dirección y aceleración/frenado, ambas dentro de \texttt{[-1, 1]}.\\
+08/01/2026 & Rigidez observada con \textit{Path Finding}. & Se abandona esta opción como solución principal y se adopta entrenamiento evolutivo por prueba y error para aprender las maniobras básicas.\\
+05/02/2026 & Fallos en curvas e intersecciones. & Se introduce de forma provisional el etiquetado dinámico de bordes y se estudia cómo coordinar la elección de trayectoria con la percepción local.\\
+19/02/2026 & Falta de una validación conjunta de los subsistemas. & Se programa una demostración con red neuronal, sensores y bordes activos en todo el mapa.\\
+05/03/2026 & Demostración fallida y resultados difíciles de interpretar. & Se decide instrumentar la función de fitness y simplificar temporalmente los escenarios más complejos para localizar el origen de los fallos.\\
+19/03/2026 & Segunda demostración con navegación ya estable en buena parte del mapa. & Se acepta la base técnica, se planifica la reorganización del repositorio y se preparan la compilación para Windows y las siguientes mejoras.\\
 \bottomrule
 \end{longtable}
 
+\noindent\textit{Fuente: elaboración propia a partir de las actas de seguimiento.}
+
 \section{Alcance}
 
-El alcance funcional completado se centra en IA vehicular autónoma. Incluye:
+El alcance funcional completado se centra en conseguir que los vehículos de tráfico puedan aprender y circular dentro del escenario existente. El trabajo no modifica el vehículo conducido por el paciente ni rediseña la ciudad: actúa sobre los coches autónomos, su controlador y los elementos del mapa que les proporcionan información. El resultado es un controlador capaz de transformar las salidas de la red neuronal en dirección, aceleración y frenado sobre el sistema físico de Unreal Engine.
 
-\begin{itemize}[leftmargin=*]
-  \item controlador de IA capaz de aplicar dirección, aceleración y frenado sobre el vehículo físico;
-  \item sensores por raycasting y entradas normalizadas para la red neuronal;
-  \item entrenamiento evolutivo con población, mutación, elitismo y persistencia de modelos;
-  \item integración con semáforos, señales de stop y ceda el paso;
-  \item cálculo de fitness con componentes de avance, centrado, velocidad, cumplimiento normativo, penalizaciones y bonus;
-  \item exportación de métricas y análisis automatizado de resultados;
-  \item separación de puntos de aparición válidos para entrenamiento y test.
-\end{itemize}
+\Needspace{9\baselineskip}
+Para alimentar ese controlador se ha incorporado percepción local mediante raycasting y se han normalizado las variables que entran en la red. El aprendizaje se realiza con poblaciones de vehículos, selección, mutación y elitismo. Los pesos obtenidos pueden guardarse y cargarse en sesiones posteriores, lo que evita reiniciar el proceso cada vez que se abre el simulador. La evaluación se apoya en una función de fitness que combina avance, centrado, velocidad, cumplimiento de señales y penalizaciones por comportamientos no deseados.
 
-Quedan fuera del alcance de esta versión preliminar la implementación completa de peatones, bicicletas, animales y perfiles de conductor totalmente diferenciados. Estos elementos se mantienen como líneas futuras porque dependen de una base vehicular estable.
+El alcance también comprende la interacción con semáforos, stops y cedas, incluida la detección de líneas de parada y la validación de las maniobras. Se han separado los puntos de aparición utilizados para entrenar de los reservados para test y se exportan métricas individuales y resúmenes a CSV. Esta instrumentación permite comparar sesiones y localizar intersecciones o puntos del mapa donde el modelo falla de forma repetida.
+
+No forman parte de esta versión la implementación completa de peatones, bicicletas y animales, ni los perfiles de conductor diferenciados previstos en la propuesta inicial. Tampoco se aborda todavía una validación con pacientes. Estas ampliaciones requieren primero consolidar la navegación vehicular y disponer de un protocolo de prueba estable, por lo que se mantienen como trabajo posterior.
 
 \section{Gestión de riesgos}
 
@@ -55,10 +52,16 @@ La tabla~\ref{tab:riesgos} relaciona los riesgos más relevantes con su impacto,
 {\small
 \setlength{\tabcolsep}{4pt}
 \begin{longtable}{L{3cm}L{3.6cm}L{1.8cm}L{5.1cm}}
-\caption{Riesgos principales del proyecto. Fuente: elaboración propia.}\label{tab:riesgos}\\
+\caption{Riesgos principales del proyecto.}\label{tab:riesgos}\\
 \toprule
 \textbf{Riesgo} & \textbf{Impacto} & \textbf{Prob.} & \textbf{Mitigación}\\
 \midrule
+\endfirsthead
+\caption[]{Riesgos principales del proyecto (continuación).}\\
+\toprule
+\textbf{Riesgo} & \textbf{Impacto} & \textbf{Prob.} & \textbf{Mitigación}\\
+\midrule
+\endhead
 Rigidez de navegación determinista & Comportamiento poco realista y baja utilidad clínica & Alta & Pivotar a percepción local con sensores y red neuronal.\\
 Fitness mal calibrado & Aprendizaje de estrategias no deseadas & Alta & Instrumentar componentes, exportar CSV y analizar penalizaciones por familia de muerte.\\
 Coste computacional & Entrenamientos lentos y dependencia de GPU/CPU & Media & Poblaciones moderadas, análisis offline y propuesta futura de modo sin renderizado.\\
@@ -69,18 +72,13 @@ Pérdida de conocimiento entrenado & Reinicio de aprendizaje entre sesiones & Me
 \end{longtable}
 }
 
+\noindent\textit{Fuente: elaboración propia a partir del seguimiento técnico del proyecto.}
+
 \Needspace{16\baselineskip}
 \section{Estimación de recursos y presupuesto}
 
-El trabajo se desarrolló en el marco de prácticas y TFG, por lo que no existe una contratación externa directa asociada. No obstante, desde el punto de vista de proyecto técnico, los recursos empleados son:
+El proyecto se ha desarrollado durante las prácticas y el TFG, sin contratación externa ni compra específica de material. El recurso de mayor peso ha sido el tiempo dedicado a implementar Blueprints, ejecutar entrenamientos, revisar los resultados y documentar cada cambio. Una parte relevante de ese tiempo no corresponde a programación directa: los entrenamientos ocupan el equipo durante periodos prolongados y obligan a repetir pruebas cuando cambia la función de fitness o la geometría de una intersección.
 
-\begin{itemize}[leftmargin=*]
-  \item equipo de desarrollo con capacidad para Unreal Engine 5;
-  \item licencia y entorno de Unreal Engine;
-  \item repositorio Git/GitLab;
-  \item herramientas Python de análisis;
-  \item tiempo de desarrollo, documentación, reuniones y experimentación.
-\end{itemize}
+El trabajo técnico se ha realizado con un equipo capaz de ejecutar Unreal Engine 5 y las físicas de varios vehículos de forma simultánea. Para el control de versiones se ha utilizado GitLab y el análisis se ha realizado con Python y bibliotecas de uso libre. Unreal Engine tampoco ha generado un coste de licencia en el contexto académico del proyecto. Por tanto, no existen costes directos de software ni de infraestructura en esta fase; el hardware ya estaba disponible y solo correspondería imputar su amortización y consumo eléctrico si se elaborase un presupuesto comercial.
 
-\Needspace{5\baselineskip}
-La estimación económica debe cerrarse con los criterios del centro y del tutor antes de la entrega final. Como base para completar el presupuesto, se propone separar coste humano, coste hardware amortizado, coste software y coste de infraestructura. En este proyecto, el coste software directo es reducido al apoyarse en herramientas sin coste de licencia para el desarrollo académico, mientras que el coste principal corresponde a horas de ingeniería y experimentación.
+En la memoria final, la valoración económica deberá convertir las horas efectivas de desarrollo y experimentación a un coste de ingeniería acordado con el tutor, y añadir la parte proporcional del equipo utilizado. Mantener separadas ambas partidas evita presentar como gasto real una licencia que no se ha pagado y permite actualizar el presupuesto cuando se cierre el registro definitivo de dedicación.

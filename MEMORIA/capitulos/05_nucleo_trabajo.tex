@@ -10,21 +10,13 @@ El sistema se completa con elementos de tráfico que comunican contexto a los co
 
 \subsection{Gestor evolutivo}
 
-\texttt{BP\_EvolutionManager} coordina entrenamiento y test. Sus responsabilidades principales son:
+\texttt{BP\_EvolutionManager} coordina el ciclo de entrenamiento y las ejecuciones de test. Al comenzar comprueba si existe un modelo histórico en \texttt{SuperCarModel}. Si lo encuentra, carga sus pesos; en caso contrario, inicializa una red aleatoria que servirá como punto de partida. Después actualiza la lista de puntos de aparición permitidos para el modo activo y crea la población de vehículos, asignando a cada coche su controlador y su red.
 
-\begin{itemize}[leftmargin=*]
-  \item cargar modelos guardados desde \texttt{SuperCarModel} o inicializar pesos si no existen;
-  \item refrescar los puntos de aparición válidos según el modo de entrenamiento o test;
-  \item generar poblaciones de vehículos;
-  \item asignar cerebros aleatorios, cargados o mutados;
-  \item detectar fin de generación cuando todos los vehículos han muerto o finalizado;
-  \item ordenar por fitness, normalizar por spawn y seleccionar el mejor individuo;
-  \item guardar pesos de sesión e histórico;
-  \item exportar resúmenes de entrenamiento y test.
-\end{itemize}
+Durante el entrenamiento conviven individuos procedentes del mejor modelo histórico, del mejor modelo obtenido en la sesión y de inicializaciones aleatorias. Los primeros se conservan o se mutan para explotar soluciones que ya han funcionado, mientras que los aleatorios mantienen capacidad de exploración. La generación termina cuando todos los vehículos han finalizado o han sido eliminados por alguna condición de muerte. En ese momento el gestor ordena los resultados, actualiza los modelos persistidos cuando corresponde, destruye la población anterior e inicia la siguiente generación.
 
-\Needspace{5\baselineskip}
-Una decisión relevante es la normalización por punto de aparición. La ciudad contiene zonas de dificultad desigual; comparar directamente fitness de spawns distintos puede favorecer rutas sencillas. Por ello se mantiene el mejor fitness observado por spawn y se selecciona el mejor coche para pesos atendiendo a una relación normalizada respecto a ese punto.
+El modo de test reutiliza la misma infraestructura, pero desactiva la mutación y carga un modelo fijo. También emplea un conjunto de puntos de aparición distinto del utilizado para entrenar. Esta separación evita que una mejora aparente proceda únicamente de evaluar el coche en los recorridos que ya han condicionado su aprendizaje. Al terminar cada bloque, el gestor exporta tanto el resumen de la ejecución como los registros individuales necesarios para el análisis.
+
+Una decisión relevante es la normalización por punto de aparición. La ciudad contiene zonas de dificultad desigual y comparar directamente el fitness de dos spawns puede favorecer al que comienza en una ruta sencilla. Por ello se conserva el mejor valor observado en cada punto y el resultado de un coche se relaciona con esa referencia local antes de seleccionar sus pesos. La normalización no elimina las diferencias del mapa, pero reduce su influencia en la elección del individuo que pasa a la siguiente generación.
 
 \subsection{Controlador de IA y red neuronal}
 
@@ -44,7 +36,10 @@ h_j = \tanh\left(\sum_i w^{IH}_{j,i} x_i\right)
 y_k = \tanh\left(\sum_j w^{HO}_{k,j} h_j\right)
 \end{equation}
 
-La ecuación~\ref{eq:capa-oculta} calcula las activaciones ocultas y la ecuación~\ref{eq:capa-salida} obtiene las dos salidas de control, donde \(x_i\) son las entradas normalizadas, \(h_j\) las neuronas ocultas e \(y_k\) las salidas. El sistema incluye guardas para detectar cerebros inválidos: número incorrecto de entradas, pesos ausentes o dimensiones incoherentes. La dimensión de entrada esperada se calcula como la longitud de los pesos de entrada dividida por el número de neuronas ocultas, en lugar de compararse con una constante. Si el error se repite cinco veces, el coche se elimina con razón de muerte \texttt{INVALID\_BRAIN}.
+La ecuación~\ref{eq:capa-oculta} calcula las activaciones ocultas y la ecuación~\ref{eq:capa-salida} obtiene las dos salidas de control, donde \(x_i\) son las entradas normalizadas, \(h_j\) las neuronas ocultas e \(y_k\) las salidas. Los superíndices identifican los dos bloques de pesos de la red. \(IH\) significa \textit{Input--Hidden} y corresponde a las conexiones entre la entrada y la capa oculta. \(HO\), denominado \texttt{WeightsHO} en los Blueprints y anotado en ocasiones como \(OH\), corresponde a las conexiones \textit{Hidden--Output} entre la capa oculta y las dos salidas.
+
+\Needspace{10\baselineskip}
+Los pesos se almacenan en arrays unidimensionales. Por esa razón, el número de entradas esperado se obtiene dividiendo la longitud de \texttt{WeightsIH} entre el número de neuronas ocultas. A continuación se comprueba que ese resultado coincide con el tamaño del vector construido por el controlador, que \texttt{WeightsIH} contiene exactamente \(n_{entradas}\times n_{ocultas}\) valores y que \texttt{WeightsHO} contiene \(n_{ocultas}\times n_{salidas}\). Este cálculo sustituye a una comparación rígida con 22 y permite detectar un modelo antiguo aunque cambie la arquitectura. Si faltan pesos o las dimensiones no son coherentes, se activa una guarda; después de cinco errores consecutivos, el coche se elimina con la razón de muerte \texttt{INVALID\_BRAIN} para evitar que continúe circulando con una red inválida.
 
 \subsection{Percepción mediante sensores}
 
@@ -56,22 +51,15 @@ La decisión se modela mediante la enumeración \texttt{E\_DirectionIntent}, con
 \Needspace{6\baselineskip}
 Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos.
 
+\Needspace{10\baselineskip}
 \subsection{Sistema de fitness}
 
-La función de fitness se ha convertido en uno de los elementos centrales del proyecto. Su objetivo no es solo premiar distancia o velocidad, sino guiar comportamientos compatibles con conducción urbana. La versión documentada actualmente incluye:
+La función de fitness se ha convertido en uno de los elementos centrales del proyecto. Las primeras versiones premiaban principalmente el avance, pero ese criterio por sí solo permitía comportamientos poco útiles: circular demasiado rápido cerca de un obstáculo, corregir hacia el lado equivocado o sobrevivir sin progresar. La función actual combina el avance con la velocidad útil y el centrado estimado a partir de los sensores laterales. También valora que la velocidad sea coherente con la distancia frontal disponible, de modo que aproximarse a un obstáculo sin reducir la marcha deje de ser ventajoso.
 
-\begin{itemize}[leftmargin=*]
-  \item recompensa por avance, velocidad útil y centrado respecto a sensores laterales;
-  \item recompensa por mantener una relación coherente entre velocidad y distancia frontal;
-  \item penalización por exceso de velocidad ante obstáculos;
-  \item penalización por corregir en sentido contrario cuando el vehículo está descentrado;
-  \item penalización por marcha atrás, estancamiento, salida de calzada y colisiones;
-  \item penalización por violar semáforos, stops, cedas y zonas no navegables;
-  \item bonus por completar correctamente stops y cedas;
-  \item métricas acumuladas de frenado, aceleración, espera, steering y contexto de parada.
-\end{itemize}
+\Needspace{8\baselineskip}
+Las penalizaciones se aplican cuando el vehículo marcha hacia atrás, permanece atascado, abandona la calzada o colisiona. Hay comprobaciones específicas para las correcciones de dirección y para el incumplimiento de semáforos, stops, cedas y zonas no navegables. Completar correctamente un stop o un ceda produce una bonificación, pero esa recompensa se registra por separado para poder comprobar que no compensa una infracción grave ocurrida en otro momento de la ejecución.
 
-La instrumentación permite explicar por qué muere cada coche y qué componentes dominan su fitness. Esto fue decisivo tras la demostración fallida del 5 de marzo de 2026, cuando se acordó analizar el fitness con detalle para detectar cálculos o restricciones incorrectas.
+Además del valor final, cada coche acumula métricas de aceleración, frenado, espera, dirección y contexto de parada. Esta instrumentación permite reconstruir qué componentes han dominado el resultado y distinguir, por ejemplo, una finalización por tiempo con recorrido útil de un vehículo inmóvil ante una señal. El desglose fue decisivo después de la demostración fallida del 5 de marzo de 2026, cuando la observación visual no bastó para localizar si el problema procedía de los sensores, de las restricciones o del propio cálculo de fitness.
 
 \subsection{Semáforos}
 
@@ -88,19 +76,8 @@ La diferencia entre stop y ceda es metodológicamente importante. El stop requie
 
 \section{Pipeline experimental}
 
-Cada ejecución genera registros en CSV. El análisis posterior produce informes y gráficas. Este pipeline permite comparar sesiones, detectar regresiones y localizar spawns problemáticos. En las últimas sesiones se emplearon métricas como:
+Cada ejecución genera un registro por vehículo y un resumen por generación. Una vez terminada la sesión, los scripts de Python validan que ambos CSV contienen el número de filas esperado y que sus identificadores pueden alinearse. Solo después de esa comprobación se calculan los indicadores y se generan las gráficas. De esta manera, una fila incompleta o una generación duplicada no queda oculta dentro de una media agregada.
 
-\begin{itemize}[leftmargin=*]
-  \item \textit{BestFit} máximo y medio;
-  \item \textit{MeanFit} por generación;
-  \item tiempo medio de vida;
-  \item porcentaje de fitness medio negativo;
-  \item razones de muerte por familia;
-  \item fallos legales;
-  \item bonus de stop y ceda;
-  \item distribución por puntos de aparición;
-  \item correlaciones entre componentes y fitness final;
-  \item estabilidad de steering y throttle.
-\end{itemize}
+El diagnóstico comienza con \textit{BestFit}, \textit{MeanFit} y tiempo de vida, pero no termina en esas tres cifras. Las razones de muerte se agrupan por familias para separar colisiones, finalizaciones por tiempo y fallos normativos; los bonus de stop y ceda se contrastan con el contexto de frenado; y los resultados se desglosan por punto de aparición. También se revisan las correlaciones entre los componentes del fitness y la estabilidad con la que las consignas de dirección y aceleración llegan al vehículo.
 
-El resultado es un ciclo de desarrollo cerrado: implementar, entrenar, exportar, analizar, diagnosticar y volver a ajustar.
+Este procedimiento ha permitido utilizar los datos para decidir el siguiente cambio de implementación. Cuando un indicador empeora, se vuelve al CSV individual para localizar actores, intersecciones o spawns concretos; después se modifica el Blueprint correspondiente y se repite el entrenamiento o el bloque de test. El pipeline cierra así el ciclo entre implementación, simulación y análisis sin depender únicamente de lo observado en pantalla.

@@ -20,21 +20,11 @@ Además de los sensores laterales y frontales, se calculan variables derivadas c
 
 \section{Red neuronal}
 
-La red neuronal empleada es un perceptrón multicapa ligero. Su vector de entrada se compone de:
+La red neuronal empleada es un perceptrón multicapa ligero. Las primeras trece posiciones de su vector de entrada describen el movimiento y el espacio próximo al vehículo: velocidad longitudinal, velocidad angular y once distancias obtenidas mediante raycasting. Todas ellas se normalizan antes de ejecutar la inferencia para evitar que una magnitud domine a las demás únicamente por su escala.
 
-\begin{itemize}[leftmargin=*]
-  \item velocidad longitudinal normalizada;
-  \item velocidad angular normalizada;
-  \item once lecturas de sensores;
-  \item estado de semáforo activo;
-  \item estado numérico del semáforo;
-  \item distancia normalizada a la línea de parada;
-  \item indicador de parada forzada;
-  \item codificación \textit{one-hot} del tipo de control de tráfico: semáforo, stop, ceda o ninguno;
-  \item sesgo constante.
-\end{itemize}
+Las ocho posiciones siguientes incorporan el contexto de señalización. Cuatro recogen si existe un semáforo activo, su estado numérico, la distancia a la línea de parada y la orden de parada forzada. Las otras cuatro forman una codificación \textit{one-hot} que distingue entre semáforo, stop, ceda el paso o ausencia de control. La última posición es un sesgo constante. De este modo, la configuración vigente suma 22 entradas y permite que una misma lectura geométrica produzca respuestas distintas según la norma aplicable en ese punto.
 
-La configuración actual produce 22 entradas. La capa oculta contiene 16 neuronas y utiliza \(\tanh\) como función de activación. La capa de salida contiene dos neuronas, también con \(\tanh\), de modo que sus valores se encuentran en el rango \([-1,1]\). La primera salida controla dirección y la segunda controla aceleración o frenado. La rutina de inferencia no fija internamente esas 22 entradas: deduce la dimensión esperada a partir de la longitud de la matriz de pesos de entrada y del número de neuronas ocultas. Esta guarda permite detectar de forma coherente modelos incompatibles si la configuración cambia.
+La capa oculta contiene 16 neuronas y utiliza \(\tanh\) como función de activación. La capa de salida contiene dos neuronas, también con \(\tanh\), de modo que sus valores se encuentran en el rango \([-1,1]\). La primera salida controla dirección y la segunda controla aceleración o frenado. La rutina de inferencia no fija internamente esas 22 entradas: deduce la dimensión esperada a partir de la longitud de la matriz de pesos de entrada y del número de neuronas ocultas. Esta guarda permite detectar de forma coherente modelos incompatibles si la configuración cambia.
 
 \section{Algoritmos evolutivos}
 
@@ -44,7 +34,7 @@ La tasa de mutación documentada en la configuración actual se sitúa en torno 
 
 \section{Análisis de datos}
 
-El proyecto genera tres ficheros principales:
+La instrumentación se diseñó para separar el detalle de cada vehículo de los resúmenes utilizados al comparar generaciones. Esta separación evita que los ficheros agregados crezcan innecesariamente y, al mismo tiempo, permite volver al registro individual cuando aparece una colisión, una penalización o un resultado anómalo. El proyecto genera tres ficheros principales:
 
 \begin{itemize}[leftmargin=*]
   \item \texttt{Fitness\_Debug.csv}, con métricas por coche: fitness, tiempo de vida, punto de aparición, razón de muerte, penalizaciones, bonus, datos de conducción, validación de stops y cedas, mutaciones y familia genealógica.

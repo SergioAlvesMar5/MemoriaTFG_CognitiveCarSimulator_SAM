@@ -1,0 +1,50 @@
+\documentclass[tikz,border=2pt]{standalone}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{pgfplots}
+
+\pgfplotsset{compat=1.18}
+
+\begin{document}
+\begin{tikzpicture}
+  \begin{axis}[
+    width=15cm,
+    height=6.4cm,
+    title={Entrenamiento del 8 de junio de 2026: evolución del fitness},
+    xlabel={Generación},
+    ylabel={Fitness},
+    grid=major,
+    grid style={black!12},
+    tick label style={font=\small},
+    label style={font=\small},
+    title style={font=\small},
+    legend style={
+      font=\scriptsize,
+      at={(0.98,0.98)},
+      anchor=north east,
+      draw=black!30,
+      fill=white
+    },
+    scaled y ticks=false,
+    yticklabel style={/pgf/number format/fixed},
+  ]
+    \addplot[blue!70, opacity=0.16, line width=0.2pt]
+      table[x=Generation,y=BestFit]
+      {tendencia_entrenamiento_2026-06-08.dat};
+    \addplot[green!60!black, opacity=0.16, line width=0.2pt]
+      table[x=Generation,y=MeanFit]
+      {tendencia_entrenamiento_2026-06-08.dat};
+    \addplot[blue!75!black, line width=1pt]
+      table[x=Generation,y=BestFitMA]
+      {tendencia_entrenamiento_2026-06-08.dat};
+    \addlegendentry{BestFit, media móvil de 30 generaciones}
+    \addplot[green!55!black, line width=1pt]
+      table[x=Generation,y=MeanFitMA]
+      {tendencia_entrenamiento_2026-06-08.dat};
+    \addlegendentry{MeanFit, media móvil de 30 generaciones}
+    \addplot[red!65, dashed, line width=0.5pt, domain=1:2067] {0};
+  \end{axis}
+\end{tikzpicture}
+\end{document}
