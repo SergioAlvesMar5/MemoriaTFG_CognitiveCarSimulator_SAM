@@ -8,9 +8,10 @@ La evaluación de test agrega las cuatro carpetas del 18 de junio: \texttt{12-41
 
 Los tamaños efectivos se obtienen de los CSV: 30 vehículos por generación de entrenamiento y 54 por ejecución de test. Esta comprobación es necesaria porque \texttt{PopulationSize} es editable en la instancia del mapa y su valor por defecto no describe necesariamente la sesión archivada. También se detectó que las carpetas de test \texttt{2026-06-11\_11-55} y \texttt{2026-06-11\_13-08} contienen un \texttt{Fitness\_Debug.csv} idéntico; en las comparaciones se cuenta una sola vez.
 
+\Needspace{22\baselineskip}
 \section{Resumen cuantitativo}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{Resultados principales del entrenamiento y del bloque de test del 18 de junio de 2026.}
 \label{tab:resultados-principales}
@@ -28,10 +29,10 @@ Ejecuciones con \textit{MeanFit} negativo & 0.00\% & 0.00\%\\
 Colisiones & 45.54\% & 40.04\%\\
 Fallos legales & 2.12\% & 2.29\%\\
 \texttt{LAZY} & 0.00\% & 0.00\%\\
-Tasa de acierto & -- & 57.50\%\\
+Tasa de acierto & \multicolumn{1}{c}{No aplica} & 57.50\%\\
 \bottomrule
 \end{tabular}
-\caption*{\textit{Fuente: elaboración propia a partir de los CSV del proyecto.}}
+\caption*{\textit{Fuente. Elaboración propia a partir de los CSV del proyecto.}}
 \end{table}
 
 El test no mejora el modelo durante la ejecución: carga pesos fijos y desactiva la mutación. Su mayor \textit{MeanFit} responde a que cambia la distribución de puntos y trayectorias y a que cada ejecución cubre los 54 spawns de test. Por ello, la tabla~\ref{tab:resultados-principales} describe cada modo, pero no permite atribuir la diferencia de fitness únicamente a la calidad de la política.
@@ -42,9 +43,10 @@ El mejor fitness se alcanza en la generación 56, con 134959.45, y el fitness me
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.92\textwidth]{assets/tendencia_entrenamiento_2026-06-18.pdf}
-\caption[Tendencia del fitness en el entrenamiento del 18 de junio de 2026.]{Tendencia del fitness en el entrenamiento del 18 de junio de 2026. Fuente: análisis generado a partir de \texttt{Training\_Summary.csv}.}
+\caption[Tendencia del fitness en el entrenamiento del 18 de junio de 2026.]{Tendencia del fitness en el entrenamiento del 18 de junio de 2026.}
 \label{fig:tendencia-entrenamiento}
+\includegraphics[width=0.92\textwidth]{assets/tendencia_entrenamiento_2026-06-18.pdf}
+\caption*{\textit{Fuente. Análisis generado a partir de \texttt{Training\_Summary.csv}.}}
 \end{figure}
 
 \Needspace{8\baselineskip}
@@ -54,13 +56,14 @@ De los 16432 registros, 8511 terminan por tiempo y 7483 por colisión. Los 348 f
 
 La sesión registra además 5365 entradas en rotonda, 1075 completaciones confirmadas por una nueva entrada y 2350 colisiones dentro de ese contexto. La tasa de completado del 20.04\% es un límite inferior porque el contador solo confirma la maniobra al alcanzar de nuevo el trigger de entrada. El saldo específico de rotonda es negativo, con \(-553966.78\) puntos acumulados, debido principalmente a la penalización de aceleración.
 
+\Needspace{14\baselineskip}
 \section{Evaluación de test}
 
 El criterio implementado considera fallo cualquier colisión, infracción, estancamiento, corrección o marcha atrás incorrecta, vuelco, red inválida o navegación fuera de zona; también exige al menos 60 segundos de vida. El umbral de fitness de 25000 está configurado, pero desactivado mediante \texttt{TestUseFitness}. Con estas reglas, el bloque del 18 de junio obtiene 652 aciertos de 1134 evaluaciones, un 57.50\%. El intervalo de confianza de Wilson al 95\% se sitúa entre el 54.60\% y el 60.34\%. Las cuatro sesiones oscilan entre el 53.70\% y el 61.42\%, con una mediana del 57.04\%.
 
 La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archivadas. No constituye un experimento controlado entre fechas, porque durante junio cambian el fitness, las intersecciones, el número de spawns y los modelos. Se utiliza para mostrar la evolución observada, no para atribuir causalidad a una modificación aislada. En esta tabla, el fitness medio se calcula directamente sobre \texttt{Fitness\_Final}; por ello puede diferir ligeramente del promedio de \textit{MeanFit} de la tabla~\ref{tab:resultados-principales}. El duplicado exacto del 11 de junio se excluye y el bloque del día 15 conserva 431 de las 432 filas declaradas.
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -80,11 +83,12 @@ La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archi
 18 de junio & 1134 & 57.50\% & 44631.86 & 77.91 s\\
 \bottomrule
 \end{tabular}
-\caption*{\textit{Fuente: elaboración propia a partir de \texttt{Fitness\_Debug.csv} y \texttt{Test\_Summary.csv}.}}
+\caption*{\textit{Fuente. Elaboración propia a partir de \texttt{Fitness\_Debug.csv} y \texttt{Test\_Summary.csv}.}}
 \end{table}
 
 Respecto al bloque del 8 de junio, el del día 18 aumenta la tasa de acierto en 32.31 puntos porcentuales, el fitness final medio en un 42.6\% y el tiempo de vida en un 46.6\%. La progresión no es uniforme: el resultado desciende el día 15 y vuelve a hacerlo en varias sesiones del 16. Esta variación respalda la decisión de agregar repeticiones y conservar cada configuración antes de aceptar una mejora.
 
+\Needspace{13\baselineskip}
 \section{Razones de finalización}
 
 Las 652 finalizaciones por tiempo coinciden con los aciertos declarados en el resumen de test. Entre los 482 fallos hay 454 colisiones, 23 infracciones de stop, tres infracciones de tráfico y dos casos de marcha atrás. No aparecen \texttt{LAZY}, \texttt{YIELD\_VIOLATION}, \texttt{NAV\_VIOLATION} ni \texttt{INVALID\_BRAIN}.
@@ -103,6 +107,7 @@ El bloque de test registra 443 entradas en rotonda, 31 completaciones confirmada
 
 El signo negativo no significa necesariamente que el vehículo nunca complete la maniobra, sino que la escala del castigo por acelerar domina sobre la recompensa. La corrección de unidades introducida el 22 de junio intenta resolver este desequilibrio. Dado que todavía no existe un bloque de test posterior a esa modificación, su efecto debe considerarse pendiente de validación.
 
+\Needspace{12\baselineskip}
 \section{Dificultad por puntos de aparición}
 
 Cada uno de los 54 spawns dispone de 21 observaciones. Los puntos 16, 9 y 25 alcanzan los mayores fitness medios, con 68705.3, 68516.8 y 67472.3; sus tasas de acierto son 95.2\%, 100.0\% y 85.7\%. En el extremo opuesto, los puntos 3, 36 y 42 obtienen 10250.2, 14349.2 y 14722.7, con tasas del 9.5\%, 14.3\% y 19.0\%.
