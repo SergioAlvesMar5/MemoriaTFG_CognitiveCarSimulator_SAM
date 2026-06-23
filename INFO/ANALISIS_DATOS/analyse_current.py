@@ -69,13 +69,25 @@ NETWORK_WEIGHTS_TOTAL = (
     + NETWORK_HIDDEN_COUNT * NETWORK_OUTPUT_COUNT
 )
 WEIGHTS_TOTAL = max(1, int(os.environ.get('ANALYSE_WEIGHTS_TOTAL', str(NETWORK_WEIGHTS_TOTAL))))
+NETWORK_OUTPUT_WEIGHTS_TOTAL = max(1, NETWORK_HIDDEN_COUNT * NETWORK_OUTPUT_COUNT)
 TEST_MIN_TIME = float(os.environ.get('ANALYSE_TEST_MIN_TIME', '60'))
 TEST_MIN_FITNESS = float(os.environ.get('ANALYSE_TEST_MIN_FITNESS', '25000'))
 TEST_USE_FITNESS = str(
     os.environ.get('ANALYSE_TEST_USE_FITNESS', 'false')
 ).strip().lower() in ('1', 'true', 'yes', 'on')
-MUTATION_RATE_EVOLVED = float(os.environ.get('ANALYSE_MUTATION_RATE', '0.03'))
-MUTATION_RATE_RANDOM_FAMILY = float(os.environ.get('ANALYSE_RANDOM_MUTATION_RATE', '0.06'))
+MUTATION_RATE_DYNAMIC_MIN = float(os.environ.get('ANALYSE_MUTATION_RATE_MIN', str(1.0 / max(WEIGHTS_TOTAL, 1))))
+MUTATION_RATE_DYNAMIC_MAX = float(os.environ.get(
+    'ANALYSE_MUTATION_RATE_MAX',
+    str(NETWORK_OUTPUT_WEIGHTS_TOTAL / max(WEIGHTS_TOTAL, 1)),
+))
+MUTATION_RATE_LARGE_MIN = float(os.environ.get(
+    'ANALYSE_MUTATION_LARGE_MIN',
+    str((NETWORK_OUTPUT_WEIGHTS_TOTAL + 1.0) / max(WEIGHTS_TOTAL, 1)),
+))
+MUTATION_RATE_LARGE_MAX = float(os.environ.get(
+    'ANALYSE_MUTATION_LARGE_MAX',
+    str((NETWORK_OUTPUT_WEIGHTS_TOTAL * 2.0) / max(WEIGHTS_TOTAL, 1)),
+))
 MUTATION_TOP_SPAWNS = max(5, int(os.environ.get('ANALYSE_MUTATION_TOP_SPAWNS', '15')))
 MUTATION_TOP_GENS = max(10, int(os.environ.get('ANALYSE_MUTATION_TOP_GENS', '20')))
 CARINDEX_MUT_LOADED_END = max(3, int(os.environ.get('ANALYSE_CARINDEX_MUT_LOADED_END', '20')))
@@ -153,7 +165,12 @@ DEBUG_ALIASES = {
     'acumpenaltysteeringwhilestopped': 'pen_swstop',
     'steeringwhilestopped': 'pen_swstop',
     'acumsteerapproachpenalty': 'pen_steer_app',
+    'debugacumsteerapproachpenalty': 'pen_steer_app',
     'acumpenaltysteerapproach': 'pen_steer_app',
+    'acumalignmentpenalty': 'pen_align',
+    'debugacumalignmentpenalty': 'pen_align',
+    'acumpenaltyalignment': 'pen_align',
+    'alignmentpenalty': 'pen_align',
     'ticksnormal': 't_norm',
     'tickstotal': 't_tot',
     # nuevas metricas de control (07-04-2026+)
@@ -364,6 +381,10 @@ def detect_debug_schema(mapped_keys):
     keys = set(mapped_keys or [])
     if {'b', 'c', 'd', 'e'} & keys:
         return 'legacy-components'
+    if 'pen_align' in keys and {'round_completion_bonus', 'round_entry_penalty', 'round_throttle_penalty'} & keys:
+        return '2026-06-alignment-roundabout-bonus-breakdown'
+    if 'pen_align' in keys:
+        return '2026-06-alignment-penalty'
     if {'round_completion_bonus', 'round_entry_penalty', 'round_throttle_penalty'} & keys:
         return '2026-06-roundabout-bonus-breakdown'
     if 'round_bonus' in keys and {'round_exit1_count', 'round_exit2_count', 'round_exit3_count'} <= keys:
@@ -541,10 +562,14 @@ def summarize_car_index_families(rows, analysis_mode=None, bounds=None):
     return stats
 
 def mutation_profile_for_row(row, bounds=None):
-    """Classify mutation telemetry according to the latest EvolutionManager."""
+    """Classify mutation telemetry according to EvolutionManager 22-06.
+
+    The current Blueprint drives MutationRate from GenerationsWithoutImprovement,
+    which is not exported in Fitness_Debug.csv. For mutated families we can only
+    report the valid range; exact 0.0 still applies to loaded/session seed cars.
+    """
     changed = num(row.get('mut_changed', 0.0), 0.0)
     gen = int(num(row.get('gen', 0), 0.0))
-    parent_fit = num(row.get('mut_parent_fit', 0.0), 0.0)
     observed = sdiv(changed, WEIGHTS_TOTAL)
 
     if is_initial_random_brain(row):
@@ -552,6 +577,8 @@ def mutation_profile_for_row(row, bounds=None):
             'kind': 'INITIAL_RANDOM',
             'is_initialization': True,
             'expected_rate': None,
+            'expected_min': None,
+            'expected_max': None,
             'observed_rate': observed,
         }
 
@@ -559,23 +586,32 @@ def mutation_profile_for_row(row, bounds=None):
     if gen == 1:
         kind = 'INITIAL_LOADED'
         expected = 0.0
+        expected_min = expected_max = 0.0
     elif family in ('LOADED', 'SESSION'):
         kind = family
         expected = 0.0
+        expected_min = expected_max = 0.0
     elif family in ('MUT_LOADED', 'MUT_SESSION'):
         kind = family
-        expected = MUTATION_RATE_EVOLVED
+        expected = None
+        expected_min = MUTATION_RATE_DYNAMIC_MIN
+        expected_max = MUTATION_RATE_DYNAMIC_MAX
     elif family == 'MUT_LOADED_LARGE':
         kind = 'MUT_LOADED_LARGE'
-        expected = MUTATION_RATE_RANDOM_FAMILY
+        expected = None
+        expected_min = MUTATION_RATE_LARGE_MIN
+        expected_max = MUTATION_RATE_LARGE_MAX
     else:
         kind = family
         expected = None
+        expected_min = expected_max = None
 
     return {
         'kind': kind,
         'is_initialization': False,
         'expected_rate': expected,
+        'expected_min': expected_min,
+        'expected_max': expected_max,
         'observed_rate': observed,
     }
 
@@ -877,10 +913,15 @@ def inspect_csv_layout(path, aliases, required_keys, min_cols=0):
         'header': [],
         'mapped_keys': [],
         'unknown_headers': [],
+        'duplicate_headers': [],
+        'duplicate_mapped_keys': [],
         'missing_required': list(required_keys),
         'data_rows': 0,
         'empty_rows': 0,
         'short_rows': 0,
+        'long_rows': 0,
+        'header_cols': 0,
+        'max_cols': 0,
         'loaded_rows': 0,
         'discarded_rows': 0,
     }
@@ -900,16 +941,34 @@ def inspect_csv_layout(path, aliases, required_keys, min_cols=0):
             p = [clean(x) for x in row]
             if i == 0:
                 meta['header'] = p
+                meta['header_cols'] = len(p)
+                meta['max_cols'] = len(p)
                 norm = [normalize_header_token(x) for x in p]
                 unknown = []
+                seen_headers = defaultdict(list)
+                seen_mapped = defaultdict(list)
                 for idx, h in enumerate(norm):
+                    if h:
+                        seen_headers[h].append(p[idx])
                     key = alias_lookup(h, aliases)
                     if key:
-                        header_map[key] = idx
+                        seen_mapped[key].append(p[idx])
+                        if key not in header_map:
+                            header_map[key] = idx
                     else:
                         unknown.append(p[idx])
                 meta['mapped_keys'] = sorted(header_map.keys())
                 meta['unknown_headers'] = [u for u in unknown if u]
+                meta['duplicate_headers'] = [
+                    f'{vals[0]} x{len(vals)}'
+                    for vals in seen_headers.values()
+                    if len(vals) > 1 and vals[0]
+                ]
+                meta['duplicate_mapped_keys'] = [
+                    f'{key}: {short_list(vals, 4)}'
+                    for key, vals in sorted(seen_mapped.items())
+                    if len(vals) > 1
+                ]
                 meta['missing_required'] = [k for k in required_keys if k not in header_map]
                 continue
 
@@ -917,8 +976,11 @@ def inspect_csv_layout(path, aliases, required_keys, min_cols=0):
                 meta['empty_rows'] += 1
                 continue
             meta['data_rows'] += 1
+            meta['max_cols'] = max(meta.get('max_cols', 0), len(p))
             if min_cols and len(p) < min_cols:
                 meta['short_rows'] += 1
+            if meta.get('header_cols', 0) and len(p) > meta.get('header_cols', 0):
+                meta['long_rows'] += 1
     
     if meta['exists']:
         logging.debug(f"[inspect_csv_layout] {os.path.basename(path)}: {meta['data_rows']} data rows, {meta['empty_rows']} empty, {meta['short_rows']} short, missing: {meta['missing_required']}")
@@ -1226,7 +1288,7 @@ def is_invalid_brain_reason(reason):
 
 def is_test_failure_reason(reason):
     # Mirrors BP_EvolutionManager CalculateAndExport death-based fail rules
-    # from the latest local description (17-06-2026). Fitness/time thresholds
+    # from the latest local description (22-06-2026). Fitness/time thresholds
     # are handled in Unreal and are not inferable from DeathReason alone.
     canon = canonical_death_reason(reason)
     if canon in {
@@ -2488,9 +2550,18 @@ def analyze_fitness_components_correlation(debug_rows):
         component_counts[key] = len(vals)
         contributions[key] = sdiv(component_means[key], fit_mean) if fit_mean != 0 else 0.0
 
-    penalty_keys = ('pen_m', 'pen_v', 'pen_tv', 'pen_nav', 'pen_lazy', 'pen_steer_app')
+    penalty_keys = ('pen_m', 'pen_v', 'pen_tv', 'pen_nav', 'pen_lazy', 'pen_steer_app', 'pen_align')
+    penalty_labels = {
+        'pen_m': 'Penalty_Muerte',
+        'pen_v': 'Penalty_Velocidad',
+        'pen_tv': 'Penalty_TrafficViolation',
+        'pen_nav': 'Penalty_NavViolation',
+        'pen_lazy': 'Penalty_Lazy',
+        'pen_steer_app': 'Penalty_SteerApproach',
+        'pen_align': 'Penalty_Alignment',
+    }
     pen_means = [
-        (key, mean([r.get(key, 0.0) for r in debug_rows]))
+        (penalty_labels.get(key, key), mean([r.get(key, 0.0) for r in debug_rows]))
         for key in penalty_keys if key in available
     ]
     pen_means.sort(key=lambda item: item[1], reverse=True)
@@ -2658,6 +2729,7 @@ def parse_debug(path):
             'pen_lazy': to_num(parts, header_map.get('pen_lazy'), float),
             'pen_swstop': to_num(parts, header_map.get('pen_swstop'), float),
             'pen_steer_app': to_num(parts, header_map.get('pen_steer_app'), float),
+            'pen_align': to_num(parts, header_map.get('pen_align'), float),
             't_norm': to_num(parts, header_map.get('t_norm'), int),
             't_tot': to_num(parts, header_map.get('t_tot'), int),
             'thr_pos': to_num(parts, header_map.get('thr_pos'), float),
@@ -2795,10 +2867,14 @@ def parse_debug(path):
         r['mutation_kind'] = mutation_profile['kind']
         r['is_weight_initialization'] = mutation_profile['is_initialization']
         r['expected_mut_rate'] = mutation_profile['expected_rate']
-        r['mut_rate_error'] = (
-            r['mut_rate'] - mutation_profile['expected_rate']
-            if mutation_profile['expected_rate'] is not None else 0.0
-        )
+        r['expected_mut_rate_min'] = mutation_profile.get('expected_min')
+        r['expected_mut_rate_max'] = mutation_profile.get('expected_max')
+        if mutation_profile['expected_rate'] is not None:
+            r['mut_rate_error'] = r['mut_rate'] - mutation_profile['expected_rate']
+        else:
+            # MutationRate is a probability; an individual car can legitimately
+            # realize 0 changes even when the expected range is non-zero.
+            r['mut_rate_error'] = 0.0
         if r.get('mut_parent_fit', 0.0) != 0.0:
             r['mut_parent_delta'] = r.get('fit', 0.0) - r.get('mut_parent_fit', 0.0)
             r['mut_parent_delta_pct'] = sdiv(r['mut_parent_delta'] * 100.0, abs(r.get('mut_parent_fit', 0.0)))
@@ -3182,7 +3258,7 @@ def compute_debug_aggregates(dbg):
         'f': 0.0, 'wait_bonus': 0.0, 'net': 0.0,
         'pen_m': 0.0, 'pen_v': 0.0, 'pen_cw': 0.0, 'pen_tv': 0.0, 'pen_nav': 0.0,
         'pen_creep': 0.0, 'pen_rev': 0.0, 'pen_lazy': 0.0, 'pen_swstop': 0.0,
-        'pen_steer_app': 0.0, 't_norm': 0.0, 't_tot': 0.0,
+        'pen_steer_app': 0.0, 'pen_align': 0.0, 't_norm': 0.0, 't_tot': 0.0,
         'thr_pos': 0.0, 'thr_grace': 0.0, 'brake_grace': 0.0, 'brake_in': 0.0,
         'coast_t': 0.0, 'stop_brake': 0.0, 'stop_throttle': 0.0,
         't_stop_ctx': 0.0, 't_stop_ctx_tl': 0.0, 't_stop_ctx_stop': 0.0, 't_stop_ctx_yield': 0.0,
@@ -3232,6 +3308,7 @@ def compute_debug_aggregates(dbg):
         agg['pen_lazy'] += r.get('pen_lazy', 0.0)
         agg['pen_swstop'] += r.get('pen_swstop', 0.0)
         agg['pen_steer_app'] += r.get('pen_steer_app', 0.0)
+        agg['pen_align'] += r.get('pen_align', 0.0)
         agg['t_norm'] += r.get('t_norm', 0.0)
         agg['t_tot'] += r.get('t_tot', 0.0)
         agg['thr_pos'] += r.get('thr_pos', 0.0)
@@ -3428,6 +3505,8 @@ def report_debug(R, dbg):
     R.p(f'  Penalty_Lazy:                    {sdiv(agg["pen_lazy"], nd):>10.4f}')
     R.p(f'  Penalty_SteeringWhileStopped:    {sdiv(agg["pen_swstop"], nd):>10.4f}')
     R.p(f'  Penalty_SteerApproach:           {sdiv(agg["pen_steer_app"], nd):>10.4f}')
+    if debug_field_available(dbg, 'pen_align'):
+        R.p(f'  Penalty_Alignment:               {sdiv(agg["pen_align"], nd):>10.4f}')
     R.p(f'  Ticks Normal / Total:            {sdiv(agg["t_norm"], nd):>6.1f} / {sdiv(agg["t_tot"], nd):>6.1f}')
     R.p(f'  Acum_ThrottlePos:                {sdiv(agg["thr_pos"], nd):>10.4f}')
     R.p(f'  Acum_ThrottleDuringGraceTime:    {sdiv(agg["thr_grace"], nd):>10.4f}')
@@ -3626,9 +3705,11 @@ def report_debug(R, dbg):
         R.p(f'  Weights total (assumed):        {WEIGHTS_TOTAL}')
         init_rows = sum(1 for r in dbg if r.get('is_weight_initialization', False))
         R.p(
-            f'  Config EvolutionManager:        mutados={MUTATION_RATE_EVOLVED*100:.1f}% | '
-            f'MUT_LOADED_LARGE={MUTATION_RATE_RANDOM_FAMILY*100:.1f}%'
+            f'  Config EvolutionManager 23/06:  MUT_LOADED/MUT_SESSION={MUTATION_RATE_DYNAMIC_MIN*100:.2f}%..'
+            f'{MUTATION_RATE_DYNAMIC_MAX*100:.2f}% | '
+            f'MUT_LOADED_LARGE={MUTATION_RATE_LARGE_MIN*100:.2f}%..{MUTATION_RATE_LARGE_MAX*100:.2f}%'
         )
+        R.p('  Nota: GenerationsWithoutImprovement no se exporta; el expected exacto es rango, no punto fijo.')
         if init_rows:
             R.p(f'  Inicializaciones excluidas:     {init_rows} (no son mutaciones)')
         R.p(
@@ -3683,15 +3764,20 @@ def report_debug(R, dbg):
                 fam,
                 len(mutation_rows),
                 mean([x.get('mut_rate', 0.0) for x in mutation_rows]),
-                mean([x.get('expected_mut_rate', 0.0) or 0.0 for x in mutation_rows]),
+                mean([x.get('expected_mut_rate_min', 0.0) or 0.0 for x in mutation_rows]),
+                mean([x.get('expected_mut_rate_max', 0.0) or 0.0 for x in mutation_rows]),
                 mean([x.get('fit', 0.0) for x in mutation_rows]),
             ))
         if fam_stats:
-            R.p('  By family (observed vs expected):')
-            for fam, n, mrate, expected, mfit in sorted(fam_stats, key=lambda x: x[2], reverse=True):
+            R.p('  By family (observed vs expected range):')
+            for fam, n, mrate, expected_min, expected_max, mfit in sorted(fam_stats, key=lambda x: x[2], reverse=True):
+                if expected_min == expected_max:
+                    expected_txt = f'{expected_min*100:>5.2f}%'
+                else:
+                    expected_txt = f'{expected_min*100:>5.2f}..{expected_max*100:>5.2f}%'
                 R.p(
                     f'    {fam:10s}: N={n:4d} observed={mrate*100:>6.2f}% '
-                    f'expected={expected*100:>5.2f}% fit_mean={mfit:>9.1f}'
+                    f'expected={expected_txt} fit_mean={mfit:>9.1f}'
                 )
         spawn_mut = []
         for sp, rows_sp in spawns.items():
@@ -3870,6 +3956,8 @@ def report_quicksummary(R, rows, dbg):
         R.p(f'  PenReverse med:   {sdiv(sum(r.get("pen_rev", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  PenLazy med:      {sdiv(sum(r.get("pen_lazy", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  PenSteerStop med: {sdiv(sum(r.get("pen_swstop", 0.0) for r in dbg), nd):.2f}')
+        if debug_field_available(dbg, 'pen_align'):
+            R.p(f'  PenAlign med:     {sdiv(sum(r.get("pen_align", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  ThrGrace med:     {sdiv(sum(r.get("thr_grace", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  BrGrace med:      {sdiv(sum(r.get("brake_grace", 0.0) for r in dbg), nd):.2f}')
         R.p(f'  YieldVal med:     {sdiv(sum(r.get("yield_val_t", 0.0) for r in dbg), nd):.2f}')
@@ -3988,9 +4076,15 @@ def report_input_quality(R, summary_meta, debug_meta):
         R.p(f'  Filas descart.:  {meta.get("discarded_rows", 0)}')
         R.p(f'  Filas vacias:    {meta.get("empty_rows", 0)}')
         R.p(f'  Filas cortas:    {meta.get("short_rows", 0)}')
+        if meta.get('long_rows', 0):
+            R.p(f'  Filas largas:    {meta.get("long_rows", 0)} (max cols {meta.get("max_cols", 0)} vs header {meta.get("header_cols", 0)})')
         R.p(f'  Campos mapeados: {len(meta.get("mapped_keys", []))} -> {short_list(meta.get("mapped_keys", []), 14)}')
         R.p(f'  Campos faltan:   {short_list(meta.get("missing_required", []), 14)}')
         R.p(f'  Cabeceras extra: {short_list(meta.get("unknown_headers", []), 14)}')
+        if meta.get('duplicate_headers'):
+            R.p(f'  Cabeceras duplicadas: {short_list(meta.get("duplicate_headers", []), 14)}')
+        if meta.get('duplicate_mapped_keys'):
+            R.p(f'  Campos mapeados duplicados: {short_list(meta.get("duplicate_mapped_keys", []), 14)}')
 
 def report_debug_scope(R, info):
     if not info:
@@ -4690,6 +4784,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('pen_lazy', 'Penalty_Lazy'),
         ('pen_swstop', 'Penalty_SteeringWhileStopped'),
         ('pen_steer_app', 'Penalty_SteerApproach'),
+        ('pen_align', 'Penalty_Alignment'),
         ('pen_cw', 'Penalty_CorrectingWrong'),
         ('thr_pos', 'Acum_ThrottlePos'),
         ('thr_grace', 'Acum_ThrottleDuringGraceTime'),
@@ -5054,6 +5149,7 @@ def save_json_snapshot(
     lazy_total = sum(r.get('pen_lazy', 0.0) for r in dbg_rows)
     steer_stop_total = sum(r.get('pen_swstop', 0.0) for r in dbg_rows)
     steer_approach_total = sum(r.get('pen_steer_app', 0.0) for r in dbg_rows)
+    alignment_total = sum(r.get('pen_align', 0.0) for r in dbg_rows)
     yield_val_total = sum(r.get('yield_val_t', 0.0) for r in dbg_rows)
     stop_val_total = sum(r.get('stop_val_t', 0.0) for r in dbg_rows)
     stop_bonus_total = sum(r.get('stop_bonus', 0.0) for r in dbg_rows)
@@ -5171,6 +5267,7 @@ def save_json_snapshot(
             'avg_pen_swstop': sdiv(steer_stop_total, len(dbg_rows)),
             'avg_pen_nav': sdiv(sum(r.get('pen_nav', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_pen_steer_app': sdiv(steer_approach_total, len(dbg_rows)),
+            'avg_pen_alignment': sdiv(alignment_total, len(dbg_rows)),
             'avg_yield_val_t': sdiv(yield_val_total, len(dbg_rows)),
             'avg_stop_val_t': sdiv(stop_val_total, len(dbg_rows)),
             'avg_stop_bonus': sdiv(stop_bonus_total, len(dbg_rows)),
@@ -5289,6 +5386,189 @@ def save_fig(fig, name):
         import traceback; traceback.print_exc()
     plt.close(fig)
     return p
+
+def lifetime_distribution_bins(debug_rows, step_pct=10):
+    step_pct = max(1, min(100, int(step_pct or 10)))
+    if 100 % step_pct != 0:
+        step_pct = 10
+    n_bins = max(1, 100 // step_pct)
+
+    rows = []
+    for r in debug_rows or []:
+        t = num(r.get('time', 0.0), 0.0)
+        if math.isfinite(t) and t >= 0.0:
+            rows.append((t, r))
+    if not rows:
+        return {
+            'max_time': 0.0,
+            'max_row': {},
+            'total': 0,
+            'bins': [],
+        }
+
+    max_time, max_row = max(rows, key=lambda item: item[0])
+    counts = [0 for _ in range(n_bins)]
+    for t, _ in rows:
+        if max_time <= 0.0:
+            idx = 0
+        else:
+            pct = sdiv(t * 100.0, max_time)
+            idx = min(n_bins - 1, int(pct // step_pct))
+        counts[idx] += 1
+
+    total = len(rows)
+    bins = []
+    accum = 0
+    for i, count in enumerate(counts):
+        pct_start = i * step_pct
+        pct_end_exclusive = min(100, (i + 1) * step_pct)
+        pct_label = f'{pct_start}-{pct_end_exclusive - 1}%'
+        if i == n_bins - 1:
+            pct_label = f'{pct_start}-100%'
+
+        sec_start = max_time * pct_start / 100.0
+        sec_end = max_time * pct_end_exclusive / 100.0
+        accum += count
+        bins.append({
+            'pct_start': pct_start,
+            'pct_end': pct_end_exclusive,
+            'pct_label': pct_label,
+            'sec_start': sec_start,
+            'sec_end': sec_end,
+            'count': count,
+            'car_pct': sdiv(count * 100.0, total),
+            'accum_pct': sdiv(accum * 100.0, total),
+        })
+
+    return {
+        'max_time': max_time,
+        'max_row': max_row,
+        'total': total,
+        'bins': bins,
+    }
+
+def plot_lifetime_distribution(dbg):
+    """Distribucion de tiempo vivo normalizada por el coche mas longevo."""
+    saved = []
+    if not dbg:
+        return saved
+
+    try:
+        step_pct = int(os.environ.get('ANALYSE_LIFETIME_BIN_PCT', '10'))
+    except ValueError:
+        step_pct = 10
+    info = lifetime_distribution_bins(dbg, step_pct=step_pct)
+    bins = info.get('bins', [])
+    if not bins:
+        return saved
+
+    max_time = info.get('max_time', 0.0)
+    max_row = info.get('max_row', {}) or {}
+    labels = [b['pct_label'] for b in bins]
+    values = [b['car_pct'] for b in bins]
+    counts = [b['count'] for b in bins]
+    sec_labels = [
+        f'{b["sec_start"]:.1f}-{b["sec_end"]:.1f}s'
+        for b in bins
+    ]
+    xlabels = [f'{label}\n{seconds}' for label, seconds in zip(labels, sec_labels)]
+    max_detail = (
+        f'Coche maximo: {max_time:.2f}s | Gen {max_row.get("gen", "-")} | '
+        f'{max_row.get("car", "-")} | '
+        f'{str(max_row.get("spawn", "-")).replace("TargetPoint", "TP")} | '
+        f'{short_death_reason(max_row.get("death", "-"))}'
+    )
+
+    fig = plt.figure(figsize=(16, 11.2))
+    grid = fig.add_gridspec(3, 1, height_ratios=[3.05, 0.58, 1.78], hspace=0.0)
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.905, bottom=0.065)
+    ax = fig.add_subplot(grid[0])
+    ax_gap = fig.add_subplot(grid[1])
+    ax_table = fig.add_subplot(grid[2])
+    ax_gap.axis('off')
+    fig.suptitle(
+        f'{LABEL} - Distribucion porcentual del tiempo vivo (100% = {max_time:.2f}s)',
+        fontsize=15,
+        fontweight='bold',
+        y=0.982,
+    )
+    fig.text(
+        0.5,
+        0.955,
+        max_detail,
+        ha='center',
+        va='center',
+        fontsize=10,
+        color='#374151',
+    )
+
+    colors = plt.cm.Blues(np.linspace(0.38, 0.86, len(bins)))
+    bars = ax.bar(range(len(bins)), values, color=colors, edgecolor='#1f2937', linewidth=0.8)
+    if bars:
+        bars[-1].set_edgecolor('black')
+        bars[-1].set_linewidth(1.6)
+
+    y_max = max(values) if values else 0.0
+    ax.set_ylim(0, max(5.0, y_max * 1.22))
+    ax.set_xticks(range(len(bins)))
+    ax.set_xticklabels(xlabels, fontsize=8)
+    ax.set_ylabel('% de coches')
+    ax.set_xlabel('Tramo de vida respecto al coche mas longevo (100%)')
+    ax.xaxis.labelpad = 12
+    ax.margins(x=0.045)
+    ax.grid(True, axis='y', alpha=0.3)
+
+    for i, bar in enumerate(bars):
+        h = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.0,
+            h + max(0.25, y_max * 0.015),
+            f'{values[i]:.1f}%\nN={counts[i]}',
+            ha='center',
+            va='bottom',
+            fontsize=8,
+        )
+
+    ax_table.axis('off')
+    table_rows = []
+    for b in bins:
+        if b['pct_end'] >= 100:
+            sec_range = f'{b["sec_start"]:.2f} <= t <= {b["sec_end"]:.2f}s'
+        else:
+            sec_range = f'{b["sec_start"]:.2f} <= t < {b["sec_end"]:.2f}s'
+        table_rows.append([
+            b['pct_label'],
+            sec_range,
+            str(b['count']),
+            f'{b["car_pct"]:.2f}%',
+            f'{b["accum_pct"]:.2f}%',
+        ])
+    table = ax_table.table(
+        cellText=table_rows,
+        colLabels=['Tramo %', 'Rango en segundos', 'Coches', '% coches', '% acum.'],
+        cellLoc='center',
+        colLoc='center',
+        bbox=[0.02, 0.04, 0.96, 0.92],
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    table.scale(1.0, 1.28)
+    for (row, col), cell in table.get_celld().items():
+        if row == 0:
+            cell.set_facecolor('#dbeafe')
+            cell.set_text_props(weight='bold')
+        elif row % 2 == 0:
+            cell.set_facecolor('#f8fafc')
+
+    fig.text(
+        0.075,
+        0.025,
+        'Los tramos son relativos al tiempo maximo real del lote; por eso el rango en segundos cambia entre ejecuciones.',
+        fontsize=8,
+        color='#4b5563',
+    )
+    saved.append(save_fig(fig, '01b_distribucion_tiempo_vida.png'))
+    return saved
 
 def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None):
     stats = summarize_test_results(summary)
@@ -5479,7 +5759,7 @@ def plot_debug(dbg):
     # ── 7. Componentes fitness por gen ──
     if len(gens) >= 1:
         g_a, g_e, g_f, g_wait, g_stop_bonus, g_yield_bonus = [], [], [], [], [], []
-        g_pm, g_pv, g_ptv, g_pn, g_pc, g_pr, g_pl, g_ps, g_net, g_fit = [], [], [], [], [], [], [], [], [], []
+        g_pm, g_pv, g_ptv, g_pn, g_pc, g_pr, g_pl, g_ps, g_pa, g_net, g_fit = [], [], [], [], [], [], [], [], [], [], []
         for g in gens:
             gc = by_gen[g]  # O(1) lookup
             ng = len(gc)
@@ -5497,6 +5777,7 @@ def plot_debug(dbg):
             g_pr.append(sdiv(sum(r.get('pen_rev', 0.0) for r in gc), ng))
             g_pl.append(sdiv(sum(r.get('pen_lazy', 0.0) for r in gc), ng))
             g_ps.append(sdiv(sum(r.get('pen_swstop', 0.0) for r in gc), ng))
+            g_pa.append(sdiv(sum(r.get('pen_align', 0.0) for r in gc), ng))
             g_net.append(sdiv(sum(r['net'] for r in gc), ng))
             g_fit.append(sdiv(sum(r['fit'] for r in gc), ng))
 
@@ -5533,6 +5814,8 @@ def plot_debug(dbg):
         ax.plot(gens, g_pr, color='tab:pink', linestyle='-', marker=mk or None, markersize=ms, label='Pen Reverse', linewidth=1.2)
         ax.plot(gens, g_pl, color='tab:olive', linestyle='-', marker=mk or None, markersize=ms, label='Pen Lazy', linewidth=1.2)
         ax.plot(gens, g_ps, color='tab:cyan', linestyle='-', marker=mk or None, markersize=ms, label='Pen SteeringStop', linewidth=1.2)
+        if debug_field_available(dbg, 'pen_align'):
+            ax.plot(gens, g_pa, color='black', linestyle='--', marker=mk or None, markersize=ms, label='Pen Alignment', linewidth=1.2)
         ax.set_title('Penalizaciones (media por gen)')
         ax.set_xlabel(GEN_XLABEL); ax.set_ylabel('Valor'); ax.legend(); ax.grid(True, alpha=0.3)
 
@@ -6630,7 +6913,8 @@ def plot_mutation_family_summary(dbg):
     fams = []
     mut_rates = []
     fit_means = []
-    expected_rates = []
+    expected_min_rates = []
+    expected_max_rates = []
     for fam in sorted(fam_rows.keys()):
         rows_f = fam_rows[fam]
         if not rows_f:
@@ -6638,7 +6922,8 @@ def plot_mutation_family_summary(dbg):
         fams.append(fam)
         mut_rates.append(mean([x.get('mut_rate', 0.0) for x in rows_f]) * 100.0)
         fit_means.append(mean([x.get('fit', 0.0) for x in rows_f]))
-        expected_rates.append(mean([x.get('expected_mut_rate', 0.0) or 0.0 for x in rows_f]) * 100.0)
+        expected_min_rates.append(mean([x.get('expected_mut_rate_min', 0.0) or 0.0 for x in rows_f]) * 100.0)
+        expected_max_rates.append(mean([x.get('expected_mut_rate_max', 0.0) or 0.0 for x in rows_f]) * 100.0)
 
     if not fams:
         return saved
@@ -6646,7 +6931,8 @@ def plot_mutation_family_summary(dbg):
     fig, ax = plt.subplots(figsize=(12, 6))
     fig.suptitle(f'{LABEL} - Mutation by family', fontsize=14, fontweight='bold')
     ax.bar(fams, mut_rates, color='steelblue', alpha=0.8)
-    ax.plot(fams, expected_rates, color='crimson', marker='D', linewidth=1.8, label='expected')
+    ax.plot(fams, expected_min_rates, color='crimson', marker='D', linewidth=1.4, label='expected min')
+    ax.plot(fams, expected_max_rates, color='crimson', marker='D', linestyle='--', linewidth=1.4, label='expected max')
     ax.set_ylabel('mut_rate (%)')
     ax.set_xlabel('family')
     ax.grid(True, alpha=0.3, axis='y')
@@ -6880,6 +7166,7 @@ def plot_all(summary, dbg):
     # Si no hay summary, aun asi intenta generar las graficas de debug.
     if not summary:
         if dbg:
+            saved += plot_lifetime_distribution(dbg)
             saved += plot_debug(dbg)
         return saved
 
@@ -6934,6 +7221,8 @@ def plot_all(summary, dbg):
 
     plt.tight_layout()
     saved.append(save_fig(fig, '01_resumen.png'))
+    if dbg:
+        saved += plot_lifetime_distribution(dbg)
 
     # ── 2. Tendencia BestNorm + MeanNorm ──
     fig, ax = plt.subplots(figsize=(15, 6))
@@ -7194,6 +7483,19 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
             if legal_fail_pct > 0.0:
                 insights.append(f'Fallo legal (stop+traffic+yield+nav): {legal_fail_pct:.2f}% de coches.')
 
+        mutation_rows = [
+            r for r in dbg_rows
+            if not r.get('is_weight_initialization', False)
+            and str(r.get('mutation_kind', '')).startswith('MUT_')
+        ]
+        if mutation_rows:
+            mut_rate_med = pctl([r.get('mut_rate', 0.0) for r in mutation_rows], 50) * 100.0
+            insights.append(
+                f'Mutacion dinamica 23/06: MutRate mediano {mut_rate_med:.2f}% '
+                f'(rango normal {MUTATION_RATE_DYNAMIC_MIN*100:.2f}%..{MUTATION_RATE_DYNAMIC_MAX*100:.2f}%, '
+                f'familia grande {MUTATION_RATE_LARGE_MIN*100:.2f}%..{MUTATION_RATE_LARGE_MAX*100:.2f}%).'
+            )
+
         cmd_thr = sum(r.get('thr_pos', 0.0) for r in dbg_rows)
         thr_grace = sum(r.get('thr_grace', 0.0) for r in dbg_rows)
         brake_grace = sum(r.get('brake_grace', 0.0) for r in dbg_rows)
@@ -7224,6 +7526,7 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
         rev_pen = sum(r.get('pen_rev', 0.0) for r in dbg_rows)
         lazy_pen = sum(r.get('pen_lazy', 0.0) for r in dbg_rows)
         steer_stop_pen = sum(r.get('pen_swstop', 0.0) for r in dbg_rows)
+        align_pen = sum(r.get('pen_align', 0.0) for r in dbg_rows)
         nav_pen = sum(r.get('pen_nav', 0.0) for r in dbg_rows)
 
         brake_share_global = sdiv(cmd_brk, cmd_brk + cmd_thr)
@@ -7373,6 +7676,10 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
             insights.append(f'Penalty por aproximacion con steering acumulado: media {sdiv(steer_approach_pen, n_dbg):.2f} por coche.')
             if steer_stop_pen > 0.0 and steer_approach_pen > steer_stop_pen:
                 insights.append('La penalizacion por aproximacion de steering supera la de giro en parado; revisar suavizado antes de la fase stop.')
+        if align_pen > 0.0:
+            insights.append(f'Penalty de alineacion 23/06 acumulado: media {sdiv(align_pen, n_dbg):.2f} por coche.')
+            if align_pen > steer_approach_pen and steer_approach_pen > 0.0:
+                insights.append('La penalizacion de alineacion supera a SteerApproach; revisar orientacion respecto a la linea de stop/ceda/semaforo.')
         if abs(thr_grace) > 0.0:
             insights.append(f'Acum_ThrottleDuringGraceTime medio: {sdiv(thr_grace, n_dbg):.2f} por coche.')
         if abs(brake_grace) > 0.0:
@@ -7614,6 +7921,345 @@ def report_auto_insights(R, insights):
     for line in insights:
         R.p(f'  - {line}')
 
+def fmt_num(value, digits=2):
+    try:
+        fv = float(value)
+    except (TypeError, ValueError):
+        return '-'
+    if not math.isfinite(fv):
+        return '-'
+    return f'{fv:.{digits}f}'
+
+def fmt_pct_value(value, digits=2):
+    return f'{fmt_num(value, digits)}%'
+
+def fmt_pct_ratio(num_value, den_value, digits=2):
+    return fmt_pct_value(sdiv(float(num_value) * 100.0, float(den_value or 0.0)), digits)
+
+def fmt_int(value):
+    try:
+        return f'{int(round(float(value))):,}'
+    except (TypeError, ValueError):
+        return '-'
+
+def add_kv(R, label, value):
+    R.p(f'  {label:<32s}: {value}')
+
+def report_external_ai_brief(
+    R,
+    summary_rows,
+    debug_rows,
+    summary_meta,
+    debug_meta,
+    debug_scope,
+    data_coherence,
+    detected_info,
+    gen_norm_info,
+    auto_insights,
+    yield_stuck_info=None,
+    stop_stuck_info=None,
+    train_summary_rows=0,
+    test_summary_rows=0,
+):
+    """Top-level report brief for readers that do not inspect the CSV files."""
+    R.p(f'{"="*76}')
+    R.p('  RESUMEN EJECUTIVO PARA IA EXTERNA')
+    R.p(f'{"="*76}')
+    R.p('  Objetivo: este bloque resume lo imprescindible para analizar el train/test')
+    R.p('  sin abrir Fitness_Debug.csv ni los Summary. El detalle completo queda debajo.')
+
+    add_kv(R, 'Modo de este informe', f'{MODE} ({LABEL})')
+    add_kv(R, 'Fecha de analisis', datetime.now().strftime('%d/%m/%Y %H:%M'))
+    add_kv(R, 'Modo global detectado', detected_info.get('mode', '-'))
+    add_kv(R, 'Motivo de deteccion', detected_info.get('reason', '-'))
+    add_kv(R, 'Summary usado', os.path.basename(SUMMARY_FILE) if SUMMARY_FILE else '-')
+    add_kv(R, 'Debug usado', os.path.basename(DEBUG_FILE))
+    add_kv(R, 'Training/Test Summary filas', f'{train_summary_rows}/{test_summary_rows}')
+
+    schema = debug_rows[0].get('_schema', 'unknown') if debug_rows else detect_debug_schema(debug_meta.get('mapped_keys', []))
+    mapped_summary = len(summary_meta.get('mapped_keys', []))
+    mapped_debug = len(debug_meta.get('mapped_keys', []))
+    add_kv(R, 'Esquema Debug detectado', schema)
+    add_kv(R, 'Campos mapeados Summary/Debug', f'{mapped_summary}/{mapped_debug}')
+    add_kv(R, 'Cabeceras extra Summary', short_list(summary_meta.get('unknown_headers', []), 8))
+    add_kv(R, 'Cabeceras extra Debug', short_list(debug_meta.get('unknown_headers', []), 8))
+    add_kv(R, 'Cabeceras duplicadas Debug', short_list(debug_meta.get('duplicate_headers', []), 8))
+    add_kv(R, 'Campos duplicados Debug', short_list(debug_meta.get('duplicate_mapped_keys', []), 8))
+    if any(str(x).startswith('pen_steer_app:') for x in debug_meta.get('duplicate_mapped_keys', [])) and 'pen_align' not in debug_meta.get('mapped_keys', []):
+        add_kv(R, 'Aviso export 23/06', 'SteerApproach aparece duplicado y AlignmentPenalty no aparece como columna.')
+
+    R.p(f'\n-- Cobertura y Validez de Datos --')
+    status = data_coherence.get('status', 'ok').upper() if data_coherence else 'UNKNOWN'
+    add_kv(R, 'Estado coherencia', status)
+    add_kv(
+        R,
+        'Summary filas/gens',
+        f'{data_coherence.get("summary_rows", 0)}/{data_coherence.get("summary_gens", 0)} '
+        f'({data_coherence.get("summary_gen_min", 0)}..{data_coherence.get("summary_gen_max", 0)})'
+        if data_coherence else '-',
+    )
+    add_kv(
+        R,
+        'Debug filas/gens',
+        f'{data_coherence.get("debug_rows", 0)}/{data_coherence.get("debug_gens", 0)} '
+        f'({data_coherence.get("debug_gen_min", 0)}..{data_coherence.get("debug_gen_max", 0)})'
+        if data_coherence else '-',
+    )
+    if data_coherence:
+        if data_coherence.get('summary_gens', 0) > 0:
+            add_kv(R, 'Cobertura gens Debug', fmt_pct_value(data_coherence.get('debug_gen_coverage_pct', 0.0), 1))
+        else:
+            add_kv(R, 'Cobertura gens Debug', 'n/a (Summary sin generaciones)')
+        if data_coherence.get('expected_debug_rows', 0) > 0:
+            add_kv(
+                R,
+                'Cobertura filas Debug',
+                f'{fmt_pct_value(data_coherence.get("debug_row_coverage_pct", 0.0), 1)} '
+                f'(esperado~{fmt_int(data_coherence.get("expected_debug_rows", 0))}, '
+                f'{data_coherence.get("expected_debug_source", "-")})',
+            )
+        else:
+            add_kv(R, 'Cobertura filas Debug', 'n/a (sin esperado porque Summary esta vacio)')
+    add_kv(R, 'Registros Debug totales', fmt_int(debug_scope.get('raw_total', 0)))
+    add_kv(R, 'Registros seleccionados', fmt_int(debug_scope.get('selected_total', len(debug_rows))))
+    if debug_scope.get('has_training_flag'):
+        add_kv(
+            R,
+            'Split TRAIN/TEST/UNK',
+            f'{fmt_int(debug_scope.get("train_total", 0))}/'
+            f'{fmt_int(debug_scope.get("test_total", 0))}/'
+            f'{fmt_int(debug_scope.get("unknown_total", 0))}',
+        )
+    if debug_scope.get('excluded_incomplete_rows', 0):
+        add_kv(
+            R,
+            'Debug excluido sin Summary',
+            f'{fmt_int(debug_scope.get("excluded_incomplete_rows", 0))} filas; '
+            f'gens {short_list(debug_scope.get("excluded_incomplete_generations", []), 12)}',
+    )
+    if gen_norm_info:
+        if gen_norm_info.get('summary_count', 0) > 0:
+            add_kv(
+                R,
+                'Generaciones Summary',
+                f'{gen_norm_info.get("summary_raw_min", 0)}..{gen_norm_info.get("summary_raw_max", 0)} '
+                f'-> 1..{gen_norm_info.get("summary_idx_max", 0)}',
+            )
+        else:
+            add_kv(R, 'Generaciones Summary', 'sin datos')
+        if gen_norm_info.get('debug_count', 0) > 0:
+            add_kv(
+                R,
+                'Generaciones Debug',
+                f'{gen_norm_info.get("debug_raw_min", 0)}..{gen_norm_info.get("debug_raw_max", 0)} '
+                f'-> 1..{gen_norm_info.get("debug_idx_max", 0)}',
+            )
+        else:
+            add_kv(R, 'Generaciones Debug', 'sin datos')
+
+    warnings = list(data_coherence.get('warnings', [])) if data_coherence else []
+    R.p(f'\n-- Alertas de Lectura --')
+    if warnings:
+        for w in warnings:
+            R.p(f'  - {w}')
+    else:
+        R.p('  - No hay alertas fuertes de alineacion entre Summary y Debug.')
+    if not debug_rows:
+        R.p('  - No hay registros Debug seleccionados; las metricas por coche no son concluyentes.')
+    if not summary_rows:
+        R.p('  - No hay Summary seleccionado; la lectura de generacion/convergencia queda limitada.')
+
+    R.p(f'\n-- KPIs Principales --')
+    if summary_rows:
+        n = len(summary_rows)
+        br = max(summary_rows, key=lambda x: x.get('best', 0.0))
+        mr = max(summary_rows, key=lambda x: x.get('mean', 0.0))
+        wr = min(summary_rows, key=lambda x: x.get('mean', 0.0))
+        means = [r.get('mean', 0.0) for r in summary_rows]
+        times = [r.get('time', 0.0) for r in summary_rows]
+        slope_mean = trend_slope([r.get('gen', i + 1) for i, r in enumerate(summary_rows)], means)
+        tail_n = min(50, max(1, n // 3)) if n >= 3 else n
+        tail = summary_rows[-tail_n:] if tail_n else []
+        add_kv(R, 'Generaciones analizadas', fmt_int(n))
+        add_kv(R, 'BestFit max', f'{br.get("best", 0.0):.2f} (gen {br.get("gen", 0)})')
+        add_kv(R, 'MeanFit max/min', f'{mr.get("mean", 0.0):.2f} / {wr.get("mean", 0.0):.2f}')
+        add_kv(R, 'MeanFit medio/P50', f'{mean(means):.2f} / {pctl(means, 50):.2f}')
+        add_kv(R, 'MeanFit tendencia', f'{slope_mean:+.4f} por gen normalizada')
+        add_kv(R, 'Tiempo medio/P50', f'{mean(times):.2f}s / {pctl(times, 50):.2f}s')
+        if tail:
+            add_kv(R, f'Ultimas {tail_n} gens', f'MeanFit {mean([r.get("mean", 0.0) for r in tail]):.2f}; Tiempo {mean([r.get("time", 0.0) for r in tail]):.2f}s')
+        test_stats = summarize_test_results(summary_rows)
+        if test_stats:
+            add_kv(
+                R,
+                'Test acierto global',
+                f'{test_stats["success_rate"]:.2f}% '
+                f'({test_stats["total_success"]}/{test_stats["total_n"]}, '
+                f'IC95 {test_stats["wilson_lo"]:.2f}-{test_stats["wilson_hi"]:.2f}%)',
+            )
+            add_kv(R, 'Test acierto P50/desv', f'{test_stats["success_median"]:.2f}% / {test_stats["success_std"]:.2f} pp')
+    else:
+        R.p('  Summary: sin datos.')
+
+    if debug_rows:
+        nd = len(debug_rows)
+        fits = [r.get('fit', 0.0) for r in debug_rows]
+        times_dbg = [r.get('time', 0.0) for r in debug_rows]
+        deaths = Counter(r.get('death', '') for r in debug_rows if r.get('death', ''))
+        family_counts = Counter(death_family(r.get('death', '')) for r in debug_rows if r.get('death', ''))
+        top_death = deaths.most_common(1)[0] if deaths else ('-', 0)
+        lazy_n = sum(1 for r in debug_rows if is_lazy_reason(r.get('death', '')))
+        death_fail_n = sum(1 for r in debug_rows if r.get('is_test_failure_death', is_test_failure_reason(r.get('death', ''))))
+        total_ticks = sum(r.get('t_tot', 0.0) for r in debug_rows)
+        stop_ticks = sum(r.get('t_stop_ctx', 0.0) for r in debug_rows)
+        legal_fail_n = family_counts.get('VIOLATION', 0)
+        add_kv(R, 'Debug registros', fmt_int(nd))
+        add_kv(R, 'Fitness raw medio/P50/P90', f'{mean(fits):.2f} / {pctl(fits, 50):.2f} / {pctl(fits, 90):.2f}')
+        add_kv(R, 'Tiempo vivo medio/P50', f'{mean(times_dbg):.2f}s / {pctl(times_dbg, 50):.2f}s')
+        add_kv(R, 'Muerte dominante', f'{top_death[0]} ({fmt_pct_ratio(top_death[1], nd, 1)})')
+        add_kv(R, 'Familias de muerte top', ', '.join(f'{k}={fmt_pct_ratio(v, nd, 1)}' for k, v in family_counts.most_common(4)) or '-')
+        add_kv(R, 'Fallo legal', f'{fmt_pct_ratio(legal_fail_n, nd, 2)} ({fmt_int(legal_fail_n)}/{fmt_int(nd)})')
+        add_kv(R, 'LAZY', f'{fmt_pct_ratio(lazy_n, nd, 2)} ({fmt_int(lazy_n)}/{fmt_int(nd)})')
+        fail_label = 'Fail por muerte' if MODE == 'test' else 'Muertes no exitosas segun TEST'
+        add_kv(R, fail_label, f'{fmt_pct_ratio(death_fail_n, nd, 2)} ({fmt_int(death_fail_n)}/{fmt_int(nd)})')
+        add_kv(R, 'Stop-context/ticks', fmt_pct_ratio(stop_ticks, total_ticks, 2))
+        add_kv(R, 'Stop/Yield completados', f'{sum(r.get("stop_done_n", 0.0) for r in debug_rows):.0f} / {sum(r.get("yield_done_n", 0.0) for r in debug_rows):.0f}')
+        add_kv(R, 'Stop/Yield bonus total', f'{sum(r.get("stop_bonus", 0.0) for r in debug_rows):.2f} / {sum(r.get("yield_bonus", 0.0) for r in debug_rows):.2f}')
+        if yield_stuck_info and yield_stuck_info.get('timefinished_rows', 0) > 0:
+            add_kv(
+                R,
+                'YieldTrap en TIME_FINISHED',
+                f'{yield_stuck_info.get("candidate_count", 0)}/{yield_stuck_info.get("timefinished_rows", 0)} '
+                f'candidatos; watch={yield_stuck_info.get("watch_count", 0)}',
+            )
+        if stop_stuck_info and stop_stuck_info.get('timefinished_rows', 0) > 0:
+            add_kv(
+                R,
+                'StopTrap en TIME_FINISHED',
+                f'{stop_stuck_info.get("candidate_count", 0)}/{stop_stuck_info.get("timefinished_rows", 0)} '
+                f'candidatos; watch={stop_stuck_info.get("watch_count", 0)}',
+            )
+        penalty_parts = [
+            f'Muerte={mean([r.get("pen_m", 0.0) for r in debug_rows]):.2f}',
+            f'Nav={mean([r.get("pen_nav", 0.0) for r in debug_rows]):.2f}',
+            f'Creep={mean([r.get("pen_creep", 0.0) for r in debug_rows]):.2f}',
+            f'SteerApp={mean([r.get("pen_steer_app", 0.0) for r in debug_rows]):.2f}',
+        ]
+        if debug_field_available(debug_rows, 'pen_align'):
+            penalty_parts.append(f'Align={mean([r.get("pen_align", 0.0) for r in debug_rows]):.2f}')
+        penalty_parts.append(f'Lazy={mean([r.get("pen_lazy", 0.0) for r in debug_rows]):.2f}')
+        add_kv(
+            R,
+            'Penalties medios clave',
+            '; '.join(penalty_parts),
+        )
+        mutation_rows = [
+            r for r in debug_rows
+            if not r.get('is_weight_initialization', False)
+            and str(r.get('mutation_kind', '')).startswith('MUT_')
+        ]
+        if mutation_rows:
+            add_kv(
+                R,
+                'Mutacion observada',
+                f'MutRate P50={pctl([r.get("mut_rate", 0.0) for r in mutation_rows], 50)*100.0:.2f}%; '
+                f'MutChanged P50={pctl([r.get("mut_changed", 0.0) for r in mutation_rows], 50):.0f}',
+            )
+        car_fams = summarize_car_index_families(debug_rows)
+        if car_fams:
+            add_kv(R, 'Familias CarIndex', ', '.join(f'{x["family"]}={x["n"]}' for x in car_fams))
+    else:
+        R.p('  Debug: sin datos.')
+
+    if debug_rows and debug_field_available(debug_rows, 'round_entered_n'):
+        R.p(f'\n-- Rotondas y Metricas Situacionales --')
+        nd = len(debug_rows)
+        round_entered = sum(r.get('round_entered_n', 0.0) for r in debug_rows)
+        round_completed = sum(r.get('round_completed_n', 0.0) for r in debug_rows)
+        round_collisions = sum(r.get('round_collisions', 0.0) for r in debug_rows)
+        round_ticks = sum(r.get('round_ticks', 0.0) for r in debug_rows)
+        total_ticks = sum(r.get('t_tot', 0.0) for r in debug_rows)
+        add_kv(R, 'Entradas/completadas', f'{round_entered:.0f} / {round_completed:.0f} ({fmt_pct_ratio(round_completed, round_entered, 2)})')
+        add_kv(R, 'Colisiones en rotonda', f'{round_collisions:.0f} ({fmt_pct_ratio(round_collisions, round_entered, 2)} por entrada)')
+        add_kv(R, 'Ticks en rotonda', f'{round_ticks:.0f} ({fmt_pct_ratio(round_ticks, total_ticks, 2)} del total)')
+        entry_speed_n = metric_exposure_count(debug_rows, 'round_entry_speed_avg')
+        entry_front_n = metric_exposure_count(debug_rows, 'round_entry_front_avg')
+        steer_n = metric_exposure_count(debug_rows, 'round_steer_avg')
+        throttle_n = metric_exposure_count(debug_rows, 'round_throttle_avg')
+        add_kv(R, 'EntrySpeed avg (N exp.)', f'{mean(metric_values(debug_rows, "round_entry_speed_avg")):.2f} (N={entry_speed_n}/{nd})')
+        add_kv(R, 'FrontObst entry avg (N exp.)', f'{mean(metric_values(debug_rows, "round_entry_front_avg")):.4f} (N={entry_front_n}/{nd})')
+        add_kv(R, 'Steering/Throttle in round', f'{mean(metric_values(debug_rows, "round_steer_avg")):.4f} (N={steer_n}) / {mean(metric_values(debug_rows, "round_throttle_avg")):.4f} (N={throttle_n})')
+        if debug_field_available(debug_rows, 'round_bonus'):
+            round_bonus = sum(r.get('round_bonus', 0.0) for r in debug_rows)
+            add_kv(R, 'RoundaboutBonus neto', f'{round_bonus:.2f}; {sdiv(round_bonus, round_entered):.2f}/entrada; {sdiv(round_bonus, round_ticks):.4f}/tick')
+            if debug_field_available(debug_rows, 'round_completion_bonus'):
+                add_kv(
+                    R,
+                    'Bonus C/E/T',
+                    f'+{sum(r.get("round_completion_bonus", 0.0) for r in debug_rows):.2f} / '
+                    f'-{sum(r.get("round_entry_penalty", 0.0) for r in debug_rows):.2f} / '
+                    f'-{sum(r.get("round_throttle_penalty", 0.0) for r in debug_rows):.2f}',
+                )
+        if debug_field_available(debug_rows, 'round_exit1_count'):
+            exit_parts = []
+            for exit_num, label in ((1, 'E1'), (2, 'E2'), (3, 'E3+')):
+                count = sum(r.get(f'round_exit{exit_num}_count', 0.0) for r in debug_rows)
+                deaths = sum(r.get(f'round_exit{exit_num}_deaths', 0.0) for r in debug_rows)
+                if count > 0:
+                    exit_parts.append(f'{label} {deaths:.0f}/{count:.0f}={fmt_pct_ratio(deaths, count, 1)}')
+                else:
+                    exit_parts.append(f'{label} sin exposicion')
+            add_kv(R, 'Muertes por salida', '; '.join(exit_parts))
+        R.p('  Nota: las medias de entrada/steering/throttle usan solo filas con exposicion real;')
+        R.p('  los ceros de coches que no entraron en rotonda no se mezclan como si fueran medidas reales.')
+
+    R.p(f'\n-- Diagnosticos Prioritarios --')
+    priority_lines = []
+    if data_coherence and data_coherence.get('status') in ('warning', 'critical'):
+        priority_lines.append('Primero validar coherencia: hay avisos de alineacion/cobertura.')
+    if summary_rows:
+        means = [r.get('mean', 0.0) for r in summary_rows]
+        slope_mean = trend_slope([r.get('gen', i + 1) for i, r in enumerate(summary_rows)], means)
+        if slope_mean < 0:
+            priority_lines.append(f'MeanFit cae ({slope_mean:+.4f}/gen): posible regresion o recompensa dominante negativa.')
+    if debug_rows:
+        family_counts = Counter(death_family(r.get('death', '')) for r in debug_rows if r.get('death', ''))
+        violation_pct = sdiv(family_counts.get('VIOLATION', 0) * 100.0, len(debug_rows))
+        collision_pct = sdiv(family_counts.get('COLLISION', 0) * 100.0, len(debug_rows))
+        if violation_pct >= 20.0:
+            priority_lines.append(f'Fallo legal alto ({violation_pct:.2f}%): revisar stop/yield/traffic/nav antes que microajustes de fitness.')
+        if collision_pct >= 20.0:
+            priority_lines.append(f'Colisiones altas ({collision_pct:.2f}%): revisar velocidad/steering/spawns problematicos.')
+    if yield_stuck_info and yield_stuck_info.get('candidate_count', 0) > 0:
+        priority_lines.append(
+            f'YieldTrap: {yield_stuck_info.get("candidate_count", 0)}/'
+            f'{yield_stuck_info.get("timefinished_rows", 0)} TIME_FINISHED candidatos.'
+        )
+    if stop_stuck_info and stop_stuck_info.get('candidate_count', 0) > 0:
+        priority_lines.append(
+            f'StopTrap: {stop_stuck_info.get("candidate_count", 0)}/'
+            f'{stop_stuck_info.get("timefinished_rows", 0)} TIME_FINISHED candidatos.'
+        )
+    if debug_rows and debug_field_available(debug_rows, 'round_entered_n'):
+        round_entered = sum(r.get('round_entered_n', 0.0) for r in debug_rows)
+        round_collisions = sum(r.get('round_collisions', 0.0) for r in debug_rows)
+        if round_entered > 0 and sdiv(round_collisions, round_entered) >= 0.20:
+            priority_lines.append(f'Rotondas: colision por entrada {sdiv(round_collisions*100.0, round_entered):.2f}%, probablemente un foco de regresion.')
+    for line in priority_lines[:8] or ['Sin diagnosticos prioritarios adicionales fuera de los insights automaticos.']:
+        R.p(f'  - {line}')
+    for line in auto_insights[:8]:
+        R.p(f'  - Insight: {line}')
+
+    R.p(f'\n-- Guia de Interpretacion para Otra IA --')
+    R.p('  - Tratar este bloque como indice y el resto del informe como evidencia detallada.')
+    R.p('  - No inferir causalidad desde Pearson/correlaciones; usarlas solo para priorizar hipotesis.')
+    R.p('  - Las metricas situacionales solo valen con denominador real: entradas, ticks o completaciones.')
+    R.p('  - NumRoundaboutsCompleted es limite inferior: se confirma al registrar una entrada posterior.')
+    R.p('  - RoundaboutBonus neto = bonus completado - penalty entrada - penalty throttle cuando el desglose existe.')
+    R.p('  - Mutacion 23/06: GenerationsWithoutImprovement no se exporta; el informe valida rangos esperados, no el valor exacto por individuo.')
+    R.p('  - En TEST, Summary es la fuente principal de acierto/fallo; Debug reconstruye causas y contexto.')
+    R.p('  - Si hay filas Debug excluidas sin Summary cerrado, evitar conclusiones sobre generaciones incompletas.')
+
 def save_generation_mapping(out_dir, info):
     path = os.path.join(out_dir, 'mapeo_generaciones.csv')
     rows = []
@@ -7682,10 +8328,15 @@ def build_combined_summary_meta(train_meta, test_meta):
         'header': [],
         'mapped_keys': sorted(set(train_meta.get('mapped_keys', []) + test_meta.get('mapped_keys', []))),
         'unknown_headers': sorted(set(train_meta.get('unknown_headers', []) + test_meta.get('unknown_headers', []))),
+        'duplicate_headers': sorted(set(train_meta.get('duplicate_headers', []) + test_meta.get('duplicate_headers', []))),
+        'duplicate_mapped_keys': sorted(set(train_meta.get('duplicate_mapped_keys', []) + test_meta.get('duplicate_mapped_keys', []))),
         'missing_required': sorted(set(train_meta.get('missing_required', [])) & set(test_meta.get('missing_required', []))),
         'data_rows': train_meta.get('data_rows', 0) + test_meta.get('data_rows', 0),
         'empty_rows': train_meta.get('empty_rows', 0) + test_meta.get('empty_rows', 0),
         'short_rows': train_meta.get('short_rows', 0) + test_meta.get('short_rows', 0),
+        'long_rows': train_meta.get('long_rows', 0) + test_meta.get('long_rows', 0),
+        'header_cols': max(train_meta.get('header_cols', 0), test_meta.get('header_cols', 0)),
+        'max_cols': max(train_meta.get('max_cols', 0), test_meta.get('max_cols', 0)),
         'loaded_rows': 0,
         'discarded_rows': 0,
     }
@@ -7854,6 +8505,22 @@ def run_analysis_variant(
         )
 
     R = Report()
+    report_external_ai_brief(
+        R,
+        summary_rows_idx,
+        debug_rows_idx,
+        summary_meta,
+        debug_meta,
+        debug_scope,
+        data_coherence,
+        detected_info,
+        gen_norm_info,
+        auto_insights,
+        yield_stuck_info=yield_stuck_info,
+        stop_stuck_info=stop_stuck_info,
+        train_summary_rows=train_summary_rows,
+        test_summary_rows=test_summary_rows,
+    )
     report_input_quality(R, summary_meta, debug_meta)
     report_debug_scope(R, debug_scope)
     report_data_coherence(R, data_coherence)

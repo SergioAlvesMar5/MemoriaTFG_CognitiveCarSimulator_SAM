@@ -4,11 +4,16 @@ import os
 import tempfile
 import numpy as np
 from analyse_current import (
+    DEBUG_ALIASES,
+    DEBUG_REQUIRED_KEYS,
+    NETWORK_OUTPUT_WEIGHTS_TOTAL,
     WEIGHTS_TOTAL,
     align_debug_to_completed_summary,
     classify_test_outcome,
     correlation_sample,
     infer_label_from_debug_rows,
+    inspect_csv_layout,
+    lifetime_distribution_bins,
     normalize_header_token,
     metric_values,
     metric_exposure_count,
@@ -80,6 +85,25 @@ def test_metric_values_exclude_situational_zeros_without_exposure():
         {'round_entered_n': 1, 'round_bonus_per_entry': 0.0},
     ]
     assert metric_values(bonus_rows, 'round_bonus_per_entry') == [-15.0, 0.0]
+
+
+def test_lifetime_distribution_bins_are_relative_to_max_time():
+    rows = [
+        {'time': 0.0, 'car': 'C0'},
+        {'time': 5.0, 'car': 'C5'},
+        {'time': 50.0, 'car': 'C50'},
+        {'time': 100.0, 'car': 'C100'},
+    ]
+    info = lifetime_distribution_bins(rows, step_pct=10)
+    assert info['max_time'] == 100.0
+    assert info['total'] == 4
+    assert info['bins'][0]['pct_label'] == '0-9%'
+    assert info['bins'][-1]['pct_label'] == '90-100%'
+    assert info['bins'][0]['sec_start'] == 0.0
+    assert info['bins'][0]['sec_end'] == 10.0
+    assert info['bins'][5]['count'] == 1
+    assert info['bins'][-1]['count'] == 1
+    assert info['max_row']['car'] == 'C100'
 
 
 def test_infer_label_from_debug_rows_prefers_phase_flags():
@@ -242,6 +266,53 @@ def test_new_debug_schema_does_not_shift_removed_components():
     assert rows[0]['round_exit3_throttle_avg'] == -0.2
 
 
+def test_debug_parser_supports_alignment_penalty_23_06():
+    header = [
+        'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
+        'Acum_AlignmentPenalty',
+    ]
+    values = [1, 'Car1', 100, 12, 'Spawn1', 'TIMEFINISHED', 77.5]
+    path = ''
+    try:
+        with tempfile.NamedTemporaryFile('w', newline='', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(header)
+            writer.writerow(values)
+            path = tmp.name
+        rows = parse_debug(path)
+    finally:
+        if path and os.path.exists(path):
+            os.unlink(path)
+
+    assert len(rows) == 1
+    assert rows[0]['pen_align'] == 77.5
+    assert 'pen_align' in rows[0]['_available_fields']
+    assert rows[0]['_schema'] == '2026-06-alignment-penalty'
+
+
+def test_csv_layout_reports_duplicate_mapped_headers():
+    header = [
+        'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
+        'Acum_SteerApproachPenalty', 'Acum_SteerApproachPenalty',
+    ]
+    values = [1, 'Car1', 100, 12, 'Spawn1', 'TIMEFINISHED', 3.0, 4.0]
+    path = ''
+    try:
+        with tempfile.NamedTemporaryFile('w', newline='', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(header)
+            writer.writerow(values)
+            path = tmp.name
+        meta = inspect_csv_layout(path, DEBUG_ALIASES, DEBUG_REQUIRED_KEYS, min_cols=6)
+    finally:
+        if path and os.path.exists(path):
+            os.unlink(path)
+
+    assert meta['duplicate_headers'] == ['Acum_SteerApproachPenalty x2']
+    assert meta['duplicate_mapped_keys'] == ['pen_steer_app: Acum_SteerApproachPenalty, Acum_SteerApproachPenalty']
+    assert meta['long_rows'] == 0
+
+
 def test_current_network_weight_count_and_test_rules():
     assert WEIGHTS_TOTAL == 352
     assert classify_test_outcome({'death': 'TIMEFINISHED', 'time': 60, 'fit': 30000}) == 'success'
@@ -286,9 +357,13 @@ def test_evolution_manager_mutation_profiles():
         bounds=bounds,
     )
     assert seed['expected_rate'] == 0
-    assert mutated['expected_rate'] == 0.03
+    assert mutated['expected_rate'] is None
+    assert mutated['expected_min'] == 1 / WEIGHTS_TOTAL
+    assert mutated['expected_max'] == 32 / WEIGHTS_TOTAL
     assert large_mutation_family['kind'] == 'MUT_LOADED_LARGE'
-    assert large_mutation_family['expected_rate'] == 0.06
+    assert large_mutation_family['expected_rate'] is None
+    assert large_mutation_family['expected_min'] == 33 / WEIGHTS_TOTAL
+    assert large_mutation_family['expected_max'] == (NETWORK_OUTPUT_WEIGHTS_TOTAL * 2) / WEIGHTS_TOTAL
 
 
 if __name__ == "__main__":

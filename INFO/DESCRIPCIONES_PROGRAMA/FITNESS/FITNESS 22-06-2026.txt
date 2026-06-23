@@ -225,7 +225,7 @@ Luego se setea LastLocation con GetActorLocation. Después de eso hay un SetTime
 
 EventTick:
 
-Lo primero hay un Parent:Tick de 0.0. Luego hay un SetAngularDamping cuyo target=mesh, InDamping=(SelectFloat(a=0.0, b=3.0, picka=Ismovingonground(AsChaosWheeledVehicleMovementComponent))). Luego hay un Branch cuya condition es NOT(IsDead), si es false, vacío, si es true sigue el flujo. Luego hay un Branch cuya condition es (NOT(TrainingMode de AiController)) AND (TimeAlived>MaxTimeAlived). Si es true llama a KillCar cuya razón de muerte es TIMEFINISHED, si es false, pasa a otro branch cuya condition es TimeAlived>120. Si es true, llama a KillCar cuya razón de muerte es TIMEFINISHED, si es false, llama a la función UpdateFitness.
+Lo primero hay un Parent:Tick de 0.0. Luego hay un SetAngularDamping cuyo target=mesh, InDamping=(SelectFloat(a=0.0, b=3.0, picka=Ismovingonground(AsChaosWheeledVehicleMovementComponent))). Luego hay un Branch cuya condition es NOT(IsDead), si es false, vacío, si es true sigue el flujo. Luego hay un Branch cuya condition es (NOT(TrainingMode de AiController)) AND (TimeAlived>MaxTimeAlived). Si es true llama a KillCar cuya razón de muerte es TIMEFINISHED, si es false, pasa a otro branch cuya condition es TimeAlived>600. Si es true, llama a KillCar cuya razón de muerte es TIMEFINISHED, si es false, llama a la función UpdateFitness.
 
 
 
@@ -607,7 +607,8 @@ Luego, pasa a un branch (D), cuya condition es TrafficControlTypedelaicontroller
 
 Si es true, se setea DeltaCreepingPenalty como Clamp(value=SafeDivide(a=ABS(GetForwardSpeed), b=MAX(AproachSpeed, 1.0)), min=0.0, max=1.0) x MAX(AproachSpeed, 0.0) x SafeDelta x (1- ClampFloat(value=SafeDivide(a= Distance(GetActorLocation, StopTargetLocationdelAiController), b=MAX(Sensorentrydistancedeaicontroller, 1.0)), min=0.0, max=1.0)). Luego hay un set Fitness como Fitness - DeltaCreepingPenalty. tras eso se setea Debug_Acum_CreepingPenalty como Debug_Acum_CreepingPenalty + DeltaCreepingPenalty.
 
-Luego hay otro Branch cuya condition es (ForceStopdeaicontroller OR (IsTrafficLightActivedelaicontroller AND TrafficLightStatedelaicontroller<=0.5)) AND (ABS(getfordwardspeed)<(Maxspeeddelaicontroller*0.005)), si es false sigue el flujo. 
+Luego hay otro Branch cuya condition es (ForceStop OR (IsTrafficLightActive AND TrafficLightState<=0.5)) AND (ABS(ForwardSpeed) < MaxSpeed(AiController) × 0.005) AND (StopValidationTime <= SafeDivide(SensorEntryDistance(AiController), MAX(ABS(AproachSpeed), MaxSpeed(AiController) × 0.005))), si es false sigue el flujo.
+ 
 si es true setea DeltaWaitBonus como (((LERP(A=1.0, B=(1-(ABS(distsensordcha-distsensorizda))), alpha=frontobstacledistance) x SafeDelta x AproachSpeed x frontobstacledistance)+(((Clamp(value=(aproachspeed/maxspeed),min=0.0,max=1.0)^2)*maxspeed*frontobsacledistance^2*SafeDelta))) x (1-ClampFloat(value=SafeDivide(Distance(GetActorLocation, StopTargetLocationdelaicontroller), MAX(SensorEntryDistancedelacontroller, 1.0)), min=0.0, max=1.0)). Luego setea fitness como Fitness + DeltaWaitBonus. Luego setea Debug_Acum_WaitBonus como Debug_Acum_WaitBonus + DeltaWaitBonus. Ahora, se pasa al calculo del fitness:
 
 
