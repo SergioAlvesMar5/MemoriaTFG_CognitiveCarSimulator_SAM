@@ -22,10 +22,10 @@ La tabla~\ref{tab:cronologia} sintetiza los principales hitos recogidos en las a
 \midrule
 \endhead
 \bottomrule
-\multicolumn{3}{c}{\textit{Fuente. Elaboración propia a partir de las actas de seguimiento.}}\\
+\multicolumn{3}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir de las actas de seguimiento.}}\\
 \endfoot
 \bottomrule
-\multicolumn{3}{c}{\textit{Fuente. Elaboración propia a partir de las actas de seguimiento.}}\\
+\multicolumn{3}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir de las actas de seguimiento.}}\\
 \endlastfoot
 27/11/2025 & Integración de tráfico y elección de la primera IA. & Se prioriza la IA vehicular y se revisan semáforos dinámicos. Se descarta una malla dinámica para reconocer caminos por su coste de desarrollo.\\
 11/12/2025 & Representación de las rutas de la ciudad. & Se descarta mapear todo el escenario con splines y se prueba el \textit{Path Finding} de Unreal. Se separan la decisión del modelo y la aplicación física del control.\\
@@ -36,6 +36,40 @@ La tabla~\ref{tab:cronologia} sintetiza los principales hitos recogidos en las a
 05/03/2026 & Demostración fallida y resultados difíciles de interpretar. & Se decide instrumentar la función de fitness y simplificar temporalmente los escenarios más complejos para localizar el origen de los fallos.\\
 19/03/2026 & Segunda demostración con navegación ya estable en buena parte del mapa. & Se acepta la base técnica, se planifica la reorganización del repositorio y se preparan la compilación para Windows y las siguientes mejoras.\\
 \end{longtable}
+
+\Needspace{16\baselineskip}
+\section{Línea evolutiva del desarrollo}
+
+Además de los hitos de reunión, el proyecto ha seguido una evolución técnica marcada por pruebas que no siempre dieron un resultado utilizable a la primera. Esa evolución es relevante porque explica por qué la solución actual no se limita a una red neuronal aislada, sino que integra sensores, reglas de tráfico, persistencia de modelos, análisis de CSV y pruebas de regresión.
+
+La tabla~\ref{tab:linea-evolutiva} resume las fases principales. No pretende listar cada cambio menor de Blueprint, sino recoger las decisiones que modificaron la dirección del trabajo.
+
+{\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{L{2.2cm}L{4.2cm}L{7.5cm}}
+\caption{Línea evolutiva del desarrollo técnico.}\label{tab:linea-evolutiva}\\
+\toprule
+\textbf{Periodo} & \textbf{Prueba o problema} & \textbf{Aprendizaje incorporado}\\
+\midrule
+\endfirsthead
+\caption[]{Línea evolutiva del desarrollo técnico (continuación).}\\
+\toprule
+\textbf{Periodo} & \textbf{Prueba o problema} & \textbf{Aprendizaje incorporado}\\
+\midrule
+\endhead
+\bottomrule
+\multicolumn{3}{>{\centering\arraybackslash}p{0.9\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, descripciones de Blueprints y análisis de datos.}}\\
+\endfoot
+\bottomrule
+\multicolumn{3}{>{\centering\arraybackslash}p{0.9\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, descripciones de Blueprints y análisis de datos.}}\\
+\endlastfoot
+Noviembre-diciembre & Tráfico autónomo inicial y conexión red-vehículo. & Se comprobó que el objetivo debía centrarse primero en IA vehicular. La red quedó acoplada a dos salidas continuas, dirección y aceleración/frenado, para respetar la física del vehículo.\\
+Enero-febrero & Rigidez de NavMesh y \textit{Path Finding}. & Las rutas deterministas ayudaban a desplazar actores, pero no resolvían bien curvas, cruces ni control continuo. Se adoptó percepción local con sensores y aprendizaje evolutivo.\\
+Marzo & Demostración fallida e interpretación insuficiente de los fallos. & La observación visual dejó de ser suficiente. Se instrumentó el fitness, se exportaron métricas por coche y se simplificaron temporalmente escenarios para localizar causas.\\
+Abril-mayo & Señalización, stops, cedas e intersecciones. & Los actores de tráfico pasaron a comunicar contexto al controlador. Los bordes de cruce se asociaron a dirección y trigger para que cada maniobra tuviera límites sensoriales coherentes.\\
+Junio & Separación train/test, rotondas y análisis de regresión. & Se diferenciaron spawns y trayectorias por modo, se añadieron métricas de rotonda y se compararon bloques repetidos. Las sesiones del 22 y 23 de junio muestran que una mejora local del fitness puede degradar stops o generalización.\\
+\end{longtable}
+}
 
 \section{Alcance}
 
@@ -66,10 +100,10 @@ La tabla~\ref{tab:riesgos} relaciona los riesgos más relevantes con su impacto,
 \midrule
 \endhead
 \bottomrule
-\multicolumn{4}{c}{\textit{Fuente. Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
+\multicolumn{4}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
 \endfoot
 \bottomrule
-\multicolumn{4}{c}{\textit{Fuente. Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
+\multicolumn{4}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
 \endlastfoot
 Rigidez de navegación determinista & Comportamiento poco realista y baja utilidad clínica & Alta & Pivotar a percepción local con sensores y red neuronal.\\
 Fitness mal calibrado & Aprendizaje de estrategias no deseadas & Alta & Instrumentar componentes, exportar CSV y analizar penalizaciones por familia de muerte.\\

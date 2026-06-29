@@ -2,7 +2,7 @@
 
 \section{Unreal Engine 5}
 
-Unreal Engine 5 es el motor sobre el que se desarrolla el simulador. Proporciona renderizado 3D, editor visual, sistema de actores, colisiones, físicas, Blueprints y herramientas de depuración~\cite{unreal}. Su elección viene heredada de la versión inicial del proyecto y resulta coherente con los requisitos de realismo visual, interacción en tiempo real y despliegue del simulador como aplicación ejecutable.
+Unreal Engine 5 es el motor sobre el que se desarrolla el simulador. Proporciona renderizado 3D, editor visual, sistema de actores, colisiones, físicas, Blueprints y herramientas de depuración~\cite{unreal,blueprints}. Su elección viene heredada de la versión inicial del proyecto y resulta coherente con los requisitos de realismo visual, interacción en tiempo real y despliegue del simulador como aplicación ejecutable.
 
 El trabajo se implementa principalmente mediante Blueprints, lo que permite integrar lógica de IA, controladores, sensores y eventos de tráfico dentro del propio editor. Este enfoque facilita la iteración rápida, aunque introduce retos de mantenibilidad cuando los grafos crecen. Por ello se han documentado los Blueprints principales del gestor evolutivo, el controlador de IA, el vehículo autónomo y los actores de señalización. Las denominaciones concretas de estos módulos se recogen en el anexo de fuentes para mantener la trazabilidad técnica sin sobrecargar el texto principal.
 
@@ -14,7 +14,7 @@ Esta separación es importante porque mantiene el comportamiento dentro de la f�
 
 \section{Raycasting y percepción local}
 
-La percepción del vehículo se implementa mediante trazas o rayos simulados. El controlador lanza once sensores en un ángulo de visión de 180 grados desde el vehículo. Cada sensor devuelve una distancia normalizada al primer obstáculo relevante, con valor cercano a 1 cuando no se detecta un obstáculo próximo y valores menores cuando existe un límite, pared, vehículo o borde de intersección.
+La percepción del vehículo se implementa mediante trazas o rayos simulados, una técnica soportada por Unreal Engine para consultar colisiones a lo largo de una línea de la escena~\cite{traces}. El controlador lanza once sensores en un ángulo de visión de 180 grados desde el vehículo. Cada sensor devuelve una distancia normalizada al primer obstáculo relevante, con valor cercano a 1 cuando no se detecta un obstáculo próximo y valores menores cuando existe un límite, pared, vehículo o borde de intersección.
 
 Además de los sensores laterales y frontales, se calculan variables derivadas como la distancia frontal a obstáculo, la distancia del sensor izquierdo, la distancia del sensor derecho y la diferencia horizontal entre ambos. Estas magnitudes permiten construir una señal de centrado en carril y detectar correcciones equivocadas.
 
