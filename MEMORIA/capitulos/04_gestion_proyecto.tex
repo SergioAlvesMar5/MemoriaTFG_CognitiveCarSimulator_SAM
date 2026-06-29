@@ -6,6 +6,8 @@ El desarrollo se ha organizado mediante un enfoque iterativo e incremental. Las 
 
 La planificación inicial contemplaba una progresión amplia: semáforos y señales, IA vehicular, stops y cedas, perfiles de conductor, peatones, bicicletas, animales, diversidad de assets y optimización. El desarrollo real concentró el esfuerzo en construir una base sólida de IA vehicular, debido a la dificultad técnica de lograr navegación autónoma estable en la ciudad.
 
+Durante el desarrollo se utilizaron asistentes de inteligencia artificial como apoyo de análisis y depuración. Su papel fue generar hipótesis, ordenar alternativas, proponer comprobaciones y ayudar a interpretar logs, Blueprints y CSV. Las respuestas no se incorporaron de forma automática: las decisiones se contrastaron con el comportamiento observado en Unreal Engine, las descripciones fechadas del programa, los resultados exportados y las pruebas de regresión. El anexo B documenta una selección depurada de estos prompts.
+
 \section{Cronología de decisiones}
 
 La tabla~\ref{tab:cronologia} sintetiza los principales hitos recogidos en las actas de seguimiento.
@@ -66,7 +68,9 @@ La tabla~\ref{tab:linea-evolutiva} resume las fases principales. No pretende lis
 Noviembre-diciembre & Tráfico autónomo inicial y conexión red-vehículo. & Se comprobó que el objetivo debía centrarse primero en IA vehicular. La red quedó acoplada a dos salidas continuas, dirección y aceleración/frenado, para respetar la física del vehículo.\\
 Enero-febrero & Rigidez de NavMesh y \textit{Path Finding}. & Las rutas deterministas ayudaban a desplazar actores, pero no resolvían bien curvas, cruces ni control continuo. Se adoptó percepción local con sensores y aprendizaje evolutivo.\\
 Marzo & Demostración fallida e interpretación insuficiente de los fallos. & La observación visual dejó de ser suficiente. Se instrumentó el fitness, se exportaron métricas por coche y se simplificaron temporalmente escenarios para localizar causas.\\
+Marzo-abril & Precisión de parada, marcha atrás y coches inmóviles. & Se introdujeron penalizaciones específicas para parada imprecisa, retroceso y estancamiento injustificado. Las consultas de apoyo insistieron en evitar constantes arbitrarias y en derivar umbrales de variables ya presentes en el simulador.\\
 Abril-mayo & Señalización, stops, cedas e intersecciones. & Los actores de tráfico pasaron a comunicar contexto al controlador. Los bordes de cruce se asociaron a dirección y trigger para que cada maniobra tuviera límites sensoriales coherentes.\\
+Mayo-junio & Persistencia de modelos, duplicados y selección para reentrenar. & Se revisó la estrategia de \texttt{SuperCarModel}, \texttt{SessionCarModel} y copias fechadas. También se compararon respaldos para evitar repetir tests sobre modelos equivalentes y para elegir candidatos de reentrenamiento con datos, no solo por fitness máximo.\\
 Junio & Separación train/test, rotondas y análisis de regresión. & Se diferenciaron spawns y trayectorias por modo, se añadieron métricas de rotonda, solapes entre vehículos y diagnóstico de navegación fuera de calzada. Las sesiones del 22, 23, 26 y 29 de junio muestran que una mejora local del fitness puede degradar stops o generalización.\\
 \end{longtable}
 }
@@ -78,7 +82,7 @@ El alcance funcional completado se centra en conseguir que los vehículos de tr�
 \Needspace{9\baselineskip}
 Para alimentar ese controlador se ha incorporado percepción local mediante raycasting y se han normalizado las variables que entran en la red. El aprendizaje se realiza con poblaciones de vehículos, selección, mutación y elitismo. Los pesos obtenidos pueden guardarse y cargarse en sesiones posteriores, lo que evita reiniciar el proceso cada vez que se abre el simulador. La evaluación se apoya en una función de fitness que combina avance, centrado, velocidad, cumplimiento de señales y penalizaciones por comportamientos no deseados.
 
-El alcance también comprende la interacción con semáforos, stops y cedas, incluida la detección de líneas de parada y la validación de las maniobras. Las intersecciones pueden habilitar trayectorias diferentes en entrenamiento y test, y las rotondas registran entrada, salida, aceleración, giro, colisiones y recompensa específica. Se han separado asimismo los puntos de aparición de ambos modos y se exportan métricas individuales y resúmenes a CSV. Esta instrumentación permite comparar sesiones y localizar intersecciones, salidas de rotonda o puntos del mapa donde el modelo falla de forma repetida.
+Incluye además semáforos, stops, cedas, líneas de parada y validación de maniobras. En cruces y rotondas se registran trayectorias, entrada, salida, giro, colisiones y recompensa, con puntos de aparición separados para entrenamiento y test. Los CSV resultantes permiten comparar ejecuciones y localizar fallos repetidos por zona.
 
 No forman parte de esta versión la implementación completa de peatones, bicicletas y animales, ni los perfiles de conductor diferenciados previstos en la propuesta inicial. Tampoco se aborda todavía una validación con pacientes. Estas ampliaciones requieren primero consolidar la navegación vehicular y disponer de un protocolo de prueba estable, por lo que se mantienen como trabajo posterior.
 
