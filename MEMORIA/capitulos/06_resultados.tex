@@ -8,7 +8,7 @@ La evaluación de test agrega las cuatro carpetas del 18 de junio: \texttt{12-41
 
 Los tamaños efectivos se obtienen de los CSV: 30 vehículos por generación de entrenamiento y 54 por ejecución de test. Esta comprobación es necesaria porque \texttt{PopulationSize} es editable en la instancia del mapa y su valor por defecto no describe necesariamente la sesión archivada. También se detectó que las carpetas de test \texttt{2026-06-11\_11-55} y \texttt{2026-06-11\_13-08} contienen un \texttt{Fitness\_Debug.csv} idéntico; en las comparaciones se cuenta una sola vez.
 
-Los bloques posteriores del 22 y 23 de junio se emplean como pruebas de regresión, no como nueva referencia principal. El primero conserva un rendimiento próximo al del día 18, aunque con más fallo legal. El segundo muestra una degradación clara por \texttt{STOP\_VIOLATION}. Por ello, los resultados principales del capítulo se apoyan en la configuración validada del 18 de junio y las sesiones posteriores se interpretan como evidencia para decidir las siguientes correcciones.
+Los bloques posteriores del 22, 23, 26 y 29 de junio se emplean como pruebas de regresión, no como nueva referencia principal. El primero conserva un rendimiento próximo al del día 18, aunque con más fallo legal. El día 23 muestra una degradación clara por \texttt{STOP\_VIOLATION}. El día 26 combina una sesión corta poco satisfactoria con otra muy favorable, y el día 29 vuelve a caer por fallos legales. Por ello, los resultados principales del capítulo se apoyan en la configuración validada del 18 de junio y las sesiones posteriores se interpretan como evidencia para decidir las siguientes correcciones.
 
 \Needspace{22\baselineskip}
 \section{Resumen cuantitativo}
@@ -63,7 +63,7 @@ La sesión registra además 5365 entradas en rotonda, 1075 completaciones confir
 
 El criterio implementado considera fallo cualquier colisión, infracción, estancamiento, corrección o marcha atrás incorrecta, vuelco, red inválida o navegación fuera de zona; también exige al menos 60 segundos de vida. El umbral de fitness de 25000 está configurado, pero desactivado mediante \texttt{TestUseFitness}. Con estas reglas, el bloque del 18 de junio obtiene 652 aciertos de 1134 evaluaciones, un 57.50\%. El intervalo de confianza de Wilson al 95\% se sitúa entre el 54.60\% y el 60.34\%~\cite{wilson}. Las cuatro sesiones oscilan entre el 53.70\% y el 61.42\%, con una mediana del 57.04\%.
 
-La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archivadas. No constituye un experimento controlado entre fechas, porque durante junio cambian el fitness, las intersecciones, el número de spawns y los modelos. Se utiliza para mostrar la evolución observada, no para atribuir causalidad a una modificación aislada. En esta tabla, el fitness medio se calcula directamente sobre \texttt{Fitness\_Final}; por ello puede diferir ligeramente del promedio de \textit{MeanFit} de la tabla~\ref{tab:resultados-principales}. El duplicado exacto del 11 de junio se excluye y el bloque del día 15 conserva 431 de las 432 filas declaradas.
+La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archivadas. No constituye un experimento controlado entre fechas, porque durante junio cambian el fitness, las intersecciones, el número de spawns y los modelos. Se utiliza para mostrar la evolución observada, no para atribuir causalidad a una modificación aislada. En esta tabla, el fitness medio se calcula directamente sobre \texttt{Fitness\_Final}; por ello puede diferir ligeramente del promedio de \textit{MeanFit} de la tabla~\ref{tab:resultados-principales}. El duplicado exacto del 11 de junio se excluye. Cuando el resumen declara más evaluaciones que registros completos de detalle, se conserva la cifra de detalle para el fitness y la vida media, y la tasa de acierto procede de \texttt{Test\_Summary.csv}.
 
 {\small
 \setlength{\tabcolsep}{4pt}
@@ -94,13 +94,15 @@ La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archi
 18 de junio & 1134 & 57.50\% & 44631.86 & 77.91 s\\
 22 de junio & 550 & 52.91\% & 44296.62 & 76.20 s\\
 23 de junio & 1094 & 16.27\% & 28264.74 & 50.21 s\\
+26 de junio & 467 & 49.89\% & 41869.89 & 73.34 s\\
+29 de junio & 1179 & 30.42\% & 33191.28 & 61.07 s\\
 \end{longtable}
 }
 
 Respecto al bloque del 8 de junio, el del día 18 aumenta la tasa de acierto en 32.31 puntos porcentuales, el fitness final medio en un 42.6\% y el tiempo de vida en un 46.6\%. La progresión no es uniforme: el resultado desciende el día 15 y vuelve a hacerlo en varias sesiones del 16. Esta variación respalda la decisión de agregar repeticiones y conservar cada configuración antes de aceptar una mejora.
 
 \Needspace{7\baselineskip}
-Los bloques del 22 y 23 muestran por qué no basta con seguir la fecha más reciente. El día 22 mantiene un 52.91\% de acierto y una vida media de 76.20 segundos, todavía cerca de la referencia. El día 23 cae al 16.27\% de acierto y concentra casi la mitad de sus fallos en causas legales. Ese contraste convierte las sesiones posteriores en material de diagnóstico, no en sustitución directa del bloque del día 18.
+Los bloques posteriores muestran por qué no basta con seguir la fecha más reciente. El día 22 mantiene un 52.91\% de acierto y una vida media de 76.20 segundos, todavía cerca de la referencia. El día 23 cae al 16.27\% de acierto y concentra casi la mitad de sus fallos en causas legales. El día 26 mejora hasta el 49.89\% agregado, pero procede de solo dos sesiones muy desiguales: una de 29.66\% y otra de 83.05\%. El día 29, ya con dos sesiones de 590 evaluaciones declaradas cada una, baja al 30.42\% y vuelve a situar \texttt{STOP\_VIOLATION} como causa dominante. Ese contraste convierte las sesiones posteriores en material de diagnóstico, no en sustitución directa del bloque del día 18.
 
 \Needspace{13\baselineskip}
 \section{Razones de finalización}
@@ -119,7 +121,7 @@ Estos datos confirman que la señalización modifica la acción del controlador,
 
 El bloque de test registra 443 entradas en rotonda, 31 completaciones confirmadas y 149 colisiones. Esto equivale a un mínimo del 7.00\% de completaciones y a 33.63 colisiones por cada 100 entradas. El saldo del componente específico es \(-187295.02\): las bonificaciones de completado suman 82883.48 puntos, frente a 2408.29 de penalización de entrada y 267770.21 de penalización por aceleración.
 
-El signo negativo no significa necesariamente que el vehículo nunca complete la maniobra, sino que la escala del castigo por acelerar domina sobre la recompensa. La corrección de unidades introducida el 22 de junio intenta resolver este desequilibrio. Dado que todavía no existe un bloque de test posterior a esa modificación, su efecto debe considerarse pendiente de validación.
+El signo negativo no significa necesariamente que el vehículo nunca complete la maniobra, sino que la escala del castigo por acelerar domina sobre la recompensa. La corrección de unidades introducida el 22 de junio intenta resolver este desequilibrio. Los tests posteriores elevan el porcentaje mínimo de completaciones de rotonda respecto al 18 de junio, pero no estabilizan el comportamiento global: el 29 de junio se registran 69 completaciones sobre 363 entradas y 103 colisiones en rotonda, mientras los fallos legales dominan el resultado. Por tanto, la escala de rotonda parece mejor instrumentada, pero no puede validarse de forma aislada mientras el stop siga introduciendo regresiones.
 
 \Needspace{12\baselineskip}
 \section{Dificultad por puntos de aparición}
@@ -128,7 +130,7 @@ Cada uno de los 54 spawns dispone de 21 observaciones. Los puntos 16, 9 y 25 alc
 
 La diferencia entre el mejor y el peor fitness medio supera los 58000 puntos. Como todos tienen el mismo número de observaciones, no procede de un desequilibrio de muestreo. Puede deberse a la geometría inicial, la primera intersección, las trayectorias habilitadas o la adaptación del modelo a esa zona; por ello, los puntos 3, 36 y 42 deben utilizarse en pruebas dirigidas y los puntos 16, 9 y 25 como control de regresión.
 
-\section{Pruebas posteriores del 22 y 23 de junio}
+\section{Pruebas posteriores hasta el 29 de junio}
 
 La sesión \texttt{train\_2026-06-22\_12-04} incorpora la nueva escala de rotonda y la simplificación del tiempo límite del stop. Contiene 613 generaciones y 18379 registros. Su \textit{MeanFit} desciende un 59.0\% entre las primeras y las últimas 50 generaciones, de 40620.05 a 16672.78, y el tiempo medio cae de 67.41 a 36.00 segundos. El cambio más importante aparece en las razones de muerte: 10691 coches, el 58.17\%, terminan por una causa legal y 10672 de ellos son \texttt{STOP\_VIOLATION}. En el entrenamiento estable del día 18, los fallos legales eran 348, el 2.12\%.
 
@@ -136,10 +138,10 @@ Sin embargo, los dos tests del 22 de junio no reproducen con la misma intensidad
 
 La regresión queda mucho más clara el 23 de junio. El entrenamiento \texttt{train\_2026-06-23\_11-40} contiene 319 generaciones y 8584 registros, con una caída del \textit{MeanFit} del 65.8\% entre las primeras y las últimas 50 generaciones. El 51.93\% de los coches termina por fallo legal y \texttt{STOP\_VIOLATION} aparece como causa dominante. Los cuatro tests del mismo día reúnen 1094 registros de detalle, pero solo alcanzan un 16.27\% de acierto, con un 48.99\% de fallos legales.
 
-La comparación no aísla por sí sola cuál de las modificaciones provoca el resultado, pero sí demuestra que la referencia del día 18 no debe reemplazarse. La siguiente iteración debe revisar el límite temporal del stop, repetir una prueba corta modificando un único componente y mantener constantes modelo, spawns y criterios de test antes de lanzar un entrenamiento largo.
+La sesión larga del 25 de junio no se considera candidata a referencia. Aunque contiene 8266 generaciones, su fitness medio queda en 1413.30 puntos, el tiempo vivo medio baja a 8.85 segundos y el 71.49\% de los registros termina por colisión. El entrenamiento corto del 26 de junio tiene solo 30 registros de detalle, insuficientes para extraer una conclusión sólida. El entrenamiento del 29 de junio vuelve a ser completo, con 515 generaciones y 15935 registros, pero mantiene un 63.26\% de fallos legales y \texttt{STOP\_VIOLATION} como razón dominante.
 
-\section{Conclusión experimental}
+Los tests del 26 y 29 de junio confirman esa lectura. El día 26 suma 467 evaluaciones y alcanza un 49.89\% agregado, pero el resultado mezcla una sesión de 29.66\% con otra de 83.05\%, demasiado dispar como para aceptarla como nueva referencia. El día 29 aporta un bloque más amplio, con 1180 evaluaciones declaradas y 1179 registros de detalle, pero baja al 30.42\% de acierto. Además, introduce 492 solapes entre coches y mantiene un 42.07\% de fallos legales.
 
-El bloque del 18 de junio mejora de forma sustancial la tasa de acierto y reduce las colisiones respecto a la referencia anterior. También amplía la evaluación a 54 spawns y aporta evidencia específica sobre rotondas, mutaciones y contexto de señalización. Sin embargo, el 40.04\% de colisiones, la diferencia entre spawns y el saldo negativo en rotondas impiden considerar resuelto el tráfico autónomo.
+La comparación no aísla por sí sola cuál de las modificaciones provoca el resultado, pero sí demuestra que la referencia del día 18 no debe reemplazarse. La siguiente iteración debe revisar el límite temporal del stop, repetir pruebas cortas modificando un único componente y mantener constantes modelo, spawns y criterios de test antes de lanzar un entrenamiento largo.
 
-Las pruebas del 22 y 23 de junio añaden una conclusión metodológica: una mejora local de fórmula puede degradar otra parte del comportamiento y los máximos de fitness no bastan para detectarlo. La versión estable debe definirse por un bloque reproducible de entrenamiento y test, con datos completos, modelo identificado y criterios constantes, no por la fecha más reciente ni por una ejecución aislada favorable.
+Como conclusión experimental, el bloque del 18 de junio mejora la tasa de acierto, reduce colisiones y amplía la evaluación a 54 spawns. También aporta evidencias sobre rotondas, mutaciones y señalización. Aun así, el 40.04\% de colisiones, la diferencia entre spawns y el saldo negativo en rotondas mantienen abierto el problema. Las pruebas del 22 al 29 de junio muestran que una mejora local de fórmula puede degradar otra parte del comportamiento y que los máximos de fitness no bastan. La versión estable debe definirse por un bloque reproducible de entrenamiento y test, con datos completos, modelo identificado y criterios constantes.
