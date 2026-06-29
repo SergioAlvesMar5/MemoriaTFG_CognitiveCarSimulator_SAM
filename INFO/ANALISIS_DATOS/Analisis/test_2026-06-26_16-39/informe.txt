@@ -1,0 +1,1032 @@
+============================================================================
+  RESUMEN EJECUTIVO PARA IA EXTERNA
+============================================================================
+  Objetivo: este bloque resume lo imprescindible para analizar el train/test
+  sin abrir Fitness_Debug.csv ni los Summary. El detalle completo queda debajo.
+  Modo de este informe            : test (TEST)
+  Fecha de analisis               : 26/06/2026 16:39
+  Modo global detectado           : test
+  Motivo de deteccion             : Fitness_Debug contiene solo filas TEST.
+  Summary usado                   : Test_Summary.csv
+  Debug usado                     : Fitness_Debug.csv
+  Training/Test Summary filas     : 8266/3
+  Esquema Debug detectado         : 2026-06-alignment-roundabout-bonus-breakdown
+  Campos mapeados Summary/Debug   : 12/82
+  Cabeceras extra Summary         : -
+  Cabeceras extra Debug           : -
+  Cabeceras duplicadas Debug      : -
+  Campos duplicados Debug         : -
+
+-- Cobertura y Validez de Datos --
+  Estado coherencia               : OK
+  Summary filas/gens              : 3/3 (1..3)
+  Debug filas/gens                : 177/3 (1..3)
+  Cobertura gens Debug            : 100.0%
+  Cobertura filas Debug           : 100.0% (esperado~177, sum(N))
+  Registros Debug totales         : 177
+  Registros seleccionados         : 177
+  Split TRAIN/TEST/UNK            : 0/177/0
+  Generaciones Summary            : 1..3 -> 1..3
+  Generaciones Debug              : 1..3 -> 1..3
+
+-- Alertas de Lectura --
+  - No hay alertas fuertes de alineacion entre Summary y Debug.
+
+-- KPIs Principales --
+  Generaciones analizadas         : 3
+  BestFit max                     : 76907.73 (gen 3)
+  MeanFit max/min                 : 55558.20 / 52046.44
+  MeanFit medio/P50               : 53737.82 / 53608.81
+  MeanFit tendencia               : -781.1837 por gen normalizada
+  Tiempo medio/P50                : 91.86s / 91.29s
+  Ultimas 1 gens                  : MeanFit 52046.44; Tiempo 90.75s
+  Test acierto global             : 83.05% (147/177, IC95 76.84-87.86%)
+  Test acierto P50/desv           : 83.05% / 3.39 pp
+  Debug registros                 : 177
+  Fitness raw medio/P50/P90       : 53754.37 / 58000.53 / 70917.44
+  Tiempo vivo medio/P50           : 91.86s / 100.00s
+  Muerte dominante                : TIMEFINISHED (83.1%)
+  Familias de muerte top          : TIMEOUT=83.1%, COLLISION=8.5%, VIOLATION=8.5%
+  Colisiones normal/rotonda       : 0/15 (rotonda 100.0% de colisiones)
+  Fallo legal                     : 8.47% (15/177)
+  LAZY                            : 0.00% (0/177)
+  Fail por muerte                 : 16.95% (30/177)
+  Stop-context/ticks              : 8.03%
+  Stop/Yield completados          : 115 / 280
+  Stop/Yield bonus total          : 691422.76 / 318901.96
+  YieldTrap en TIME_FINISHED      : 3/147 candidatos; watch=4
+  StopTrap en TIME_FINISHED       : 1/147 candidatos; watch=1
+  Penalties medios clave          : Muerte=120.26; Nav=180.57; Creep=385.37; SteerApp=247.09; Align=0.00; Lazy=0.00
+  Familias CarIndex               : LOADED=177
+
+-- Rotondas y Metricas Situacionales --
+  Entradas/completadas            : 73 / 11 (15.07%)
+  Colisiones en rotonda           : 15 (20.55% por entrada)
+  Ticks en rotonda                : 20471 (8.00% del total)
+  EntrySpeed avg (N exp.)         : 962.94 (N=73/177)
+  FrontObst entry avg (N exp.)    : 1.0870 (N=73/177)
+  Steering/Throttle in round      : 0.0450 (N=73) / 0.2322 (N=73)
+  RoundaboutBonus neto            : -1744.68; -23.90/entrada; -0.0852/tick
+  Bonus C/E/T                     : +30520.41 / -747.26 / -31517.84
+  Muertes por salida              : E1 11/84=13.1%; E2 5/42=11.9%; E3+ 13/15=86.7%
+  Nota: las medias de entrada/steering/throttle usan solo filas con exposicion real;
+  los ceros de coches que no entraron en rotonda no se mezclan como si fueran medidas reales.
+
+-- Diagnosticos Prioritarios --
+  - MeanFit cae (-781.1837/gen): posible regresion o recompensa dominante negativa.
+  - YieldTrap: 3/147 TIME_FINISHED candidatos.
+  - StopTrap: 1/147 TIME_FINISHED candidatos.
+  - Rotondas: colision por entrada 20.55%, probablemente un foco de regresion.
+  - Insight: Tendencia MeanFit negativa (-781.1837/gen normalizada).
+  - Insight: Tiempo medio de vida en descenso (-0.271s/gen).
+  - Insight: Acierto medio solido en test (83.05%).
+  - Insight: Razon de muerte dominante: TIMEFINISHED (83.1%).
+  - Insight: Fallo legal (stop+traffic+yield+nav): 8.47% de coches.
+  - Insight: Colisiones: 15 en rotonda (100.0% de colisiones) y 0 normales.
+  - Insight: Cobertura de contexto stop/semaforo: 8.03% de ticks.
+  - Insight: Ventanas de validacion acumuladas: Yield=0.05s y Stop=0.43s por coche.
+
+-- Guia de Interpretacion para Otra IA --
+  - Tratar este bloque como indice y el resto del informe como evidencia detallada.
+  - No inferir causalidad desde Pearson/correlaciones; usarlas solo para priorizar hipotesis.
+  - Las metricas situacionales solo valen con denominador real: entradas, ticks o completaciones.
+  - NumRoundaboutsCompleted es limite inferior: se confirma al registrar una entrada posterior.
+  - RoundaboutBonus neto = bonus completado - penalty entrada - penalty throttle cuando el desglose existe.
+  - Mutacion 23/06: GenerationsWithoutImprovement no se exporta; el informe valida rangos esperados, no el valor exacto por individuo.
+  - En TEST, Summary es la fuente principal de acierto/fallo; Debug reconstruye causas y contexto.
+  - Si hay filas Debug excluidas sin Summary cerrado, evitar conclusiones sobre generaciones incompletas.
+
+============================================================================
+  CALIDAD DE ENTRADA (CSV)
+============================================================================
+
+-- Summary --
+  Ruta:            c:\Users\SergioULE\Documents\Unreal Projects\cognitive-car\Saved\Logs\Test_Summary.csv
+  Tamano:          466 bytes
+  Modificado:      2026-06-26 16:39:51
+  Filas datos:     3
+  Filas cargadas:  3
+  Filas descart.:  0
+  Filas vacias:    0
+  Filas cortas:    0
+  Campos mapeados: 12 -> best, best_death, eval_n, fail_count, fail_rate, gen, mean, pop_count, pop_death, success_count, success_rate, time
+  Campos faltan:   -
+  Cabeceras extra: -
+
+-- Debug --
+  Ruta:            c:\Users\SergioULE\Documents\Unreal Projects\cognitive-car\Saved\Logs\Fitness_Debug.csv
+  Tamano:          89,887 bytes
+  Modificado:      2026-06-26 16:39:50
+  Filas datos:     177
+  Filas cargadas:  177
+  Filas seleccionadas (modo): 177
+  Filas descart.:  0
+  Filas vacias:    0
+  Filas cortas:    0
+  Campos mapeados: 82 -> a, brake_grace, brake_in, car, car_index, coast_t, death, f, fit, fit_peak_raw, gen, mut_avg_mag, mut_changed, mut_large ... (+68)
+  Campos faltan:   -
+  Cabeceras extra: -
+
+-- Alcance del Debug por Fase --
+  Modo analizado:           test
+  Registros debug totales:  177
+  Registros seleccionados:  177
+  Split TRAIN/TEST/UNK:     0 / 177 / 0
+
+-- Coherencia Summary vs Debug --
+  Estado:                  OK
+  Summary filas/gens:      3 / 3 (1..3)
+  Debug filas/gens:        177 / 3 (1..3)
+  Solape de generaciones:  3
+  Cobertura gens Debug:    100.0%
+  Cobertura filas Debug:   100.0% (esperado~177 via sum(N), pop~59)
+  Sin alertas fuertes de desalineacion entre Summary y Debug.
+
+-- Deteccion automatica de fase --
+  Modo global detectado: test
+  Modo de este informe:  test
+  Motivo global:         Fitness_Debug contiene solo filas TEST.
+
+-- Normalizacion de Generaciones (1..N) --
+  Summary original: 1..3 (3 gens) -> analisis: 1..3 [sin cambios]
+  Debug original:   1..3 (3 gens) -> analisis: 1..3 [sin cambios]
+
+-- Insights Automaticos --
+  - Tendencia MeanFit negativa (-781.1837/gen normalizada).
+  - Tiempo medio de vida en descenso (-0.271s/gen).
+  - Acierto medio solido en test (83.05%).
+  - Razon de muerte dominante: TIMEFINISHED (83.1%).
+  - Fallo legal (stop+traffic+yield+nav): 8.47% de coches.
+  - Colisiones: 15 en rotonda (100.0% de colisiones) y 0 normales.
+  - Cobertura de contexto stop/semaforo: 8.03% de ticks.
+  - Ventanas de validacion acumuladas: Yield=0.05s y Stop=0.43s por coche.
+  - Completados: Stop=0.65/coche (bonus 3906.34), Yield=1.58/coche (bonus 1801.71).
+  - Rotondas: 73 entradas, 11 completaciones confirmadas por reentrada (15.1%, limite inferior), 15 colisiones (20.5% por entrada).
+  - Cobertura en rotonda: 8.00% de ticks.
+  - RoundaboutBonus neto: -1744.68 (-23.90/entrada, -0.0852/tick en rotonda).
+  - Desglose RoundaboutBonus: +30520.41 completado, -747.26 entrada, -31517.84 throttle.
+  - El penalty de throttle en rotonda pesa mucho frente al bonus de completado; revisar aceleracion dentro de rotonda.
+  - RoundaboutBonus neto negativo; el castigo de throttle en rotonda esta superando los bonus de entrada/completado.
+  - Tasa alta de colision en rotonda (>=20% por entrada); revisar velocidad de entrada y steering dentro de la rotonda.
+  - Tramo de rotonda mas critico: Exit3+ con 13/15 muertes (86.7%), steering/tick=0.813, throttle/tick=0.569.
+  - Seguimiento steering: Input=167.76, Target=167.76, GapAbs=0.00 por coche.
+  - Seguimiento de steering estable (Gap/Target=0.0%).
+  - Penalty de creeping acumulado: media 385.37 por coche.
+  - Penalty de navegacion acumulado: media 180.57 por coche.
+  - Penalty de marcha atras acumulado: media 0.00 por coche.
+  - Penalty por giro en parado acumulado: media 4.54 por coche.
+  - Penalty por aproximacion con steering acumulado: media 247.09 por coche.
+  - La penalizacion por aproximacion de steering supera la de giro en parado; revisar suavizado antes de la fase stop.
+  - Penalty de alineacion 23/06 acumulado: media 0.00 por coche.
+  - Acum_ThrottleDuringGraceTime medio: 1.94 por coche.
+  - Acum_BrakeDuringGraceTime medio: 0.07 por coche.
+  - En contexto stop/semaforo se frena proporcionalmente mas que en global (99.77% vs 19.44%).
+  - Se omitieron 9 spawns con violaciones por N<10; faltan mas datos.
+  - Spawns con mayor exposicion stop-context (>=P75=10.42%): BP_SpawnPoint36:40.4%, BP_SpawnPoint42:33.3%, BP_SpawnPoint3:28.9%, BP_SpawnPoint41:25.6%, BP_SpawnPoint35:16.8%.
+  - Posible atasco en ceda: 3/147 TIME_FINISHED (2.04%) con bajo fitness y alto stop-context (score>=3.20).
+  - Hotspot atasco-ceda por spawn: BP_SpawnPoint34 (Cand=1, TF=3, StopCtxP50=17.6%, FitMed=50233.0).
+  - Generacion mas afectada por atasco-ceda: G2 (Cand=1, TF=51, Cand/TF=2.0%).
+  - Posible atasco en stop: 1/147 TIME_FINISHED (0.68%) con alto stop-context y validacion de stop (score>=3.00).
+  - Causa dominante en StopTrap (candidatos): OTHER (1 casos).
+  - Hotspot atasco-stop por spawn: BP_SpawnPoint6 (Cand=1, TF=3, StopCtxP50=12.0%, FitMed=45744.8).
+  - Generacion mas afectada por atasco-stop: G3 (Cand=1, TF=47, Cand/TF=2.1%).
+
+-- Resumen de Fases (Summary CSV) --
+  Training_Summary filas: 8266
+  Test_Summary filas:     3
+
+============================================================================
+  ANALISIS TEST - 3 generaciones
+  Fecha: 26/06/2026 16:39
+============================================================================
+
+-- Estadisticas Generales --
+  Generaciones:     1 - 3 (3 total)
+  BestFit max:      76907.731392  (gen 3)
+  BestFit medio:    76139.082636
+  MeanFit max:      55558.202852  (gen 2)
+  MeanFit medio:    53737.816460
+  MeanFit min:      52046.439596  (gen 3)
+  MeanFit P25/P50/P75: 52827.6233 / 53608.8069 / 54583.5049
+  MeanFit < 0:      0/3 (0.0%)
+  TiempoMedio:      90.75s - 93.56s (media 91.86s)
+  PopDeaths medio:  49.0/59
+
+-- KPI de Test (promedio) --
+  N evaluado medio: 59.0
+  Aciertos (%):     83.05%
+  Errores (%):      16.95%
+  Score (Acierto):  83.05
+  Score (WilsonLB): 71.58
+  Success P10/P50/P90: 80.34% / 83.05% / 85.76%
+  IC95 Aciertos (global): [76.84%, 87.86%]
+
+-- Razones de Muerte (Mejor Coche) --
+  TIMEFINISHED                            :    3 (100.0%)
+
+-- Razon de Muerte Mas Popular (Poblacion) --
+  TIMEFINISHED                            :    3 gens (media 49.0/59)
+
+-- Top 3 (BestFit) --
+  Gen     3: Best=76907.7314  Mean=52046.4396  t=90.75s  TIMEFINISHED
+  Gen     2: Best=76627.2948  Mean=55558.2029  t=93.56s  TIMEFINISHED
+  Gen     1: Best=74882.2217  Mean=53608.8069  t=91.29s  TIMEFINISHED
+
+-- Top 3 (MeanFit) --
+  Gen     2: Mean=55558.2029  Best=76627.2948  t=93.56s
+  Gen     1: Mean=53608.8069  Best=74882.2217  t=91.29s
+  Gen     3: Mean=52046.4396  Best=76907.7314  t=90.75s
+
+============================================================================
+  ANALISIS DE CONVERGENCIA Y ESTABILIDAD
+============================================================================
+
+-- Mejora General --
+  Fitness máximo alcanzado:  76907.731392
+  Generación del máximo:     Gen 3
+  Fitness inicial:           74882.221712
+  Mejora total:              2025.509680 (2.70%)
+
+-- Estado de Convergencia --
+  Generaciones en plateau:   2 (66.7%)
+  Varianza promedio:         22401.266175
+  Tendencia reciente (últ 10): 1012.75484000
+  CV (Best):                 0.0144
+  CV (Mean):                 0.0327
+
+-- Diagnóstico --
+  [OK] CONVERGENCIA DETECTADA: >30% generaciones en plateau
+  [OK] MEJORANDO: Tendencia positiva reciente
+
+============================================================================
+  ANALISIS PREDICTIVO
+============================================================================
+
+-- Regresión Lineal (últimas 20 gens) --
+  Pendiente (slope):         1012.75484000
+  Correlación:               0.9228
+  Ajuste del modelo:         Bueno
+
+-- Predicciones (próximas 10 generaciones) --
+  Gen     4: fitness predicho ~= 77920.4862
+  Gen     5: fitness predicho ~= 78933.2411
+  Gen     6: fitness predicho ~= 79945.9959
+  ... (7 más predicciones disponibles)
+
+-- Proyección --
+  Estimado alcanzar +10% en ~= 8 generaciones
+
+-- Diagnostico de Tendencia y Volatilidad --
+  BestFit std/cv:   1097.4679 / 1.44%
+  MeanFit std/cv:   1759.4325 / 3.27%
+  Tiempo std/cv:    1.4927 / 1.62%
+  Pendiente BestFit: +1012.754840/gen (+101275.4840/100gens)
+  Pendiente MeanFit: -781.183669/gen (-78118.3669/100gens)
+  Pendiente Tiempo:  -0.271186/gen (-27.1186/100gens)
+  Racha sin nuevo BestFit: 0 gens
+  Racha MeanFit negativo:  0 gens
+  Racha MeanFit no-neg:    3 gens
+
+-- Saltos Mas Grandes Entre Gens (por |delta MeanFit|) --
+      GenA->GenB |       dMean |       dBest |     dTime
+  ------------------------------------------------------
+      2->3     |  -3511.7633 |   +280.4366 |   -2.814s
+      1->2     |  +1949.3959 |  +1745.0731 |   +2.271s
+
+-- Bottom 3 Generaciones por MeanFit --
+  Gen     3: Mean=52046.4396 Best=76907.7314 t= 90.75s BestDeath=TIMEFINISHED PopDeath=TIMEFINISHED
+  Gen     1: Mean=53608.8069 Best=74882.2217 t= 91.29s BestDeath=TIMEFINISHED PopDeath=TIMEFINISHED
+  Gen     2: Mean=55558.2029 Best=76627.2948 t= 93.56s BestDeath=TIMEFINISHED PopDeath=TIMEFINISHED
+
+-- Top 3 Generaciones por MeanFit --
+  Gen     2: Mean=55558.2029 Best=76627.2948 t= 93.56s BestDeath=TIMEFINISHED PopDeath=TIMEFINISHED
+  Gen     1: Mean=53608.8069 Best=74882.2217 t= 91.29s BestDeath=TIMEFINISHED PopDeath=TIMEFINISHED
+  Gen     3: Mean=52046.4396 Best=76907.7314 t= 90.75s BestDeath=TIMEFINISHED PopDeath=TIMEFINISHED
+
+-- KPI Test: Diagnostico Detallado --
+  SuccessRate std/cv: 3.3898 / 4.08%
+  FailRate std/cv:    3.3898 / 20.00%
+  Mejor SuccessRate:  Gen 2 -> 86.44%
+  Peor SuccessRate:   Gen 3 -> 79.66%
+  Fallo duro medio:   0.00 coches/gen
+  Fallo temprano med: 0.00 coches/gen
+  Fallo colision med: 0.00 coches/gen
+
+============================================================================
+  ANALISIS DETALLADO (Fitness_Debug) - 177 registros, 3 gens
+============================================================================
+
+-- Fitness por Spawn (59 spawns) --
+            Spawn |     N |      Media |    Mediana |        Max |        P75 |  %Neg |  tMed
+  -------------------------------------------------------------------------------------------
+    BP_SpawnPoint |     3 |    70726.0 |    70519.4 |    71232.1 |    70875.7 |    0% | 100.0s
+  BP_SpawnPoint10 |     3 |    55762.3 |    64047.4 |    72680.0 |    68363.7 |    0% | 91.0s
+  BP_SpawnPoint11 |     3 |    44480.0 |    60392.5 |    64751.2 |    62571.9 |    0% | 75.0s
+  BP_SpawnPoint12 |     3 |    40119.9 |    56538.6 |    65206.3 |    60872.4 |   33% | 72.3s
+  BP_SpawnPoint13 |     3 |    53654.2 |    50117.5 |    61915.3 |    56016.4 |    0% | 100.0s
+  BP_SpawnPoint14 |     3 |    56118.6 |    65574.4 |    73531.6 |    69553.0 |    0% | 83.7s
+  BP_SpawnPoint15 |     3 |    53070.7 |    49168.0 |    61663.1 |    55415.6 |    0% | 100.0s
+  BP_SpawnPoint16 |     3 |    71113.1 |    71192.0 |    73759.1 |    72475.6 |    0% | 100.0s
+  BP_SpawnPoint17 |     3 |    54508.5 |    54421.0 |    61618.4 |    58019.7 |    0% | 100.0s
+  BP_SpawnPoint18 |     3 |    65337.1 |    63208.2 |    70200.1 |    66704.2 |    0% | 100.0s
+  BP_SpawnPoint19 |     3 |    48444.4 |    45062.3 |    56646.3 |    50854.3 |    0% | 86.0s
+   BP_SpawnPoint2 |     3 |    54108.9 |    56051.1 |    58000.5 |    57025.8 |    0% | 100.0s
+  BP_SpawnPoint20 |     3 |    59736.8 |    58962.0 |    66384.2 |    62673.1 |    0% | 100.0s
+  BP_SpawnPoint21 |     3 |    56344.9 |    57166.4 |    64352.6 |    60759.5 |    0% | 100.0s
+  BP_SpawnPoint22 |     3 |    67189.2 |    65105.7 |    76907.7 |    71006.7 |    0% | 100.0s
+  BP_SpawnPoint23 |     3 |    60575.9 |    54185.7 |    74882.2 |    64534.0 |    0% | 100.0s
+  BP_SpawnPoint24 |     3 |    65901.5 |    69058.5 |    76045.4 |    72551.9 |    0% | 100.0s
+  BP_SpawnPoint25 |     3 |    71210.6 |    73170.6 |    76585.9 |    74878.2 |    0% | 100.0s
+  BP_SpawnPoint26 |     3 |    63693.4 |    62433.1 |    71842.7 |    67137.9 |    0% | 99.3s
+  BP_SpawnPoint27 |     3 |    60297.4 |    59521.8 |    70180.0 |    64850.9 |    0% | 97.3s
+  BP_SpawnPoint28 |     3 |    57881.0 |    57903.3 |    61527.7 |    59715.5 |    0% | 100.0s
+  BP_SpawnPoint29 |     3 |    42930.9 |    57286.0 |    59329.7 |    58307.9 |    0% | 80.3s
+   BP_SpawnPoint3 |     3 |     7772.9 |     7777.8 |     7882.0 |     7829.9 |    0% | 20.3s
+  BP_SpawnPoint30 |     3 |    61097.9 |    61900.0 |    64469.0 |    63184.5 |    0% | 99.3s
+  BP_SpawnPoint31 |     3 |    69713.8 |    68357.9 |    76627.3 |    72492.6 |    0% | 100.0s
+  BP_SpawnPoint32 |     3 |    55586.9 |    55253.4 |    65646.3 |    60449.8 |    0% | 100.0s
+  BP_SpawnPoint33 |     3 |    63686.2 |    60890.3 |    70491.0 |    65690.6 |    0% | 100.0s
+  BP_SpawnPoint34 |     3 |    55607.2 |    50789.2 |    65799.5 |    58294.4 |    0% | 100.0s
+  BP_SpawnPoint35 |     3 |    29289.1 |    17355.0 |    53363.8 |    35359.4 |    0% | 57.7s
+  BP_SpawnPoint36 |     3 |     7557.2 |     7557.2 |     7576.5 |     7566.9 |    0% | 14.0s
+  BP_SpawnPoint37 |     3 |    44898.7 |    48121.8 |    61896.7 |    55009.2 |    0% | 84.3s
+  BP_SpawnPoint38 |     3 |    52572.2 |    51614.8 |    59212.1 |    55413.5 |    0% | 97.7s
+  BP_SpawnPoint39 |     3 |    64045.9 |    68367.0 |    69667.4 |    69017.2 |    0% | 100.0s
+   BP_SpawnPoint4 |     3 |    56212.7 |    54409.6 |    60616.3 |    57513.0 |    0% | 97.0s
+  BP_SpawnPoint40 |     3 |    49947.4 |    50481.0 |    53803.5 |    52142.2 |    0% | 100.0s
+  BP_SpawnPoint41 |     3 |    43006.1 |    46815.7 |    49063.7 |    47939.7 |    0% | 100.0s
+  BP_SpawnPoint42 |     3 |    40286.4 |    37244.0 |    47709.2 |    42476.6 |    0% | 100.0s
+  BP_SpawnPoint43 |     3 |    27230.0 |     8384.2 |    65122.5 |    36753.3 |    0% | 51.0s
+  BP_SpawnPoint44 |     3 |    62670.0 |    64027.7 |    66138.0 |    65082.9 |    0% | 100.0s
+  BP_SpawnPoint45 |     3 |    41906.9 |    50873.9 |    64611.6 |    57742.7 |    0% | 75.0s
+  BP_SpawnPoint46 |     3 |    44038.2 |    48419.0 |    54857.7 |    51638.4 |    0% | 88.3s
+  BP_SpawnPoint47 |     3 |    43559.9 |    43298.7 |    52832.8 |    48065.7 |    0% | 91.7s
+  BP_SpawnPoint48 |     3 |    50638.0 |    47473.2 |    64067.5 |    55770.3 |    0% | 100.0s
+  BP_SpawnPoint49 |     3 |    65162.7 |    63692.2 |    68733.1 |    66212.6 |    0% | 100.0s
+   BP_SpawnPoint5 |     3 |    46541.3 |    59074.0 |    68589.5 |    63831.7 |    0% | 78.3s
+  BP_SpawnPoint50 |     3 |    56972.2 |    60668.8 |    66466.1 |    63567.4 |    0% | 100.0s
+  BP_SpawnPoint51 |     3 |    56803.2 |    60040.2 |    63188.9 |    61614.6 |    0% | 100.0s
+  BP_SpawnPoint52 |     3 |    52072.0 |    54217.9 |    61383.3 |    57800.6 |    0% | 100.0s
+  BP_SpawnPoint53 |     3 |    52852.2 |    49671.7 |    59905.2 |    54788.4 |    0% | 100.0s
+  BP_SpawnPoint54 |     3 |    57496.3 |    58979.9 |    59373.8 |    59176.8 |    0% | 100.0s
+  BP_SpawnPoint55 |     3 |    65607.2 |    75039.5 |    75317.1 |    75178.3 |    0% | 100.0s
+  BP_SpawnPoint56 |     3 |    33791.5 |    41628.3 |    48270.0 |    44949.2 |    0% | 80.7s
+  BP_SpawnPoint57 |     3 |    66424.1 |    68148.9 |    71705.0 |    69926.9 |    0% | 100.0s
+  BP_SpawnPoint58 |     3 |    58403.8 |    58129.8 |    73601.9 |    65865.8 |    0% | 100.0s
+  BP_SpawnPoint59 |     3 |    64486.5 |    65392.0 |    70734.4 |    68063.2 |    0% | 100.0s
+   BP_SpawnPoint6 |     3 |    50810.2 |    46556.5 |    60129.3 |    53342.9 |    0% | 100.0s
+   BP_SpawnPoint7 |     3 |    65616.1 |    67026.8 |    67176.5 |    67101.7 |    0% | 100.0s
+   BP_SpawnPoint8 |     3 |    65665.1 |    67325.8 |    76222.3 |    71774.1 |    0% | 99.7s
+   BP_SpawnPoint9 |     3 |    68274.5 |    67137.5 |    71698.4 |    69418.0 |    0% | 100.0s
+
+-- Ranking de Spawns (mas dificil a mas facil, por fitness medio) --
+   1. BP_SpawnPoint36: media=    7557.2  mediana=    7557.2  %neg=0%  t=14.0s
+   2. BP_SpawnPoint3: media=    7772.9  mediana=    7777.8  %neg=0%  t=20.3s
+   3. BP_SpawnPoint43: media=   27230.0  mediana=    8384.2  %neg=0%  t=51.0s
+   4. BP_SpawnPoint35: media=   29289.1  mediana=   17355.0  %neg=0%  t=57.7s
+   5. BP_SpawnPoint56: media=   33791.5  mediana=   41628.3  %neg=0%  t=80.7s
+   6. BP_SpawnPoint12: media=   40119.9  mediana=   56538.6  %neg=33%  t=72.3s
+   7. BP_SpawnPoint42: media=   40286.4  mediana=   37244.0  %neg=0%  t=100.0s
+   8. BP_SpawnPoint45: media=   41906.9  mediana=   50873.9  %neg=0%  t=75.0s
+   9. BP_SpawnPoint29: media=   42930.9  mediana=   57286.0  %neg=0%  t=80.3s
+  10. BP_SpawnPoint41: media=   43006.1  mediana=   46815.7  %neg=0%  t=100.0s
+  11. BP_SpawnPoint47: media=   43559.9  mediana=   43298.7  %neg=0%  t=91.7s
+  12. BP_SpawnPoint46: media=   44038.2  mediana=   48419.0  %neg=0%  t=88.3s
+  13. BP_SpawnPoint11: media=   44480.0  mediana=   60392.5  %neg=0%  t=75.0s
+  14. BP_SpawnPoint37: media=   44898.7  mediana=   48121.8  %neg=0%  t=84.3s
+  15. BP_SpawnPoint5: media=   46541.3  mediana=   59074.0  %neg=0%  t=78.3s
+  16. BP_SpawnPoint19: media=   48444.4  mediana=   45062.3  %neg=0%  t=86.0s
+  17. BP_SpawnPoint40: media=   49947.4  mediana=   50481.0  %neg=0%  t=100.0s
+  18. BP_SpawnPoint48: media=   50638.0  mediana=   47473.2  %neg=0%  t=100.0s
+  19. BP_SpawnPoint6: media=   50810.2  mediana=   46556.5  %neg=0%  t=100.0s
+  20. BP_SpawnPoint52: media=   52072.0  mediana=   54217.9  %neg=0%  t=100.0s
+  21. BP_SpawnPoint38: media=   52572.2  mediana=   51614.8  %neg=0%  t=97.7s
+  22. BP_SpawnPoint53: media=   52852.2  mediana=   49671.7  %neg=0%  t=100.0s
+  23. BP_SpawnPoint15: media=   53070.7  mediana=   49168.0  %neg=0%  t=100.0s
+  24. BP_SpawnPoint13: media=   53654.2  mediana=   50117.5  %neg=0%  t=100.0s
+  25. BP_SpawnPoint2: media=   54108.9  mediana=   56051.1  %neg=0%  t=100.0s
+  26. BP_SpawnPoint17: media=   54508.5  mediana=   54421.0  %neg=0%  t=100.0s
+  27. BP_SpawnPoint32: media=   55586.9  mediana=   55253.4  %neg=0%  t=100.0s
+  28. BP_SpawnPoint34: media=   55607.2  mediana=   50789.2  %neg=0%  t=100.0s
+  29. BP_SpawnPoint10: media=   55762.3  mediana=   64047.4  %neg=0%  t=91.0s
+  30. BP_SpawnPoint14: media=   56118.6  mediana=   65574.4  %neg=0%  t=83.7s
+  31. BP_SpawnPoint4: media=   56212.7  mediana=   54409.6  %neg=0%  t=97.0s
+  32. BP_SpawnPoint21: media=   56344.9  mediana=   57166.4  %neg=0%  t=100.0s
+  33. BP_SpawnPoint51: media=   56803.2  mediana=   60040.2  %neg=0%  t=100.0s
+  34. BP_SpawnPoint50: media=   56972.2  mediana=   60668.8  %neg=0%  t=100.0s
+  35. BP_SpawnPoint54: media=   57496.3  mediana=   58979.9  %neg=0%  t=100.0s
+  36. BP_SpawnPoint28: media=   57881.0  mediana=   57903.3  %neg=0%  t=100.0s
+  37. BP_SpawnPoint58: media=   58403.8  mediana=   58129.8  %neg=0%  t=100.0s
+  38. BP_SpawnPoint20: media=   59736.8  mediana=   58962.0  %neg=0%  t=100.0s
+  39. BP_SpawnPoint27: media=   60297.4  mediana=   59521.8  %neg=0%  t=97.3s
+  40. BP_SpawnPoint23: media=   60575.9  mediana=   54185.7  %neg=0%  t=100.0s
+  41. BP_SpawnPoint30: media=   61097.9  mediana=   61900.0  %neg=0%  t=99.3s
+  42. BP_SpawnPoint44: media=   62670.0  mediana=   64027.7  %neg=0%  t=100.0s
+  43. BP_SpawnPoint33: media=   63686.2  mediana=   60890.3  %neg=0%  t=100.0s
+  44. BP_SpawnPoint26: media=   63693.4  mediana=   62433.1  %neg=0%  t=99.3s
+  45. BP_SpawnPoint39: media=   64045.9  mediana=   68367.0  %neg=0%  t=100.0s
+  46. BP_SpawnPoint59: media=   64486.5  mediana=   65392.0  %neg=0%  t=100.0s
+  47. BP_SpawnPoint49: media=   65162.7  mediana=   63692.2  %neg=0%  t=100.0s
+  48. BP_SpawnPoint18: media=   65337.1  mediana=   63208.2  %neg=0%  t=100.0s
+  49. BP_SpawnPoint55: media=   65607.2  mediana=   75039.5  %neg=0%  t=100.0s
+  50. BP_SpawnPoint7: media=   65616.1  mediana=   67026.8  %neg=0%  t=100.0s
+  51. BP_SpawnPoint8: media=   65665.1  mediana=   67325.8  %neg=0%  t=99.7s
+  52. BP_SpawnPoint24: media=   65901.5  mediana=   69058.5  %neg=0%  t=100.0s
+  53. BP_SpawnPoint57: media=   66424.1  mediana=   68148.9  %neg=0%  t=100.0s
+  54. BP_SpawnPoint22: media=   67189.2  mediana=   65105.7  %neg=0%  t=100.0s
+  55. BP_SpawnPoint9: media=   68274.5  mediana=   67137.5  %neg=0%  t=100.0s
+  56. BP_SpawnPoint31: media=   69713.8  mediana=   68357.9  %neg=0%  t=100.0s
+  57. BP_SpawnPoint: media=   70726.0  mediana=   70519.4  %neg=0%  t=100.0s
+  58. BP_SpawnPoint16: media=   71113.1  mediana=   71192.0  %neg=0%  t=100.0s
+  59. BP_SpawnPoint25: media=   71210.6  mediana=   73170.6  %neg=0%  t=100.0s
+
+-- Razones de Muerte (todos los coches, 177 reg) --
+  TIMEFINISHED                                 :   147 ( 83.1%) fit=   59575.9 t=100.0s
+  STOP_VIOLATION                               :    15 (  8.5%) fit=   24070.6 t=47.9s
+  COLLISION_WITH_BP_IntersectionBorder270      :     5 (  2.8%) fit=   20478.8 t=51.2s | rot=5, norm=0
+  COLLISION_WITH_BP_IntersectionBorder308      :     3 (  1.7%) fit=   38345.9 t=69.3s | rot=3, norm=0
+  COLLISION_WITH_BP_IntersectionBorder304      :     2 (  1.1%) fit=    8283.8 t=26.5s | rot=2, norm=0
+  COLLISION_WITH_BP_IntersectionBorder227      :     2 (  1.1%) fit=   34490.8 t=69.5s | rot=2, norm=0
+  COLLISION_WITH_BP_IntersectionBorder277      :     1 (  0.6%) fit=   51614.8 t=99.0s | rot=1, norm=0
+  COLLISION_WITH_BP_IntersectionBorder263      :     1 (  0.6%) fit=   11960.5 t=35.0s | rot=1, norm=0
+  COLLISION_WITH_BP_IntersectionBorder209      :     1 (  0.6%) fit=   29249.7 t=51.0s | rot=1, norm=0
+
+-- Familias y Fallos por DeathReason --
+  COLLISION     :    15 (  8.5%)
+  VIOLATION     :    15 (  8.5%)
+  TIMEOUT       :   147 ( 83.1%)
+  Colisiones detalle: rotonda=15 (100.0% de colisiones), normales=0; eventos_rotonda=15
+  Familias detalle: COLLISION_ROUNDABOUT=15, VIOLATION=15, TIMEOUT=147
+  Fail por muerte*:    30/177 ( 16.9%) (*sin reconstruir TestMinTime/TestMinFitness)
+
+-- Reconstruccion de Resultado TEST --
+  Reglas asumidas: tiempo>=60.0s, fitness>=25000.0 (activo=False), muerte valida
+  Acierto reconstruido: 147/177 (83.05%)
+  Fallos: muerte=30, tiempo=0, fitness=0
+  Nota: Test_Summary.csv sigue siendo autoritativo; ajusta ANALYSE_TEST_MIN_TIME/ANALYSE_TEST_MIN_FITNESS/ANALYSE_TEST_USE_FITNESS si los valores editables de Unreal cambian.
+
+-- Componentes del Fitness (medias globales, 177 coches) --
+  Esquema CSV:                     2026-06-alignment-roundabout-bonus-breakdown
+  Red asumida:                     inputs=20, hidden=16, outputs=2, pesos=352
+  Acum_A                          : 52264.5075
+  Acum_F                          :    40.1873
+  Acum_WaitBonus                  :   418.8629
+  Acum_NetNormal                  : 52304.6948
+  StopCompletionBonus             :  3906.3433
+  YieldCompletionBonus            :  1801.7060
+  Penalty_Muerte:                    120.2593
+  Penalty_Velocidad:                3671.3652
+  Penalty_CorrectingWrong:            28.7448
+  Penalty_TrafficViolation:           29.4390
+  Penalty_NavViolation:              180.5667
+  Penalty_Creeping:                  385.3727
+  Penalty_Reverse:                     0.0000
+  Penalty_Lazy:                        0.0000
+  Penalty_SteeringWhileStopped:        4.5352
+  Penalty_SteerApproach:             247.0915
+  Penalty_Alignment:                   0.0013
+  Ticks Normal / Total:            1441.6 / 1445.9
+  Acum_ThrottlePos:                   23.3970
+  Acum_ThrottleDuringGraceTime:        1.9407
+  Acum_BrakeDuringGraceTime:           0.0671
+  Acum_BrakeInput:                     5.6473
+  Acum_CoastTime:                     11.3328
+  Acum_StopBrake:                      4.1832
+  Acum_StopThrottle:                   0.0097
+  Ticks_StopContext:                 116.1299
+  Ticks_StopContext_TrafficLight:     16.7062
+  Ticks_StopContext_Stop:             65.2542
+  Ticks_StopContext_Yield:            34.1695
+  YieldValidationTime:                 0.0525
+  StopValidationTime:                  0.4254
+  StopCompletionBonus:              3906.3433
+  NumStopsCompleted:                   0.6497
+  YieldCompletionBonus:             1801.7060
+  NumYieldsCompleted:                  1.5819
+  NumStopZonesEntered:                 1.6102
+  NumRoundaboutsEntered:               0.4124
+  NumRoundaboutsCompleted:             0.0621
+  CollisionsInRoundabout:              0.0847
+  Ticks_InRoundabout:                115.6554
+  Acum_RoundaboutBonus:               -9.8569
+  RndCompletionBonus:                172.4317
+  RndEntryPenalty:                     4.2218
+  RndThrottlePenalty:                178.0669
+  NotNorm_PeakFitness:             54063.5086
+  PeakGain (Peak - Final):           309.1343
+  Acum_SteeringInput:                167.7612
+  Acum_TargetSteering:               167.7612
+  Acum_ABS_Steering:                 501.5104
+  Avg_ABS_Steering/tick:               0.3561
+  AvgAbs_TargetVsAppliedGap:           0.0000
+  SteeringGapAbs (|input-target|):     0.0000
+
+-- Validacion Legal y Stop Zones --
+  Validacion total P50/P90:              0.00 /       2.44
+  Validacion/StopTick P50/P90:          0.000 /      0.013 (N=172)
+  StopZones P50/P90 (media):         2.00 /   3.00 (1.61)
+  StopsCompleted P50/P90:            1.00 /   2.00
+  YieldsCompleted P50/P90:           1.00 /   3.00
+  StopBonus P50/P90:                  6000.00 /   12000.00
+  YieldBonus P50/P90:                 1465.20 /    3561.08
+  StopBonus/Stop P50/P90:             6000.00 /    6050.00 (N=92)
+  YieldBonus/Yield P50/P90:           1254.65 /    1382.62 (N=155)
+
+-- Rotondas --
+  Coches con entrada:                  73/177 (41.24%)
+  Entradas / compl. confirm. / col.: 73 / 11 / 15
+  Compl. confirmada global*:           15.07% (IC95 8.63-25.00%)
+  CollisionRate global:                20.55% (IC95 12.87-31.17%)
+  Compl. confirmada P50/P90 coche:      0.00% /    100.00%
+  CollisionRate P50/P90 coche:          0.00% /    100.00%
+  Velocidad entrada P50/P90:           922.60 /    1874.19
+  Obstaculo frontal entrada P50:       1.0000
+  Steering/tick P50/P90:               0.0614 /     0.2628
+  Throttle/tick P50/P90:               0.2336 /     0.3661
+  Cobertura ticks rotonda:              8.00%
+  RoundaboutBonus neto:              -1744.68
+  Desglose bonus C/E/T/neto:        30520.41 / -   747.26 / - 31517.84 /   -1744.68
+  Bonus/entrada P50/P90:              -207.16 /    2446.11 (N=73)
+  Bonus/tick rotonda P50/P90:         -0.7905 /     4.7396 (N=73)
+  Coches bonus + / - / expuestos:  11 / 59 / 73
+  * NumRoundaboutsCompleted se confirma en la siguiente entrada; es un limite inferior y puede omitir la ultima travesia.
+
+-- Rotondas por Direccion y Salida --
+  Direccion entrada First/Second/Third: 24 (28.6%) / 40 (47.6%) / 20 (23.8%)
+     Tramo |  Expos. | Muertes |  Death% |            IC95 |     Ticks |   Steer/t |     Thr/t
+  --------------------------------------------------------------------------------------------
+     Exit1 |      84 |      11 |  13.10% |       7.5-21.9% |     16687 |    0.4618 |    0.2173
+     Exit2 |      42 |       5 |  11.90% |       5.2-25.0% |      3183 |    0.6630 |    0.3488
+    Exit3+ |      15 |      13 |  86.67% |      62.1-96.3% |       601 |    0.8133 |    0.5694
+
+-- Estabilidad Fitness (Peak vs Final) --
+  PeakGain P50/P90:                      0.00 /     306.88
+  PeakGain% P50/P90:                    0.00% /      0.66%
+  Pico>Final:                         56/177 (31.6%)
+  CarIndex familias:               LOADED=177
+  CarIndex esquema (fallback):         LOADED=1, SESSION=2, MUT_LOADED=3..20, MUT_SESSION=21..38, MUT_LOADED_LARGE>38; RANDOM=InitializeRandomBrain (pop~0)
+
+-- Mutation por Generacion --
+    Gen | MutRate% |   MutMag |   Large% |  Strength |    FitMed
+  --------------------------------------------------------------
+      1 |     0.00 |   0.0000 |     0.00 |   0.00000 |  59373.82
+      2 |     0.00 |   0.0000 |     0.00 |   0.00000 |  58979.88
+      3 |     0.00 |   0.0000 |     0.00 |   0.00000 |  55253.38
+  ShareBrake (Throttle+Brake):         0.1944
+  ShareGraceBrake (GraceContext):      0.0334
+  ShareStopBrake (StopContext):        0.9977
+  Cobertura StopContext (ticks):       0.0803
+  Fitness_Final medio:             53754.3743
+  Fitness P10/P50/P90:               29085.04 /   58000.53 /   70917.44
+  Fitness CVaR10 (peor 10%):         11296.49
+  Tiempo P10/P50/P90:                   60.20 /     100.00 /     100.00
+
+-- Componentes por Generacion --
+    Gen |   NetNorm |        A |        E |        F |      PenM |     PenV |    PenTV |   PenNav |    PenCr |    PenRv |    PenLz |    PenSS |    FitMed
+  -------------------------------------------------------------------------------------------------------------------------------------------------------
+      1 | 51962.4539 | 51922.3168 |   0.0000 |  40.1371 |    104.72 | 3460.5767 |  33.6228 | 207.2580 | 365.8725 |   0.0000 |   0.0000 |   4.0692 |  53608.81
+      2 | 54144.0307 | 54102.2092 |   0.0000 |  41.8215 |     51.44 | 3605.4218 |  26.2232 | 140.8843 | 426.6042 |   0.0000 |   0.0000 |   5.2491 |  55558.20
+      3 | 50807.6000 | 50768.9965 |   0.0000 |  38.6034 |    204.62 | 3948.0970 |  28.4709 | 193.5579 | 363.6415 |   0.0000 |   0.0000 |   4.2874 |  52096.11
+
+-- Control por Generacion --
+    Gen |     Thr+ | GraceThr |  GraceBr |    Brake |    Coast |    StopB |    StopT | StopTicks |   YldVal |  StopVal |  SteerIn | SteerTgt |   GapAbs | StopBrake% |  GraceBr%
+  ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      1 |  23.0081 |   1.9896 |   0.0591 |   5.6823 |  11.4048 |   4.2596 |   0.0010 |   120.780 |   0.1373 |   0.4576 | 167.0863 | 167.0863 |   0.0000 |     99.98% |     2.88%
+      2 |  23.8191 |   1.9701 |   0.0990 |   5.8671 |  11.0102 |   4.3908 |   0.0081 |   113.831 |   0.0203 |   0.5136 | 166.0387 | 166.0387 |   0.0000 |     99.82% |     4.78%
+      3 |  23.3638 |   1.8623 |   0.0432 |   5.3925 |  11.5835 |   3.8992 |   0.0200 |   113.780 |   0.0000 |   0.3051 | 170.1586 | 170.1586 |   0.0000 |     99.49% |     2.27%
+
+-- Mejor Coche por Generacion (raw fitness) --
+  Gen    1: fit=  74882.22 spawn=BP_SpawnPoint23 t=100.0s death=TIMEFINISHED
+  Gen    2: fit=  76627.29 spawn=BP_SpawnPoint31 t=100.0s death=TIMEFINISHED
+  Gen    3: fit=  76907.73 spawn=BP_SpawnPoint22 t=100.0s death=TIMEFINISHED
+
+============================================================================
+  ANALISIS DE DIVERSIDAD GENETICA
+============================================================================
+
+-- Distribución de Familias --
+  Total coches evaluados:    177
+  Modelos cargados:          100.0%
+  Modelos aleatorios:        0.0%
+  Modelos mutados:           0.0%
+
+-- Desempeño por Familia --
+  LOADED         : N= 177 | media= 53754.37 | std=17467.37
+
+-- Entropía y Diversidad --
+  Entropía Shannon:          -0.0000
+  Entropía normalizada:      0.0000
+  [!] DIVERSIDAD BAJA: Población concentrada en pocas familias
+
+============================================================================
+  ANALISIS DE COMPONENTES FITNESS
+============================================================================
+  Esquema detectado:         2026-06-alignment-roundabout-bonus-breakdown
+
+-- Correlacion Componentes vs Fitness Final --
+  A (velocidad y centrado)      :  0.9757 (N=177)
+  F (velocidad y obstaculo)     :  0.9549 (N=177)
+  Wait bonus                    :  0.1450 (N=177)
+  Stop completion bonus         :  0.2863 (N=177)
+  Yield completion bonus        :  0.0585 (N=177)
+  Roundabout bonus neto         :  0.5038 (N=73)
+  Net normal                    :  0.9757 (N=177)
+
+-- Media y proporcion sobre Fitness medio --
+  A (velocidad y centrado)      : media= 52264.5075  ratio=  0.9723  N=177
+  F (velocidad y obstaculo)     : media=    40.1873  ratio=  0.0007  N=177
+  Wait bonus                    : media=   418.8629  ratio=  0.0078  N=177
+  Stop completion bonus         : media=  3906.3433  ratio=  0.0727  N=177
+  Yield completion bonus        : media=  1801.7060  ratio=  0.0335  N=177
+  Roundabout bonus neto         : media=   -23.8997  ratio= -0.0004  N=73
+  Net normal                    : media= 52304.6948  ratio=  0.9730  N=177
+
+-- Top 3 Penalizaciones --
+  Penalty_Velocidad   : media = 3671.3652
+  Penalty_SteerApproach: media = 247.0915
+  Penalty_NavViolation: media = 180.5667
+
+-- Calidad de Registros Debug --
+  Registros totales:         177
+  Spawn vacio:               0 (0.00%)
+  DeathReason vacio:         0 (0.00%)
+  TicksNormal > TicksTotal:  0 (0.00%)
+  Tiempo negativo:           0 (0.00%)
+  Fase TRAIN/TEST/UNK:       0 / 177 / 0
+
+-- Deteccion de posible atasco en CEDA (TIME_FINISHED) --
+  TIME_FINISHED:            147/177 (83.05%)
+  Umbrales dinamicos: Fit<=57656.77, Fit/s<=576.568, StopCtx>=25.00%, StopTicks>=180.0, YCtx>=58.0, SCtx>=117.5, TLCtx>=0.0, YShare>=34%
+  Minimos duros: StopCtx>=5.00%, StopTicks>=10.0, YieldTot>=2.00%, YieldTicks>=5.0, Val>=0.50s, Time>=100.00s, YieldVal>=0.00s, StopVal>=0.00s
+  Scores: candidato>=3.20, vigilancia>=2.50
+  Candidatos fuertes:       3 (2.04% de TIME_FINISHED)
+  Candidatos vigilancia:    4 (2.72% de TIME_FINISHED)
+  Top candidatos (score compuesto):
+    Gen |              Car |           Spawn |        Fit |      t |     Fit/s |  StopCtx% |  YShare% |  SShare% |  TShare% |  StopTk |   YVal |   SVal |    GBr |  Score |   Sev
+  -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      1 |  BP_VehicleAI236 | BP_SpawnPoint34 |   50232.99 | 100.0s |   502.330 |    17.64% |   44.04% |   55.96% |    0.00% |   277.0 |    5.6 |    0.0 |   0.08 |   6.50 |  alta
+      3 | BP_VehicleAI2147 |  BP_SpawnPoint6 |   45744.83 | 100.0s |   457.448 |    12.02% |   45.60% |   54.40% |    0.00% |   193.0 |    0.0 |    2.4 |   0.03 |   5.80 |  alta
+      2 |  BP_VehicleAI268 | BP_SpawnPoint56 |   41628.33 | 100.0s |   416.283 |    14.80% |   73.91% |   26.09% |    0.00% |   230.0 |    0.0 |    3.1 |   0.00 |   5.80 |  alta
+
+  Spawns con mas sospecha de atasco en ceda (candidatos fuertes):
+            Spawn |    TF |  Cand |  Watch | Cand/TF% |     FitMed |  StopCtxP50 |    tP50 |  ScoreP50
+  ----------------------------------------------------------------------------------------------------
+  BP_SpawnPoint34 |     3 |     1 |      2 |    33.3% |   50232.99 |      17.64% |  100.0s |      6.50
+  BP_SpawnPoint56 |     2 |     1 |      1 |    50.0% |   41628.33 |      14.80% |  100.0s |      5.80
+   BP_SpawnPoint6 |     3 |     1 |      1 |    33.3% |   45744.83 |      12.02% |  100.0s |      5.80
+
+  Generaciones con mas sospecha de atasco en ceda:
+    Gen |    TF |  Cand |  Watch | Cand/TF% |  ScoreP50
+  -----------------------------------------------------
+      2 |    51 |     1 |      2 |     2.0% |      5.80
+      3 |    47 |     1 |      1 |     2.1% |      5.80
+      1 |    49 |     1 |      1 |     2.0% |      6.50
+
+-- Deteccion de posible atasco en STOP (TIME_FINISHED) --
+  TIME_FINISHED:            147/177 (83.05%)
+  Umbrales dinamicos: Fit<=57656.77, Fit/s<=576.568, StopCtx>=25.00%, StopTicks>=180.0, StopOnlyTk>=117.5, StopOnly>=7.41%, SShare>=45%, Lazy>=0.00
+  Reanudacion minima: OutCtx>=12.0%, CmdOut>=8.0%
+  Minimos duros: StopCtx>=5.00%, StopTicks>=5.0, StopOnly>=2.00%, StopOnlyTicks>=5.0, Val>=0.50s, Time>=100.00s, StopVal>=0.00s
+  Scores: candidato>=3.00, vigilancia>=2.30
+  Candidatos fuertes:       1 (0.68% de TIME_FINISHED)
+  Candidatos vigilancia:    1 (0.68% de TIME_FINISHED)
+  Causas estimadas (TF):     OTHER=147 (100.0%)
+  Causas estimadas (Cand):   OTHER=1 (100.0%)
+  Top candidatos (score compuesto):
+    Gen |              Car |           Spawn |        Fit |      t |     Fit/s |  StopCtx% |  SShare% |  YShare% |  TShare% |  StopTk |   Out% | CmdOut% |   SVal |  Score |     Cause |   Sev
+  --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      3 | BP_VehicleAI2147 |  BP_SpawnPoint6 |   45744.83 | 100.0s |   457.448 |    12.02% |   54.40% |   45.60% |    0.00% |   105.0 |   88.0% |    67.9% |    2.4 |   4.80 |     OTHER |  alta
+
+  Spawns con mas sospecha de atasco en stop (candidatos fuertes):
+            Spawn |    TF |  Cand |  Watch | Cand/TF% |     FitMed |  StopCtxP50 |    tP50 |  ScoreP50
+  ----------------------------------------------------------------------------------------------------
+   BP_SpawnPoint6 |     3 |     1 |      1 |    33.3% |   45744.83 |      12.02% |  100.0s |      4.80
+
+  Generaciones con mas sospecha de atasco en stop:
+    Gen |    TF |  Cand |  Watch | Cand/TF% |  ScoreP50
+  -----------------------------------------------------
+      3 |    47 |     1 |      1 |     2.1% |      4.80
+
+-- Diagnostico Especifico LAZY --
+  LAZY total: 0/177 (0.00%)
+
+-- Muertes por Familia (colisiones separadas) --
+                 Familia |       N |     Pct |     FitMed |    tMed |      PenM |      PenV |     PenSS
+  -----------------------------------------------------------------------------------------------------
+                 TIMEOUT |     147 |  83.05% |   59575.91 | 100.00s |      0.00 |   3843.33 |      4.90
+    COLLISION_ROUNDABOUT |      15 |   8.47% |   26387.06 |  56.07s |   1417.41 |   3862.25 |      1.05
+               VIOLATION |      15 |   8.47% |   24070.59 |  47.93s |      1.65 |   1795.24 |      4.40
+
+-- CarIndex / Genealogia --
+       Familia |       N |     Pct |  IdxMed |     FitMed |    FitMean |    tMed |    YldV |    StpV
+  --------------------------------------------------------------------------------------------------
+        LOADED |     177 | 100.00% |     0.0 |   58000.53 |   53754.37 | 100.00s |   0.00s |   0.00s
+
+-- Cobertura de Metricas Situacionales --
+                     Metrica |        Denominador |       N |     Pct
+  -------------------------------------------------------------------
+              StopBonus/Stop |        stop_done_n |      92 |  51.98%
+            YieldBonus/Yield |       yield_done_n |     155 |  87.57%
+           StopDone/StopZone |       stop_zones_n |     154 |  87.01%
+          YieldDone/StopZone |       stop_zones_n |     154 |  87.01%
+         RoundCompletionRate |    round_entered_n |      73 |  41.24%
+          RoundCollisionRate |    round_entered_n |      73 |  41.24%
+          RoundEntrySpeedAvg |    round_entered_n |      73 |  41.24%
+      RoundEntryFrontObstAvg |    round_entered_n |      73 |  41.24%
+            RoundBonus/Entry |    round_entered_n |      73 |  41.24%
+        RoundBonus/RoundTick |        round_ticks |      73 |  41.24%
+  RndCompletionBonus/Completion |  round_completed_n |      11 |   6.21%
+       RndEntryPenalty/Entry |    round_entered_n |      73 |  41.24%
+  RndThrottlePenalty/RoundTick |        round_ticks |      73 |  41.24%
+            RoundSteeringAvg |        round_ticks |      73 |  41.24%
+            RoundThrottleAvg |        round_ticks |      73 |  41.24%
+         RoundExit1DeathRate |  round_exit1_count |      73 |  41.24%
+         RoundExit2DeathRate |  round_exit2_count |      41 |  23.16%
+     RoundExit3PlusDeathRate |  round_exit3_count |      15 |   8.47%
+
+-- Correlaciones con Fitness (Pearson) --
+  Solo se muestran metricas variables con N>=5 y exposicion real cuando requieren denominador.
+  NotNorm_PeakFitness         : +0.9981 (N=177)
+  Acum_A                      : +0.9757 (N=177)
+  Acum_NetNormal              : +0.9757 (N=177)
+  Acum_F                      : +0.9549 (N=177)
+  Tiempo                      : +0.8555 (N=177)
+  Ticks_Normal                : +0.8525 (N=177)
+  Ticks_Total                 : +0.8524 (N=177)
+  RoundaboutCollisionRate     : -0.7478 (N=73)
+  RoundThrottlePenaltyPerTick : -0.7367 (N=73)
+  Avg_ABS_Steering            : -0.7226 (N=177)
+  RoundaboutBonusPerCompletion: +0.6793 (N=11)
+  RoundExit2SteeringAvg       : -0.6209 (N=41)
+  Acum_ThrottlePos            : +0.6011 (N=177)
+  RoundaboutBonusFitShare     : +0.5991 (N=73)
+  RoundExit2ThrottleAvg       : -0.5948 (N=41)
+  RoundaboutBonusPerTick      : +0.5780 (N=73)
+  RoundaboutSteeringAvg       : +0.5476 (N=73)
+  StopValidationTime          : -0.5175 (N=177)
+  RoundaboutBonusPerEntry     : +0.5038 (N=73)
+  RoundaboutBonusNet          : +0.5038 (N=73)
+  CollisionsInRoundabout      : -0.4781 (N=177)
+  Penalty_Muerte              : -0.4670 (N=177)
+  Acum_CoastTime              : +0.4658 (N=177)
+  StopDone/StopZone           : +0.4480 (N=154)
+  PeakGain(Peak-Final)        : -0.4455 (N=177)
+  RoundThrottlePenalty        : -0.4200 (N=177)
+  RoundaboutTickRatio         : -0.4045 (N=177)
+  RoundExit3PlusThrottleAvg   : -0.3919 (N=15)
+  RoundaboutThrottleAvg       : -0.3823 (N=73)
+  RoundExit3PlusSteeringAvg   : -0.3667 (N=15)
+  RoundExit3PlusDeathRate     : -0.3389 (N=15)
+  RoundaboutEntrySpeedAvg     : +0.3383 (N=73)
+  RoundExit1DeathRate         : +0.3013 (N=73)
+  StopCompletionBonus         : +0.2863 (N=177)
+  NumStopsCompleted           : +0.2861 (N=177)
+  Acum_ABS_Steering           : +0.2757 (N=177)
+  RoundaboutEntryFrontObstAvg : +0.2735 (N=73)
+  RoundaboutCompletionRate    : +0.2189 (N=73)
+  RoundEntryPenaltyPerEntry   : -0.2015 (N=73)
+  Acum_TargetSteering         : +0.1922 (N=177)
+  Acum_SteeringInput          : +0.1922 (N=177)
+  YieldBonus/Yield            : +0.1915 (N=155)
+  RoundExit1ThrottleAvg       : -0.1782 (N=73)
+  Acum_ThrottleDuringGraceTime: +0.1681 (N=177)
+  Penalty_CorrectingWrong     : -0.1583 (N=177)
+  Ticks_StopContext_TrafficLight: -0.1411 (N=177)
+  RoundEntryPenalty           : -0.1408 (N=177)
+  Penalty_SteeringWhileStopped: +0.1280 (N=177)
+  RoundCompletionBonus        : +0.1206 (N=177)
+  NumRoundaboutsCompleted     : +0.1205 (N=177)
+  Penalty_TrafficViolation    : -0.1164 (N=177)
+  Acum_BrakeDuringGraceTime   : +0.1124 (N=177)
+  StopBonus/Stop              : +0.1118 (N=92)
+  Penalty_Creeping            : +0.1104 (N=177)
+  Penalty_SteerApproach       : +0.0951 (N=177)
+  Ticks_StopContext_Stop      : +0.0917 (N=177)
+  Penalty_Reverse             : +0.0915 (N=177)
+  Acum_StopThrottle           : -0.0910 (N=177)
+  Ticks_StopContext_Yield     : -0.0852 (N=177)
+  RoundExit1SteeringAvg       : +0.0835 (N=73)
+  Ticks_StopContext           : -0.0828 (N=177)
+  RoundCompletionBonusPerCompletion: +0.0785 (N=11)
+  Acum_BrakeInput             : +0.0753 (N=177)
+  YieldCompletionBonus        : +0.0585 (N=177)
+  NumRoundaboutsEntered       : -0.0540 (N=177)
+  Penalty_Alignment           : +0.0438 (N=177)
+  Penalty_NavViolation        : +0.0403 (N=177)
+  YieldDone/StopZone          : +0.0393 (N=154)
+  YieldValidationTime         : -0.0299 (N=177)
+  Penalty_Velocidad           : +0.0293 (N=177)
+  NumStopZonesEntered         : +0.0288 (N=177)
+  RoundExit2DeathRate         : +0.0180 (N=41)
+  Acum_StopBrake              : +0.0110 (N=177)
+  Avg_SteeringInput           : +0.0100 (N=177)
+  NumYieldsCompleted          : -0.0011 (N=177)
+
+-- Conduccion en Contexto Stop/Semaforo por Familia --
+     Familia |       N |  StopTicks |   StopTL |   StopSt |  StopYld |  StopBrake |    StopThr | StopBrake% |   Brake% |  GraceThr |   GraceBr |   YldVal |  StopVal |    StIn |   StTgt |   GapAbs |  SteerStop
+  --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+     TIMEOUT |     147 |    125.231 |   20.116 |   66.605 |   38.510 |     4.6328 |     0.0112 |     99.76% |   19.95% |    2.1891 |    0.0684 |    0.063 |    0.052 | 190.454 | 190.454 |    0.000 |     4.9045
+   COLLISION |      15 |     35.333 |    0.000 |   21.200 |   14.133 |     1.3392 |     0.0015 |     99.89% |   11.58% |    0.9786 |    0.0767 |    0.000 |    0.000 |  -2.413 |  -2.413 |    0.000 |     1.0545
+   VIOLATION |      15 |    107.733 |    0.000 |   96.067 |   11.667 |     2.6217 |     0.0025 |     99.90% |   19.35% |    0.4682 |    0.0449 |    0.000 |    4.507 | 115.545 | 115.545 |    0.000 |     4.3969
+
+-- Stop/Semaforo por Spawn (percentiles dinamicos) --
+            Spawn |     N |   Legal% |      StopCtx P10/P50/P90 |   StopBrake P50/P90 | Brake P50 |  GapStop%
+  -----------------------------------------------------------------------------------------------------------
+  BP_SpawnPoint36 |     3 |  100.00% |  40.07/ 40.37/ 40.37% |   99.86/  99.87% |    26.44% |    +0.09pp
+   BP_SpawnPoint3 |     3 |  100.00% |  28.86/ 28.86/ 29.35% |   99.89/  99.89% |    20.55% |    +0.12pp
+  BP_SpawnPoint35 |     3 |   66.67% |   4.85/ 16.79/ 16.86% |   99.90/  99.98% |    18.48% |    +0.13pp
+  BP_SpawnPoint19 |     3 |   66.67% |   8.63/ 10.38/ 11.58% |   99.93/  99.99% |    23.48% |    +0.16pp
+  BP_SpawnPoint38 |     3 |   33.33% |  12.30/ 12.62/ 16.81% |  100.00/ 100.00% |    22.98% |    +0.23pp
+  BP_SpawnPoint37 |     3 |   33.33% |   2.21/  8.54/ 10.95% |  100.00/ 100.00% |    16.48% |    +0.23pp
+  BP_SpawnPoint47 |     3 |   33.33% |   7.76/  8.16/  9.18% |   91.29/  98.21% |    16.67% |    -8.48pp
+  BP_SpawnPoint30 |     3 |   33.33% |   4.81/  6.45/  9.91% |  100.00/ 100.00% |    14.22% |    +0.23pp
+  BP_SpawnPoint46 |     3 |   33.33% |   0.63/  0.64/  7.59% |  100.00/ 100.00% |    10.69% |    +0.23pp
+  BP_SpawnPoint42 |     3 |    0.00% |  27.51/ 33.33/ 33.78% |  100.00/ 100.00% |    26.17% |    +0.23pp
+  BP_SpawnPoint41 |     3 |    0.00% |  22.70/ 25.61/ 26.26% |  100.00/ 100.00% |    35.46% |    +0.23pp
+  BP_SpawnPoint40 |     3 |    0.00% |   9.17/ 16.02/ 17.16% |  100.00/ 100.00% |    27.02% |    +0.23pp
+  BP_SpawnPoint34 |     3 |    0.00% |   3.71/ 14.80/ 17.07% |  100.00/ 100.00% |    25.03% |    +0.23pp
+  BP_SpawnPoint50 |     3 |    0.00% |  12.00/ 12.87/ 16.43% |   99.75/  99.79% |    21.79% |    -0.02pp
+   BP_SpawnPoint9 |     3 |    0.00% |  10.32/ 12.71/ 13.14% |  100.00/ 100.00% |    17.96% |    +0.23pp
+  (9 spawns con violaciones omitidos por N<10 — necesitan más datos)
+
+-- PeakGain/StopZones por Spawn (P50) --
+            Spawn |     N |   PeakP50 |   PeakP90 | Peak>Final% | StopZ P50 | ValTot P50
+  --------------------------------------------------------------------------------------
+  BP_SpawnPoint43 |     3 |   3774.56 |   3837.68 |       66.7% |      1.00 |       0.00
+  BP_SpawnPoint56 |     3 |   1939.79 |   3707.07 |      100.0% |      2.00 |       0.00
+  BP_SpawnPoint15 |     3 |     73.72 |    356.97 |       66.7% |      1.00 |       0.00
+  BP_SpawnPoint26 |     3 |     60.23 |   2861.65 |      100.0% |      1.00 |       0.00
+  BP_SpawnPoint45 |     3 |     40.79 |   3035.95 |       66.7% |      2.00 |       0.00
+  BP_SpawnPoint36 |     3 |     29.98 |     30.35 |      100.0% |      1.00 |       4.50
+  BP_SpawnPoint46 |     3 |     29.73 |    397.04 |       66.7% |      1.00 |       0.00
+  BP_SpawnPoint35 |     3 |     29.38 |     30.83 |      100.0% |      1.00 |       4.50
+   BP_SpawnPoint3 |     3 |     29.04 |     32.87 |      100.0% |      1.00 |       4.50
+  BP_SpawnPoint38 |     3 |     28.40 |   3297.21 |       66.7% |      3.00 |       0.00
+  BP_SpawnPoint19 |     3 |     27.01 |     30.99 |       66.7% |      2.00 |       4.50
+  BP_SpawnPoint17 |     3 |     18.77 |     43.96 |       66.7% |      2.00 |       0.00
+  BP_SpawnPoint29 |     3 |     12.94 |   3034.35 |       66.7% |      1.00 |       0.00
+  BP_SpawnPoint12 |     3 |      7.25 |   3637.89 |       66.7% |      2.00 |       0.00
+  BP_SpawnPoint27 |     3 |      2.49 |   2923.11 |       66.7% |      2.00 |       0.00
+
+-- Spawns Mas Inestables (por desv. fitness) --
+            Spawn |     N |     FitMed |        Std |      CV% |       P10 |       P50 |       P90 |   Lazy%
+  ----------------------------------------------------------------------------------------------------------
+  BP_SpawnPoint12 |     3 |   40119.86 |   36204.83 |    90.2% |  10199.50 |  56538.62 |  63472.73 |    0.0%
+  BP_SpawnPoint43 |     3 |   27229.99 |   32815.99 |   120.5% |   8223.49 |   8384.19 |  53774.80 |    0.0%
+  BP_SpawnPoint11 |     3 |   44480.01 |   31411.69 |    70.6% |  18715.56 |  60392.54 |  63879.45 |    0.0%
+   BP_SpawnPoint5 |     3 |   46541.34 |   30323.44 |    65.2% |  21383.22 |  59073.95 |  66686.43 |    0.0%
+  BP_SpawnPoint45 |     3 |   41906.94 |   28275.43 |    67.5% |  18363.03 |  50873.88 |  61864.07 |    0.0%
+  BP_SpawnPoint29 |     3 |   42930.94 |   26653.20 |    62.1% |  21198.88 |  57286.03 |  58920.96 |    0.0%
+  BP_SpawnPoint14 |     3 |   56118.58 |   23606.77 |    42.1% |  36514.68 |  65574.43 |  71940.13 |    0.0%
+  BP_SpawnPoint10 |     3 |   55762.34 |   22248.90 |    39.9% |  37257.17 |  64047.38 |  70953.50 |    0.0%
+  BP_SpawnPoint35 |     3 |   29289.05 |   20849.61 |    71.2% |  17189.67 |  17355.02 |  46162.05 |    0.0%
+  BP_SpawnPoint56 |     3 |   33791.49 |   19608.89 |    58.0% |  17506.59 |  41628.33 |  46941.66 |    0.0%
+  BP_SpawnPoint37 |     3 |   44898.67 |   18817.75 |    41.9% |  29366.37 |  48121.83 |  59141.69 |    0.0%
+  BP_SpawnPoint55 |     3 |   65607.17 |   16578.32 |    25.3% |  52179.79 |  75039.53 |  75261.61 |    0.0%
+  BP_SpawnPoint58 |     3 |   58403.80 |   15062.96 |    25.8% |  46409.72 |  58129.81 |  70507.47 |    0.0%
+  BP_SpawnPoint46 |     3 |   44038.24 |   13551.76 |    30.8% |  32754.18 |  48419.02 |  53569.98 |    0.0%
+  BP_SpawnPoint23 |     3 |   60575.93 |   12413.09 |    20.5% |  52965.01 |  54185.73 |  70742.92 |    0.0%
+
+-- Top Razones y Spawns Dominantes --
+  TIMEFINISHED                             ->    147 | BP_SpawnPoint53:3, BP_SpawnPoint23:3, BP_SpawnPoint2:3, BP_SpawnPoint44:3, BP_SpawnPoint9:3
+  STOP_VIOLATION                           ->     15 | BP_SpawnPoint3:3, BP_SpawnPoint36:3, BP_SpawnPoint35:2, BP_SpawnPoint19:2, BP_SpawnPoint46:1
+  COLLISION_WITH_BP_IntersectionBorder270  ->      5 | BP_SpawnPoint56:1, BP_SpawnPoint12:1, BP_SpawnPoint11:1, BP_SpawnPoint10:1, BP_SpawnPoint8:1
+  COLLISION_WITH_BP_IntersectionBorder308  ->      3 | BP_SpawnPoint27:1, BP_SpawnPoint4:1, BP_SpawnPoint45:1
+  COLLISION_WITH_BP_IntersectionBorder304  ->      2 | BP_SpawnPoint43:2
+  COLLISION_WITH_BP_IntersectionBorder227  ->      2 | BP_SpawnPoint26:1, BP_SpawnPoint29:1
+  COLLISION_WITH_BP_IntersectionBorder277  ->      1 | BP_SpawnPoint38:1
+  COLLISION_WITH_BP_IntersectionBorder263  ->      1 | BP_SpawnPoint5:1
+  COLLISION_WITH_BP_IntersectionBorder209  ->      1 | BP_SpawnPoint14:1
+
+-- Peores 15 Coches (raw fitness) --
+  Gen     1 | BP_SpawnPoint12 | fit=  -1385.28 | t= 17.0s | death=COLLISION_WITH_BP_IntersectionBorder270
+  Gen     1 | BP_SpawnPoint36 | fit=   7537.81 | t= 14.0s | death=STOP_VIOLATION
+  Gen     3 | BP_SpawnPoint36 | fit=   7557.24 | t= 14.0s | death=STOP_VIOLATION
+  Gen     2 | BP_SpawnPoint36 | fit=   7576.50 | t= 14.0s | death=STOP_VIOLATION
+  Gen     2 |  BP_SpawnPoint3 | fit=   7658.95 | t= 20.0s | death=STOP_VIOLATION
+  Gen     3 |  BP_SpawnPoint3 | fit=   7777.76 | t= 20.0s | death=STOP_VIOLATION
+  Gen     1 |  BP_SpawnPoint3 | fit=   7882.01 | t= 21.0s | death=STOP_VIOLATION
+  Gen     1 | BP_SpawnPoint43 | fit=   8183.31 | t= 29.0s | death=COLLISION_WITH_BP_IntersectionBorder304
+  Gen     2 | BP_SpawnPoint11 | fit=   8296.32 | t= 25.0s | death=COLLISION_WITH_BP_IntersectionBorder270
+  Gen     3 | BP_SpawnPoint43 | fit=   8384.19 | t= 24.0s | death=COLLISION_WITH_BP_IntersectionBorder304
+  Gen     3 | BP_SpawnPoint45 | fit=  10235.32 | t= 25.0s | death=COLLISION_WITH_BP_IntersectionBorder308
+  Gen     1 | BP_SpawnPoint56 | fit=  11476.15 | t= 42.0s | death=COLLISION_WITH_BP_IntersectionBorder270
+  Gen     3 |  BP_SpawnPoint5 | fit=  11960.53 | t= 35.0s | death=COLLISION_WITH_BP_IntersectionBorder263
+  Gen     3 | BP_SpawnPoint29 | fit=  12177.09 | t= 41.0s | death=COLLISION_WITH_BP_IntersectionBorder227
+  Gen     1 | BP_SpawnPoint35 | fit=  17148.33 | t= 37.0s | death=STOP_VIOLATION
+
+-- Mejores 15 Coches (raw fitness) --
+  Gen     3 | BP_SpawnPoint22 | fit=  76907.73 | t=100.0s | death=TIMEFINISHED
+  Gen     2 | BP_SpawnPoint31 | fit=  76627.29 | t=100.0s | death=TIMEFINISHED
+  Gen     3 | BP_SpawnPoint25 | fit=  76585.89 | t=100.0s | death=TIMEFINISHED
+  Gen     2 |  BP_SpawnPoint8 | fit=  76222.29 | t=100.0s | death=TIMEFINISHED
+  Gen     2 | BP_SpawnPoint24 | fit=  76045.35 | t=100.0s | death=TIMEFINISHED
+  Gen     3 | BP_SpawnPoint55 | fit=  75317.13 | t=100.0s | death=TIMEFINISHED
+  Gen     2 | BP_SpawnPoint55 | fit=  75039.53 | t=100.0s | death=TIMEFINISHED
+  Gen     1 | BP_SpawnPoint23 | fit=  74882.22 | t=100.0s | death=TIMEFINISHED
+  Gen     3 | BP_SpawnPoint16 | fit=  73759.09 | t=100.0s | death=TIMEFINISHED
+  Gen     2 | BP_SpawnPoint58 | fit=  73601.88 | t=100.0s | death=TIMEFINISHED
+  Gen     2 | BP_SpawnPoint14 | fit=  73531.56 | t=100.0s | death=TIMEFINISHED
+  Gen     1 | BP_SpawnPoint25 | fit=  73170.59 | t=100.0s | death=TIMEFINISHED
+  Gen     1 | BP_SpawnPoint10 | fit=  72680.02 | t=100.0s | death=TIMEFINISHED
+  Gen     1 | BP_SpawnPoint26 | fit=  71842.70 | t=100.0s | death=TIMEFINISHED
+  Gen     2 | BP_SpawnPoint57 | fit=  71704.95 | t=100.0s | death=TIMEFINISHED
+
+============================================================================
+  RESUMEN RAPIDO (copiar para comparar)
+============================================================================
+  Modo:             test
+  Fecha:            26/06/2026
+  Generaciones:     3
+  BestFit max:      76907.731392 (gen 3)
+  BestFit medio:    76139.082636
+  MeanFit max:      55558.202852 (gen 2)
+  MeanFit medio:    53737.816460
+  MeanFit P50:      53608.806933
+  %MeanFit < 0:     0.0%
+  TiempoMedio:      91.86s
+  Fitness raw med:  53754.37
+  NetNormal med:    52304.6948
+  PenMuerte med:    120.26
+  PenTraffic med:   29.44
+  PenNav med:       180.57
+  PenCreeping med:  385.37
+  PenReverse med:   0.00
+  PenLazy med:      0.00
+  PenSteerStop med: 4.54
+  PenAlign med:     0.00
+  ThrGrace med:     1.94
+  BrGrace med:      0.07
+  YieldVal med:     0.05
+  StopVal med:      0.43
+  StopDone med:     0.65
+  YieldDone med:    1.58
+  StopBonus med:    3906.34
+  YieldBonus med:   1801.71
+  Round entered:    73
+  Round compl. conf.: 11 (15.07%)*
+  Round collisions: 15 (20.55%)
+  Round tick share: 8.00%
+  Round bonus net:  -1744.68 (-23.90/entry, -0.0852/tick)
+  Round C/E/T:      +30520.41 / -747.26 / -31517.84
+  * Confirmada al registrar la siguiente entrada; limite inferior.
+  Round death E1/E2/E3+: 13.10% / 11.90% / 86.67%
+  SteerIn med:      167.76
+  SteerTgt med:     167.76
+  SteerAbs/tick med:0.3561
+  SteerGap med:     0.0000
+  CarIdx familias:  LOADED=177
+  Brake share:      19.44%
+  Grace brake share:3.34%
+  Stop brake share: 99.77%
+  Stop ctx/tot tick:8.03%
+  Muerte #1:        TIMEFINISHED (83%)
+  Collisions N/R:   0/15 (R=100.0%)
+  Fail por muerte:  16.95% (30/177)
+  YieldTrap(TF):    3/147 (2.0%) | watch=4
+  StopTrap(TF):     1/147 (0.7%) | watch=1
+  Aciertos (%):     83.05%
+  Errores (%):      16.95%
+  Score (WilsonLB): 71.58
+  Aciertos P50:     83.05%
+  Fail muerte vs SummaryFail: 16.95% vs 16.95%
+
+============================================================================
+  COMPARATIVA ENTRE SESIONES (modo=test, ultimas 9)
+============================================================================
+                  Sesion |  Gens |     BestMax |     MeanMed |  TimeMed |   Neg% |   Succ% |    DbgN |   Lazy%
+  ------------------------------------------------------------------------------------------------------------
+   test_2026-06-18_14-51 |     5 |    80104.07 |    47032.53 |   79.11s |   0.0% |  57.04% |     270 |   0.00%
+   test_2026-06-22_15-09 |     5 |    77348.73 |    45480.36 |   77.43s |   0.0% |  54.18% |     275 |   0.00%
+   test_2026-06-22_15-27 |     5 |    78059.29 |    43112.87 |   74.96s |   0.0% |  51.64% |     275 |   0.00%
+   test_2026-06-23_12-53 |     5 |    76003.15 |    28376.82 |   51.57s |   0.0% |  18.55% |     275 |   0.00%
+   test_2026-06-23_13-04 |     5 |    76602.53 |    30768.74 |   53.51s |   0.0% |  20.73% |     275 |   0.00%
+   test_2026-06-23_13-13 |     5 |    78582.81 |    24918.44 |   43.50s |   0.0% |  10.18% |     269 |   0.00%
+   test_2026-06-23_15-42 |     5 |    75192.47 |    28482.45 |   51.48s |   0.0% |  15.64% |     275 |   0.00%
+   test_2026-06-26_16-13 |     5 |    80224.59 |    34551.81 |   61.95s |   0.0% |  29.66% |     289 |   0.00%
+  ACTUAL_2026-06-26_16-3 |     3 |    76907.73 |    53737.82 |   91.86s |   0.0% |  83.05% |     177 |   0.00%
+
+-- Delta vs sesion inmediatamente anterior --
+  Sesion previa: test_2026-06-26_16-13, Sesion actual: ACTUAL_2026-06-26_16-39
+  dBestMax: -3316.86
+  dMeanMed: +19186.01
+  dTimeMed: +29.91s
+  dNegPct:  +0.00pp
+  dSuccPct: +53.40pp
+  dLazyPct: +0.00pp
+
+  Ranking actual entre 9 sesiones con summary:
+    BestMax : #6
+    MeanMed : #1
+    Neg%    : #9 (menor es mejor)
+
+============================================================================
+  Analisis completado: TEST
+  Summary: 3 gens | Debug: 177 registros
+  Mapeo generaciones: deshabilitado (no se guarda archivo).
+
+-- Modelos cargados --
+  SuperCarModel.sav: 2026-06-22 16:16:24
+  Modelos no encontrados: ['SessionCarModel.sav']
+  Carpeta: c:\Users\SergioULE\Documents\Unreal Projects\cognitive-car\Saved\Logs\Analisis\test_2026-06-26_16-39
+============================================================================

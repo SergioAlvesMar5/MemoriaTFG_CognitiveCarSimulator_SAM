@@ -171,6 +171,9 @@ DEBUG_ALIASES = {
     'debugacumalignmentpenalty': 'pen_align',
     'acumpenaltyalignment': 'pen_align',
     'alignmentpenalty': 'pen_align',
+    'numcaroverlaps': 'car_overlaps',
+    'debugnumcaroverlaps': 'car_overlaps',
+    'caroverlaps': 'car_overlaps',
     'ticksnormal': 't_norm',
     'tickstotal': 't_tot',
     # nuevas metricas de control (07-04-2026+)
@@ -381,6 +384,12 @@ def detect_debug_schema(mapped_keys):
     keys = set(mapped_keys or [])
     if {'b', 'c', 'd', 'e'} & keys:
         return 'legacy-components'
+    if 'car_overlaps' in keys and 'pen_align' in keys and {'round_completion_bonus', 'round_entry_penalty', 'round_throttle_penalty'} & keys:
+        return '2026-06-car-overlap-alignment-roundabout-bonus-breakdown'
+    if 'car_overlaps' in keys and 'pen_align' in keys:
+        return '2026-06-car-overlap-alignment'
+    if 'car_overlaps' in keys:
+        return '2026-06-car-overlap'
     if 'pen_align' in keys and {'round_completion_bonus', 'round_entry_penalty', 'round_throttle_penalty'} & keys:
         return '2026-06-alignment-roundabout-bonus-breakdown'
     if 'pen_align' in keys:
@@ -686,6 +695,8 @@ CORRELATION_EXPOSURE_FIELDS = {
     'round_exit1_throttle_avg': 'round_exit1_ticks',
     'round_exit2_throttle_avg': 'round_exit2_ticks',
     'round_exit3_throttle_avg': 'round_exit3_ticks',
+    'car_overlap_per_sec': 'car_overlaps',
+    'car_overlap_per_tick': 'car_overlaps',
 }
 
 METRIC_REQUIRED_FIELDS = {
@@ -935,6 +946,8 @@ def inspect_csv_layout(path, aliases, required_keys, min_cols=0):
         meta['mtime'] = ''
 
     header_map = {}
+    schema_name = 'partial'
+    available_fields = ()
     with open(path, encoding='utf-8-sig', newline='') as f:
         reader = csv.reader(f)
         for i, row in enumerate(reader):
@@ -1227,6 +1240,9 @@ def death_family(reason):
         return 'FLIPPED'
     return 'OTHER'
 
+def is_collision_reason(reason):
+    return canonical_death_reason(reason) == 'COLLISION'
+
 DEATH_FAMILY_ORDER = (
     'COLLISION',
     'VIOLATION',
@@ -1245,6 +1261,71 @@ def death_family_order_index(family):
         return DEATH_FAMILY_ORDER.index(family)
     except ValueError:
         return len(DEATH_FAMILY_ORDER)
+
+DEATH_FAMILY_DETAIL_ORDER = (
+    'COLLISION_ROUNDABOUT',
+    'COLLISION_NORMAL',
+) + DEATH_FAMILY_ORDER
+
+def death_family_detail_order_index(family):
+    try:
+        return DEATH_FAMILY_DETAIL_ORDER.index(family)
+    except ValueError:
+        return len(DEATH_FAMILY_DETAIL_ORDER)
+
+def collision_death_context(row):
+    if not is_collision_reason(row.get('death', '')):
+        return 'NO_COLLISION'
+    return 'COLLISION_ROUNDABOUT' if num(row.get('round_collisions', 0.0), 0.0) > 0.0 else 'COLLISION_NORMAL'
+
+def death_family_detail_for_row(row):
+    collision_context = collision_death_context(row)
+    if collision_context != 'NO_COLLISION':
+        return collision_context
+    return row.get('death_family') or death_family(row.get('death', ''))
+
+def death_group_color(group):
+    if group == 'COLLISION_ROUNDABOUT':
+        return 'crimson'
+    if group == 'COLLISION_NORMAL':
+        return 'tomato'
+    return death_reason_color(group)
+
+def group_debug_death_families(rows, split_roundabout_collisions=True):
+    counts = Counter()
+    for row in rows:
+        if split_roundabout_collisions:
+            counts[death_family_detail_for_row(row)] += 1
+        else:
+            counts[death_family(row.get('death', ''))] += 1
+    grouped = [(family, cnt, family) for family, cnt in counts.items()]
+    grouped.sort(key=lambda x: (death_family_detail_order_index(x[2]), -x[1], x[0]))
+    return grouped
+
+def summarize_collision_deaths(rows):
+    total = 0
+    roundabout = 0
+    normal = 0
+    roundabout_events = 0.0
+    round_signal_non_collision = 0
+    for r in rows:
+        round_events = num(r.get('round_collisions', 0.0), 0.0)
+        roundabout_events += round_events
+        if is_collision_reason(r.get('death', '')):
+            total += 1
+            if round_events > 0.0:
+                roundabout += 1
+            else:
+                normal += 1
+        elif round_events > 0.0:
+            round_signal_non_collision += 1
+    return {
+        'total': total,
+        'roundabout': roundabout,
+        'normal': normal,
+        'roundabout_events': roundabout_events,
+        'round_signal_non_collision': round_signal_non_collision,
+    }
 
 def group_death_reasons(deaths):
     family_counts = Counter()
@@ -1276,7 +1357,7 @@ def death_reason_color(reason):
 
 def short_death_reason(reason):
     r = normalize_reason(reason)
-    if r in DEATH_FAMILY_ORDER:
+    if r in DEATH_FAMILY_DETAIL_ORDER:
         return r
     return (reason or '').replace('COLLISION_WITH_', 'COL_') or 'UNKNOWN'
 
@@ -1288,7 +1369,7 @@ def is_invalid_brain_reason(reason):
 
 def is_test_failure_reason(reason):
     # Mirrors BP_EvolutionManager CalculateAndExport death-based fail rules
-    # from the latest local description (22-06-2026). Fitness/time thresholds
+    # from the latest local description (23-06-2026). Fitness/time thresholds
     # are handled in Unreal and are not inferable from DeathReason alone.
     canon = canonical_death_reason(reason)
     if canon in {
@@ -2700,8 +2781,8 @@ def parse_debug(path):
         t_idx = header_map.get('training')
         death_raw = parts[header_map.get('death', 5)].strip() if len(parts) > header_map.get('death', 5) else ''
         row = {
-            '_schema': detect_debug_schema(header_map.keys()),
-            '_available_fields': tuple(sorted(header_map.keys())),
+            '_schema': schema_name,
+            '_available_fields': available_fields,
             'gen': to_num(parts, header_map.get('gen', 0), int),
             'car': parts[header_map.get('car', 1)].strip() if len(parts) > header_map.get('car', 1) else '',
             'fit': to_num(parts, header_map.get('fit', 2), float),
@@ -2791,8 +2872,11 @@ def parse_debug(path):
             'round_exit1_throttle': to_num(parts, header_map.get('round_exit1_throttle'), float),
             'round_exit2_throttle': to_num(parts, header_map.get('round_exit2_throttle'), float),
             'round_exit3_throttle': to_num(parts, header_map.get('round_exit3_throttle'), float),
+            'car_overlaps': to_num(parts, header_map.get('car_overlaps'), int),
             'training': parse_bool_token(parts[t_idx]) if t_idx is not None and t_idx < len(parts) else None,
         }
+        row['collision_context'] = collision_death_context(row)
+        row['death_family_detail'] = death_family_detail_for_row(row)
         return row
 
     with open(path, encoding='utf-8-sig', newline='') as f:
@@ -2806,6 +2890,8 @@ def parse_debug(path):
                         key = alias_lookup(h, DEBUG_ALIASES)
                         if key and key not in header_map:
                             header_map[key] = idx
+                    available_fields = tuple(sorted(header_map.keys()))
+                    schema_name = detect_debug_schema(available_fields)
 
                     # Si la cabecera viene fusionada con la primera fila, recuperarla.
                     if header_map:
@@ -2850,6 +2936,8 @@ def parse_debug(path):
         r['brake_share'] = sdiv(r.get('brake_in', 0.0), r.get('brake_in', 0.0) + r.get('thr_pos', 0.0))
         r['grace_brake_share'] = sdiv(r.get('brake_grace', 0.0), r.get('brake_grace', 0.0) + r.get('thr_grace', 0.0))
         r['stop_brake_share'] = sdiv(r.get('stop_brake', 0.0), r.get('stop_brake', 0.0) + r.get('stop_throttle', 0.0))
+        r['car_overlap_per_sec'] = sdiv(r.get('car_overlaps', 0.0), max(r.get('time', 0.0), 1.0))
+        r['car_overlap_per_tick'] = sdiv(r.get('car_overlaps', 0.0), t_tot)
         val_total = r.get('yield_val_t', 0.0) + r.get('stop_val_t', 0.0)
         r['val_total'] = val_total
         r['val_per_stop_tick'] = sdiv(val_total, max(r.get('t_stop_ctx', 0.0), 1.0))
@@ -3261,6 +3349,7 @@ def compute_debug_aggregates(dbg):
         'pen_steer_app': 0.0, 'pen_align': 0.0, 't_norm': 0.0, 't_tot': 0.0,
         'thr_pos': 0.0, 'thr_grace': 0.0, 'brake_grace': 0.0, 'brake_in': 0.0,
         'coast_t': 0.0, 'stop_brake': 0.0, 'stop_throttle': 0.0,
+        'car_overlaps': 0.0, 'car_overlap_rows': 0.0,
         't_stop_ctx': 0.0, 't_stop_ctx_tl': 0.0, 't_stop_ctx_stop': 0.0, 't_stop_ctx_yield': 0.0,
         'yield_val_t': 0.0, 'stop_val_t': 0.0,
         'stop_zones_n': 0.0, 'fit_peak_raw': 0.0, 'fit_peak_gain': 0.0,
@@ -3315,6 +3404,10 @@ def compute_debug_aggregates(dbg):
         agg['thr_grace'] += r.get('thr_grace', 0.0)
         agg['brake_grace'] += r.get('brake_grace', 0.0)
         agg['brake_in'] += r.get('brake_in', 0.0)
+        car_overlaps = r.get('car_overlaps', 0.0)
+        agg['car_overlaps'] += car_overlaps
+        if car_overlaps > 0.0:
+            agg['car_overlap_rows'] += 1.0
         agg['coast_t'] += r.get('coast_t', 0.0)
         agg['stop_brake'] += r.get('stop_brake', 0.0)
         agg['stop_throttle'] += r.get('stop_throttle', 0.0)
@@ -3432,13 +3525,35 @@ def report_debug(R, dbg):
         grp = by_death[reason]
         mf = sdiv(sum(r['fit'] for r in grp), cnt)
         mt = sdiv(sum(r['time'] for r in grp), cnt)
-        R.p(f'  {reason:45s}: {cnt:5d} ({sdiv(cnt*100,len(dbg)):5.1f}%) fit={mf:>10.1f} t={mt:.1f}s')
+        collision_note = ''
+        if is_collision_reason(reason):
+            round_n = sum(1 for r in grp if collision_death_context(r) == 'COLLISION_ROUNDABOUT')
+            normal_n = cnt - round_n
+            collision_note = f' | rot={round_n}, norm={normal_n}'
+        R.p(f'  {reason:45s}: {cnt:5d} ({sdiv(cnt*100,len(dbg)):5.1f}%) fit={mf:>10.1f} t={mt:.1f}s{collision_note}')
 
     family_counts = Counter(r.get('death_family', death_family(r.get('death', ''))) for r in dbg)
+    family_detail_counts = Counter(r.get('death_family_detail', death_family_detail_for_row(r)) for r in dbg)
+    collision_stats = summarize_collision_deaths(dbg)
     death_fail_n = sum(1 for r in dbg if r.get('is_test_failure_death', is_test_failure_reason(r.get('death', ''))))
     R.p(f'\n-- Familias y Fallos por DeathReason --')
     for fam, cnt in sorted(family_counts.items(), key=lambda kv: (death_family_order_index(kv[0]), -kv[1], kv[0])):
         R.p(f'  {fam:14s}: {cnt:5d} ({sdiv(cnt*100, len(dbg)):5.1f}%)')
+    if collision_stats['total'] > 0:
+        R.p(
+            f'  Colisiones detalle: rotonda={collision_stats["roundabout"]} '
+            f'({sdiv(collision_stats["roundabout"]*100.0, collision_stats["total"]):.1f}% de colisiones), '
+            f'normales={collision_stats["normal"]}; eventos_rotonda={collision_stats["roundabout_events"]:.0f}'
+        )
+    detail_text = ', '.join(
+        f'{fam}={cnt}'
+        for fam, cnt in sorted(
+            family_detail_counts.items(),
+            key=lambda kv: (death_family_detail_order_index(kv[0]), -kv[1], kv[0]),
+        )
+    )
+    if detail_text:
+        R.p(f'  Familias detalle: {detail_text}')
     R.p(
         f'  Fail por muerte*: {death_fail_n:5d}/{len(dbg)} ({sdiv(death_fail_n*100, len(dbg)):5.1f}%) '
         f'(*sin reconstruir TestMinTime/TestMinFitness)'
@@ -3512,6 +3627,9 @@ def report_debug(R, dbg):
     R.p(f'  Acum_ThrottleDuringGraceTime:    {sdiv(agg["thr_grace"], nd):>10.4f}')
     R.p(f'  Acum_BrakeDuringGraceTime:       {sdiv(agg["brake_grace"], nd):>10.4f}')
     R.p(f'  Acum_BrakeInput:                 {sdiv(agg["brake_in"], nd):>10.4f}')
+    if debug_field_available(dbg, 'car_overlaps'):
+        R.p(f'  NumCarOverlaps:                  {sdiv(agg["car_overlaps"], nd):>10.4f}')
+        R.p(f'  Coches con CarOverlap>0:         {agg["car_overlap_rows"]:>7.0f}/{nd} ({sdiv(agg["car_overlap_rows"]*100.0, nd):.2f}%)')
     R.p(f'  Acum_CoastTime:                  {sdiv(agg["coast_t"], nd):>10.4f}')
     R.p(f'  Acum_StopBrake:                  {sdiv(agg["stop_brake"], nd):>10.4f}')
     R.p(f'  Acum_StopThrottle:               {sdiv(agg["stop_throttle"], nd):>10.4f}')
@@ -3705,7 +3823,7 @@ def report_debug(R, dbg):
         R.p(f'  Weights total (assumed):        {WEIGHTS_TOTAL}')
         init_rows = sum(1 for r in dbg if r.get('is_weight_initialization', False))
         R.p(
-            f'  Config EvolutionManager 23/06:  MUT_LOADED/MUT_SESSION={MUTATION_RATE_DYNAMIC_MIN*100:.2f}%..'
+            f'  Config EvolutionManager 26/06:  MUT_LOADED/MUT_SESSION={MUTATION_RATE_DYNAMIC_MIN*100:.2f}%..'
             f'{MUTATION_RATE_DYNAMIC_MAX*100:.2f}% | '
             f'MUT_LOADED_LARGE={MUTATION_RATE_LARGE_MIN*100:.2f}%..{MUTATION_RATE_LARGE_MAX*100:.2f}%'
         )
@@ -3940,6 +4058,7 @@ def report_quicksummary(R, rows, dbg):
         nd = len(dbg)
         deaths = Counter(r['death'] for r in dbg)
         top_death = deaths.most_common(1)[0] if deaths else ('N/A', 0)
+        collision_stats = summarize_collision_deaths(dbg)
         yield_stuck = detect_yield_stuck_candidates(dbg)
         stop_stuck = detect_stop_stuck_candidates(dbg)
         cmd_total = sum(r.get('thr_pos', 0.0) + r.get('brake_in', 0.0) for r in dbg)
@@ -4017,7 +4136,16 @@ def report_quicksummary(R, rows, dbg):
         R.p(f'  Grace brake share:{sdiv(sum(r.get("brake_grace", 0.0) for r in dbg), grace_cmd_total)*100:.2f}%')
         R.p(f'  Stop brake share: {sdiv(sum(r.get("stop_brake", 0.0) for r in dbg), stop_cmd_total)*100:.2f}%')
         R.p(f'  Stop ctx/tot tick:{sdiv(sum(r.get("t_stop_ctx", 0.0) for r in dbg), sum(r.get("t_tot", 0.0) for r in dbg))*100:.2f}%')
+        if debug_field_available(dbg, 'car_overlaps'):
+            overlap_total = sum(r.get('car_overlaps', 0.0) for r in dbg)
+            overlap_rows = sum(1 for r in dbg if r.get('car_overlaps', 0.0) > 0.0)
+            R.p(f'  CarOverlaps:      {overlap_total:.0f} ({overlap_rows}/{nd} coches)')
         R.p(f'  Muerte #1:        {top_death[0]} ({sdiv(top_death[1]*100,nd):.0f}%)')
+        if collision_stats['total'] > 0:
+            R.p(
+                f'  Collisions N/R:   {collision_stats["normal"]}/{collision_stats["roundabout"]} '
+                f'(R={sdiv(collision_stats["roundabout"]*100.0, collision_stats["total"]):.1f}%)'
+            )
         R.p(f'  Fail por muerte:  {death_fail_pct:.2f}% ({death_fail_n}/{nd})')
         if yield_stuck.get('timefinished_rows', 0) > 0:
             R.p(
@@ -4543,6 +4671,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
     by_gen = defaultdict(list)
     by_death = defaultdict(list)
     by_family = defaultdict(list)
+    by_family_detail = defaultdict(list)
 
     missing_spawn = 0
     missing_death = 0
@@ -4554,6 +4683,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         by_gen[r['gen']].append(r)
         by_death[r['death']].append(r)
         by_family[r.get('death_family', death_family(r['death']))].append(r)
+        by_family_detail[r.get('death_family_detail', death_family_detail_for_row(r))].append(r)
         if not r['spawn']:
             missing_spawn += 1
         if not r['death']:
@@ -4704,15 +4834,84 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
                     f'{st["pen_lazy_p90"]:>9.2f} | {st["pen_lazy_share"]:>8.2f}%'
                 )
 
+    if debug_field_available(dbg, 'car_overlaps'):
+        overlap_total = sum(r.get('car_overlaps', 0.0) for r in dbg)
+        overlap_rows = [r for r in dbg if r.get('car_overlaps', 0.0) > 0.0]
+        R.p(f'\n-- Interaccion entre Coches (NumCarOverlaps, 26/06) --')
+        R.p(f'  Eventos totales:           {overlap_total:.0f}')
+        R.p(f'  Coches afectados:          {len(overlap_rows)}/{nd} ({sdiv(len(overlap_rows)*100.0, nd):.2f}%)')
+        R.p(f'  Overlaps/coche medio:      {sdiv(overlap_total, nd):.4f}')
+        if overlap_rows:
+            R.p(f'  Overlaps/coche afectado:   {sdiv(overlap_total, len(overlap_rows)):.4f}')
+            R.p(f'  Overlaps/s medio afectado: {mean([r.get("car_overlap_per_sec", 0.0) for r in overlap_rows]):.4f}')
+            overlap_by_gen = []
+            for g, rows_gen in by_gen.items():
+                total_gen = sum(r.get('car_overlaps', 0.0) for r in rows_gen)
+                if total_gen <= 0.0:
+                    continue
+                affected_gen = sum(1 for r in rows_gen if r.get('car_overlaps', 0.0) > 0.0)
+                overlap_by_gen.append((total_gen, affected_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
+            if overlap_by_gen:
+                R.p('  Top generaciones por solapes:')
+                for total_gen, affected_gen, g, ngen, fit_med in sorted(overlap_by_gen, reverse=True)[:min(TOP_ROWS, 10)]:
+                    R.p(
+                        f'    Gen {g:>5d}: overlaps={total_gen:.0f}, coches={affected_gen}/{ngen} '
+                        f'({sdiv(affected_gen*100.0, ngen):.1f}%), fitMed={fit_med:.1f}'
+                    )
+            overlap_by_spawn = []
+            for sp, rows_sp in by_spawn.items():
+                total_sp = sum(r.get('car_overlaps', 0.0) for r in rows_sp)
+                if total_sp <= 0.0:
+                    continue
+                affected_sp = sum(1 for r in rows_sp if r.get('car_overlaps', 0.0) > 0.0)
+                overlap_by_spawn.append((total_sp, affected_sp, sp, len(rows_sp), mean([r.get('fit', 0.0) for r in rows_sp])))
+            if overlap_by_spawn:
+                R.p('  Top spawns por solapes:')
+                for total_sp, affected_sp, sp, nsp, fit_med in sorted(overlap_by_spawn, reverse=True)[:min(TOP_ROWS, 10)]:
+                    R.p(
+                        f'    {sp.replace("TargetPoint","TP"):>15s}: overlaps={total_sp:.0f}, '
+                        f'coches={affected_sp}/{nsp}, fitMed={fit_med:.1f}'
+                    )
+            overlap_by_death = []
+            for death, rows_dr in by_death.items():
+                total_dr = sum(r.get('car_overlaps', 0.0) for r in rows_dr)
+                if total_dr > 0.0:
+                    overlap_by_death.append((total_dr, death, len(rows_dr)))
+            if overlap_by_death:
+                R.p('  Top razones de muerte con solapes:')
+                for total_dr, death, ndr in sorted(overlap_by_death, reverse=True)[:min(TOP_ROWS, 10)]:
+                    R.p(f'    {death:45s}: overlaps={total_dr:.0f}, coches={ndr}')
+            car_bounds_overlap = infer_carindex_bounds(dbg)
+            overlap_by_car_family = defaultdict(lambda: {'overlaps': 0.0, 'rows': 0, 'affected': 0})
+            for r in dbg:
+                fam = car_index_family_for_row(r, bounds=car_bounds_overlap)
+                item = overlap_by_car_family[fam]
+                item['rows'] += 1
+                item['overlaps'] += r.get('car_overlaps', 0.0)
+                if r.get('car_overlaps', 0.0) > 0.0:
+                    item['affected'] += 1
+            family_rows = [
+                (v['overlaps'], v['affected'], fam, v['rows'])
+                for fam, v in overlap_by_car_family.items()
+                if v['overlaps'] > 0.0
+            ]
+            if family_rows:
+                R.p('  Familias CarIndex con solapes:')
+                for total_fam, affected_fam, fam, nfam in sorted(family_rows, reverse=True):
+                    R.p(
+                        f'    {fam:>16s}: overlaps={total_fam:.0f}, coches={affected_fam}/{nfam} '
+                        f'({sdiv(affected_fam*100.0, nfam):.1f}%)'
+                    )
+
     # Familias de muerte
-    R.p(f'\n-- Muertes por Familia --')
-    hdr = f'  {"Familia":>10s} | {"N":>7s} | {"Pct":>7s} | {"FitMed":>10s} | {"tMed":>7s} | {"PenM":>9s} | {"PenV":>9s} | {"PenSS":>9s}'
+    R.p(f'\n-- Muertes por Familia (colisiones separadas) --')
+    hdr = f'  {"Familia":>22s} | {"N":>7s} | {"Pct":>7s} | {"FitMed":>10s} | {"tMed":>7s} | {"PenM":>9s} | {"PenV":>9s} | {"PenSS":>9s}'
     R.p(hdr)
     R.p(f'  {"-"*(len(hdr)-2)}')
-    for fam, rows_f in sorted(by_family.items(), key=lambda kv: len(kv[1]), reverse=True):
+    for fam, rows_f in sorted(by_family_detail.items(), key=lambda kv: len(kv[1]), reverse=True):
         nf = len(rows_f)
         R.p(
-            f'  {fam:>10s} | {nf:>7d} | {sdiv(nf*100, nd):>6.2f}% | {mean([r["fit"] for r in rows_f]):>10.2f} | '
+            f'  {fam:>22s} | {nf:>7d} | {sdiv(nf*100, nd):>6.2f}% | {mean([r["fit"] for r in rows_f]):>10.2f} | '
             f'{mean([r["time"] for r in rows_f]):>6.2f}s | {mean([r["pen_m"] for r in rows_f]):>9.2f} | {mean([r["pen_v"] for r in rows_f]):>9.2f} | {mean([r.get("pen_swstop", 0.0) for r in rows_f]):>9.2f}'
         )
 
@@ -4747,6 +4946,8 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('round_exit1_death_rate', 'RoundExit1DeathRate', 'round_exit1_count'),
         ('round_exit2_death_rate', 'RoundExit2DeathRate', 'round_exit2_count'),
         ('round_exit3_death_rate', 'RoundExit3PlusDeathRate', 'round_exit3_count'),
+        ('car_overlap_per_sec', 'CarOverlaps/s', 'car_overlaps'),
+        ('car_overlap_per_tick', 'CarOverlaps/tick', 'car_overlaps'),
     ]
     available_fields = debug_available_fields(dbg)
     coverage_rows = []
@@ -4829,6 +5030,9 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('round_exit1_throttle_avg', 'RoundExit1ThrottleAvg'),
         ('round_exit2_throttle_avg', 'RoundExit2ThrottleAvg'),
         ('round_exit3_throttle_avg', 'RoundExit3PlusThrottleAvg'),
+        ('car_overlaps', 'NumCarOverlaps'),
+        ('car_overlap_per_sec', 'CarOverlapsPerSec'),
+        ('car_overlap_per_tick', 'CarOverlapsPerTick'),
         ('stop_zones_n', 'NumStopZonesEntered'),
         ('fit_peak_raw', 'NotNorm_PeakFitness'),
         ('fit_peak_gain', 'PeakGain(Peak-Final)'),
@@ -5133,6 +5337,7 @@ def save_json_snapshot(
     deaths = Counter(r.get('death', '') for r in dbg_rows)
     car_bounds = infer_carindex_bounds(dbg_rows)
     families = Counter(death_family(r.get('death', '')) for r in dbg_rows)
+    families_detail = Counter(death_family_detail_for_row(r) for r in dbg_rows)
     lazy_rows = families.get('LAZY', 0)
     invalid_brain_rows = families.get('INVALID_BRAIN', 0)
     death_failure_rows = sum(
@@ -5156,6 +5361,10 @@ def save_json_snapshot(
     yield_bonus_total = sum(r.get('yield_bonus', 0.0) for r in dbg_rows)
     stop_done_total = sum(r.get('stop_done_n', 0.0) for r in dbg_rows)
     yield_done_total = sum(r.get('yield_done_n', 0.0) for r in dbg_rows)
+    car_overlap_total = sum(r.get('car_overlaps', 0.0) for r in dbg_rows)
+    car_overlap_rows = sum(1 for r in dbg_rows if r.get('car_overlaps', 0.0) > 0.0)
+    car_overlap_per_sec_avg, car_overlap_per_sec_n = exposed_mean(dbg_rows, 'car_overlap_per_sec')
+    car_overlap_per_tick_avg, car_overlap_per_tick_n = exposed_mean(dbg_rows, 'car_overlap_per_tick')
     stop_bonus_per_avg, stop_bonus_per_n = exposed_mean(dbg_rows, 'stop_bonus_per')
     yield_bonus_per_avg, yield_bonus_per_n = exposed_mean(dbg_rows, 'yield_bonus_per')
     stop_done_rate_avg, stop_done_rate_n = exposed_mean(dbg_rows, 'stop_done_rate')
@@ -5185,6 +5394,7 @@ def save_json_snapshot(
     round_completed_total = sum(r.get('round_completed_n', 0.0) for r in dbg_rows)
     round_collisions_total = sum(r.get('round_collisions', 0.0) for r in dbg_rows)
     round_ticks_total = sum(r.get('round_ticks', 0.0) for r in dbg_rows)
+    collision_stats = summarize_collision_deaths(dbg_rows)
 
     by_spawn = defaultdict(list)
     for r in dbg_rows:
@@ -5258,6 +5468,14 @@ def save_json_snapshot(
             'avg_thr_grace': sdiv(sum(r.get('thr_grace', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_brake_grace': sdiv(sum(r.get('brake_grace', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_brake_in': sdiv(sum(r.get('brake_in', 0.0) for r in dbg_rows), len(dbg_rows)),
+            'car_overlap_events': car_overlap_total,
+            'car_overlap_rows': car_overlap_rows,
+            'car_overlap_rows_pct': sdiv(car_overlap_rows * 100.0, len(dbg_rows)),
+            'avg_car_overlaps': sdiv(car_overlap_total, len(dbg_rows)),
+            'avg_car_overlap_per_sec_exposed': car_overlap_per_sec_avg,
+            'avg_car_overlap_per_sec_exposed_n': car_overlap_per_sec_n,
+            'avg_car_overlap_per_tick_exposed': car_overlap_per_tick_avg,
+            'avg_car_overlap_per_tick_exposed_n': car_overlap_per_tick_n,
             'avg_coast_t': sdiv(sum(r.get('coast_t', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_stop_brake': sdiv(sum(r.get('stop_brake', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_stop_throttle': sdiv(sum(r.get('stop_throttle', 0.0) for r in dbg_rows), len(dbg_rows)),
@@ -5295,6 +5513,12 @@ def save_json_snapshot(
             'roundabout_entries': round_entered_total,
             'roundabout_completed': round_completed_total,
             'roundabout_collisions': round_collisions_total,
+            'collision_deaths_total': collision_stats['total'],
+            'roundabout_collision_deaths': collision_stats['roundabout'],
+            'normal_collision_deaths': collision_stats['normal'],
+            'roundabout_collision_death_share': sdiv(collision_stats['roundabout'], collision_stats['total']),
+            'roundabout_collision_events': collision_stats['roundabout_events'],
+            'roundabout_collision_signal_non_collision_rows': collision_stats['round_signal_non_collision'],
             'roundabout_bonus_breakdown_available': round_bonus_breakdown_available,
             'roundabout_bonus_net': round_bonus_total,
             'roundabout_completion_bonus': round_completion_bonus_total,
@@ -5354,6 +5578,7 @@ def save_json_snapshot(
             'stop_brake_share': sdiv(sum(r.get('stop_brake', 0.0) for r in dbg_rows), stop_cmd_total),
             'stop_ctx_tick_coverage': sdiv(stop_ticks_total, ticks_total),
             'death_families': dict(families),
+            'death_families_detail': dict(families_detail),
             'death_failure_rows': death_failure_rows,
             'death_failure_pct': sdiv(death_failure_rows * 100.0, len(dbg_rows)),
         },
@@ -5843,16 +6068,16 @@ def plot_debug(dbg):
         ax.set_xlabel('Cantidad'); ax.invert_yaxis()
         saved.append(save_fig(fig, '08_muertes_debug.png'))
 
-        grouped = group_death_reasons(deaths)
+        grouped = group_debug_death_families(dbg, split_roundabout_collisions=True)
         if grouped:
             fig, ax = plt.subplots(figsize=(12, max(4, len(grouped)*0.55)))
             reasons = [r for r, _, _ in grouped]
             counts = [c for _, c, _ in grouped]
-            colors = [death_reason_color(r) for r in reasons]
+            colors = [death_group_color(r) for r in reasons]
             short = [short_death_reason(r) for r in reasons]
             ax.barh(short, counts, color=colors, alpha=0.85)
             add_family_separators(ax, grouped)
-            ax.set_title(f'{LABEL} - Razones de Muerte Agrupadas por Familia')
+            ax.set_title(f'{LABEL} - Razones de Muerte Agrupadas (colisiones separadas)')
             ax.set_xlabel('Cantidad'); ax.invert_yaxis()
             saved.append(save_fig(fig, '08b_muertes_debug_grupos.png'))
 
@@ -7483,6 +7708,14 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
             if legal_fail_pct > 0.0:
                 insights.append(f'Fallo legal (stop+traffic+yield+nav): {legal_fail_pct:.2f}% de coches.')
 
+            collision_stats = summarize_collision_deaths(dbg_rows)
+            if collision_stats['total'] > 0:
+                insights.append(
+                    f'Colisiones: {collision_stats["roundabout"]} en rotonda '
+                    f'({sdiv(collision_stats["roundabout"]*100.0, collision_stats["total"]):.1f}% de colisiones) '
+                    f'y {collision_stats["normal"]} normales.'
+                )
+
         mutation_rows = [
             r for r in dbg_rows
             if not r.get('is_weight_initialization', False)
@@ -7491,7 +7724,7 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
         if mutation_rows:
             mut_rate_med = pctl([r.get('mut_rate', 0.0) for r in mutation_rows], 50) * 100.0
             insights.append(
-                f'Mutacion dinamica 23/06: MutRate mediano {mut_rate_med:.2f}% '
+                f'Mutacion dinamica 26/06: MutRate mediano {mut_rate_med:.2f}% '
                 f'(rango normal {MUTATION_RATE_DYNAMIC_MIN*100:.2f}%..{MUTATION_RATE_DYNAMIC_MAX*100:.2f}%, '
                 f'familia grande {MUTATION_RATE_LARGE_MIN*100:.2f}%..{MUTATION_RATE_LARGE_MAX*100:.2f}%).'
             )
@@ -7528,6 +7761,8 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
         steer_stop_pen = sum(r.get('pen_swstop', 0.0) for r in dbg_rows)
         align_pen = sum(r.get('pen_align', 0.0) for r in dbg_rows)
         nav_pen = sum(r.get('pen_nav', 0.0) for r in dbg_rows)
+        car_overlap_total = sum(r.get('car_overlaps', 0.0) for r in dbg_rows)
+        car_overlap_rows = sum(1 for r in dbg_rows if r.get('car_overlaps', 0.0) > 0.0)
 
         brake_share_global = sdiv(cmd_brk, cmd_brk + cmd_thr)
         stop_brake_share = sdiv(stop_brk, stop_brk + stop_thr)
@@ -7535,6 +7770,12 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
 
         if stop_ctx_coverage > 0.0:
             insights.append(f'Cobertura de contexto stop/semaforo: {stop_ctx_coverage*100:.2f}% de ticks.')
+
+        if debug_field_available(dbg_rows, 'car_overlaps') and car_overlap_total > 0.0:
+            insights.append(
+                f'Solapes entre coches 26/06: {car_overlap_total:.0f} eventos en '
+                f'{car_overlap_rows}/{n_dbg} coches ({sdiv(car_overlap_rows*100.0, n_dbg):.2f}%).'
+            )
 
         if (yield_val_total + stop_val_total) > 0.0:
             insights.append(
@@ -7677,7 +7918,7 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
             if steer_stop_pen > 0.0 and steer_approach_pen > steer_stop_pen:
                 insights.append('La penalizacion por aproximacion de steering supera la de giro en parado; revisar suavizado antes de la fase stop.')
         if align_pen > 0.0:
-            insights.append(f'Penalty de alineacion 23/06 acumulado: media {sdiv(align_pen, n_dbg):.2f} por coche.')
+            insights.append(f'Penalty de alineacion acumulado: media {sdiv(align_pen, n_dbg):.2f} por coche.')
             if align_pen > steer_approach_pen and steer_approach_pen > 0.0:
                 insights.append('La penalizacion de alineacion supera a SteerApproach; revisar orientacion respecto a la linea de stop/ceda/semaforo.')
         if abs(thr_grace) > 0.0:
@@ -8107,6 +8348,7 @@ def report_external_ai_brief(
         times_dbg = [r.get('time', 0.0) for r in debug_rows]
         deaths = Counter(r.get('death', '') for r in debug_rows if r.get('death', ''))
         family_counts = Counter(death_family(r.get('death', '')) for r in debug_rows if r.get('death', ''))
+        collision_stats = summarize_collision_deaths(debug_rows)
         top_death = deaths.most_common(1)[0] if deaths else ('-', 0)
         lazy_n = sum(1 for r in debug_rows if is_lazy_reason(r.get('death', '')))
         death_fail_n = sum(1 for r in debug_rows if r.get('is_test_failure_death', is_test_failure_reason(r.get('death', ''))))
@@ -8118,10 +8360,26 @@ def report_external_ai_brief(
         add_kv(R, 'Tiempo vivo medio/P50', f'{mean(times_dbg):.2f}s / {pctl(times_dbg, 50):.2f}s')
         add_kv(R, 'Muerte dominante', f'{top_death[0]} ({fmt_pct_ratio(top_death[1], nd, 1)})')
         add_kv(R, 'Familias de muerte top', ', '.join(f'{k}={fmt_pct_ratio(v, nd, 1)}' for k, v in family_counts.most_common(4)) or '-')
+        if collision_stats['total'] > 0:
+            add_kv(
+                R,
+                'Colisiones normal/rotonda',
+                f'{collision_stats["normal"]}/{collision_stats["roundabout"]} '
+                f'(rotonda {fmt_pct_ratio(collision_stats["roundabout"], collision_stats["total"], 1)} de colisiones)',
+            )
         add_kv(R, 'Fallo legal', f'{fmt_pct_ratio(legal_fail_n, nd, 2)} ({fmt_int(legal_fail_n)}/{fmt_int(nd)})')
         add_kv(R, 'LAZY', f'{fmt_pct_ratio(lazy_n, nd, 2)} ({fmt_int(lazy_n)}/{fmt_int(nd)})')
         fail_label = 'Fail por muerte' if MODE == 'test' else 'Muertes no exitosas segun TEST'
         add_kv(R, fail_label, f'{fmt_pct_ratio(death_fail_n, nd, 2)} ({fmt_int(death_fail_n)}/{fmt_int(nd)})')
+        if debug_field_available(debug_rows, 'car_overlaps'):
+            overlap_total = sum(r.get('car_overlaps', 0.0) for r in debug_rows)
+            overlap_rows = sum(1 for r in debug_rows if r.get('car_overlaps', 0.0) > 0.0)
+            add_kv(
+                R,
+                'Solapes entre coches',
+                f'{overlap_total:.0f} eventos; {fmt_pct_ratio(overlap_rows, nd, 2)} '
+                f'({fmt_int(overlap_rows)}/{fmt_int(nd)} coches)',
+            )
         add_kv(R, 'Stop-context/ticks', fmt_pct_ratio(stop_ticks, total_ticks, 2))
         add_kv(R, 'Stop/Yield completados', f'{sum(r.get("stop_done_n", 0.0) for r in debug_rows):.0f} / {sum(r.get("yield_done_n", 0.0) for r in debug_rows):.0f}')
         add_kv(R, 'Stop/Yield bonus total', f'{sum(r.get("stop_bonus", 0.0) for r in debug_rows):.2f} / {sum(r.get("yield_bonus", 0.0) for r in debug_rows):.2f}')
@@ -8224,12 +8482,17 @@ def report_external_ai_brief(
             priority_lines.append(f'MeanFit cae ({slope_mean:+.4f}/gen): posible regresion o recompensa dominante negativa.')
     if debug_rows:
         family_counts = Counter(death_family(r.get('death', '')) for r in debug_rows if r.get('death', ''))
+        collision_stats = summarize_collision_deaths(debug_rows)
         violation_pct = sdiv(family_counts.get('VIOLATION', 0) * 100.0, len(debug_rows))
         collision_pct = sdiv(family_counts.get('COLLISION', 0) * 100.0, len(debug_rows))
         if violation_pct >= 20.0:
             priority_lines.append(f'Fallo legal alto ({violation_pct:.2f}%): revisar stop/yield/traffic/nav antes que microajustes de fitness.')
         if collision_pct >= 20.0:
-            priority_lines.append(f'Colisiones altas ({collision_pct:.2f}%): revisar velocidad/steering/spawns problematicos.')
+            priority_lines.append(
+                f'Colisiones altas ({collision_pct:.2f}%): '
+                f'rotonda={collision_stats["roundabout"]}, normales={collision_stats["normal"]}; '
+                'revisar velocidad/steering/spawns problematicos.'
+            )
     if yield_stuck_info and yield_stuck_info.get('candidate_count', 0) > 0:
         priority_lines.append(
             f'YieldTrap: {yield_stuck_info.get("candidate_count", 0)}/'
@@ -8256,7 +8519,8 @@ def report_external_ai_brief(
     R.p('  - Las metricas situacionales solo valen con denominador real: entradas, ticks o completaciones.')
     R.p('  - NumRoundaboutsCompleted es limite inferior: se confirma al registrar una entrada posterior.')
     R.p('  - RoundaboutBonus neto = bonus completado - penalty entrada - penalty throttle cuando el desglose existe.')
-    R.p('  - Mutacion 23/06: GenerationsWithoutImprovement no se exporta; el informe valida rangos esperados, no el valor exacto por individuo.')
+    R.p('  - NumCarOverlaps 26/06 mide solapes entre coches vivos; no equivale automaticamente a DeathReason COLLISION.')
+    R.p('  - Mutacion 26/06: GenerationsWithoutImprovement no se exporta; el informe valida rangos esperados, no el valor exacto por individuo.')
     R.p('  - En TEST, Summary es la fuente principal de acierto/fallo; Debug reconstruye causas y contexto.')
     R.p('  - Si hay filas Debug excluidas sin Summary cerrado, evitar conclusiones sobre generaciones incompletas.')
 

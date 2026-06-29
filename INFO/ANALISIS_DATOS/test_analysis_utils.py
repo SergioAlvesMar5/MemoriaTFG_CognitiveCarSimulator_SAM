@@ -10,7 +10,11 @@ from analyse_current import (
     WEIGHTS_TOTAL,
     align_debug_to_completed_summary,
     classify_test_outcome,
+    collision_death_context,
     correlation_sample,
+    detect_debug_schema,
+    death_family_detail_for_row,
+    group_debug_death_families,
     infer_label_from_debug_rows,
     inspect_csv_layout,
     lifetime_distribution_bins,
@@ -26,6 +30,7 @@ from analyse_current import (
     analyze_convergence,
     predict_fitness_trajectory,
     select_test_summary_rows,
+    summarize_collision_deaths,
     summarize_test_results,
 )
 
@@ -290,6 +295,43 @@ def test_debug_parser_supports_alignment_penalty_23_06():
     assert rows[0]['_schema'] == '2026-06-alignment-penalty'
 
 
+def test_debug_parser_supports_car_overlaps_26_06():
+    header = [
+        'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
+        'Ticks_Total', 'Acum_AlignmentPenalty', 'NumCarOverlaps',
+    ]
+    values = [1, 'Car1', 100, 20, 'Spawn1', 'TIMEFINISHED', 200, 1.5, 4]
+    path = ''
+    try:
+        with tempfile.NamedTemporaryFile('w', newline='', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(header)
+            writer.writerow(values)
+            path = tmp.name
+        rows = parse_debug(path)
+    finally:
+        if path and os.path.exists(path):
+            os.unlink(path)
+
+    assert len(rows) == 1
+    assert rows[0]['car_overlaps'] == 4
+    assert rows[0]['car_overlap_per_sec'] == 4 / 20
+    assert rows[0]['car_overlap_per_tick'] == 4 / 200
+    assert 'car_overlaps' in rows[0]['_available_fields']
+    assert rows[0]['_schema'] == '2026-06-car-overlap-alignment'
+
+
+def test_debug_schema_detects_full_car_overlap_26_06():
+    keys = {
+        'car_overlaps',
+        'pen_align',
+        'round_completion_bonus',
+        'round_entry_penalty',
+        'round_throttle_penalty',
+    }
+    assert detect_debug_schema(keys) == '2026-06-car-overlap-alignment-roundabout-bonus-breakdown'
+
+
 def test_csv_layout_reports_duplicate_mapped_headers():
     header = [
         'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
@@ -311,6 +353,47 @@ def test_csv_layout_reports_duplicate_mapped_headers():
     assert meta['duplicate_headers'] == ['Acum_SteerApproachPenalty x2']
     assert meta['duplicate_mapped_keys'] == ['pen_steer_app: Acum_SteerApproachPenalty, Acum_SteerApproachPenalty']
     assert meta['long_rows'] == 0
+
+
+def test_collision_deaths_split_roundabout_vs_normal():
+    header = [
+        'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
+        'CollisionsInRoundabout',
+    ]
+    values = [
+        [1, 'CarRound', 100, 12, 'Spawn1', 'COLLISION_WITH_BP_IntersectionBorder139', 1],
+        [1, 'CarNormal', 90, 10, 'Spawn2', 'COLLISION_WITH_NavModifierVolume35', 0],
+        [1, 'CarStop', 80, 9, 'Spawn3', 'STOP_VIOLATION', 0],
+    ]
+    path = ''
+    try:
+        with tempfile.NamedTemporaryFile('w', newline='', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(header)
+            writer.writerows(values)
+            path = tmp.name
+        rows = parse_debug(path)
+    finally:
+        if path and os.path.exists(path):
+            os.unlink(path)
+
+    by_car = {r['car']: r for r in rows}
+    assert collision_death_context(by_car['CarRound']) == 'COLLISION_ROUNDABOUT'
+    assert death_family_detail_for_row(by_car['CarRound']) == 'COLLISION_ROUNDABOUT'
+    assert collision_death_context(by_car['CarNormal']) == 'COLLISION_NORMAL'
+    assert death_family_detail_for_row(by_car['CarNormal']) == 'COLLISION_NORMAL'
+    assert collision_death_context(by_car['CarStop']) == 'NO_COLLISION'
+
+    stats = summarize_collision_deaths(rows)
+    assert stats['total'] == 2
+    assert stats['roundabout'] == 1
+    assert stats['normal'] == 1
+    grouped = group_debug_death_families(rows)
+    assert grouped[:3] == [
+        ('COLLISION_ROUNDABOUT', 1, 'COLLISION_ROUNDABOUT'),
+        ('COLLISION_NORMAL', 1, 'COLLISION_NORMAL'),
+        ('VIOLATION', 1, 'VIOLATION'),
+    ]
 
 
 def test_current_network_weight_count_and_test_rules():
