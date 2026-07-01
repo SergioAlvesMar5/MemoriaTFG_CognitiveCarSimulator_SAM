@@ -27,6 +27,7 @@ from analyse_current import (
     pctl,
     rolling,
     sdiv,
+    stop_violation_subtype,
     analyze_convergence,
     predict_fitness_trajectory,
     select_test_summary_rows,
@@ -332,6 +333,50 @@ def test_debug_schema_detects_full_car_overlap_26_06():
     assert detect_debug_schema(keys) == '2026-06-car-overlap-alignment-roundabout-bonus-breakdown'
 
 
+def test_debug_parser_supports_yield_crossing_diagnostics_30_06():
+    header = [
+        'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
+        'Ticks_Total', 'Ticks_StopContext', 'NumYieldsCompleted', 'NumCarOverlaps',
+        'NumYieldFreePasses', 'SpeedAtYieldValidation', 'Acum_TimeBlockedAtCrossing',
+        'FrontObstAtDeath', 'Acum_SteerApproachWrongDir', 'Acum_SteerApproachRightDir',
+        'Acum_CarOverlapPenaltyShadow', 'FirstSteerAfterReleaseTicks',
+    ]
+    values = [
+        1, 'Car1', 100, 20, 'Spawn1', 'STOP_VIOLATION_TIMEOUT',
+        200, 9.0, 2, 4,
+        1, 263.5, 0.9,
+        0.12, 3.0, 1.0,
+        50.0, 14,
+    ]
+    path = ''
+    try:
+        with tempfile.NamedTemporaryFile('w', newline='', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(header)
+            writer.writerow(values)
+            path = tmp.name
+        rows = parse_debug(path)
+    finally:
+        if path and os.path.exists(path):
+            os.unlink(path)
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row['_schema'] == '2026-06-30-yield-crossing-overlap-diagnostics'
+    assert row['death_canon'] == 'STOP_VIOLATION'
+    assert row['death_family_detail'] == 'STOP_VIOLATION_TIMEOUT'
+    assert stop_violation_subtype(row['death']) == 'TIMEOUT'
+    assert classify_test_outcome(row) == 'fail_death'
+    assert row['yield_free_passes'] == 1
+    assert row['yield_validation_seen'] == 1.0
+    assert row['crossing_blocked_per_stop_tick'] == 0.1
+    assert row['crossing_blocked_per_life_sec'] == 0.045
+    assert row['car_overlap_shadow_per_overlap'] == 12.5
+    assert row['steer_app_wrong_share'] == 0.75
+    assert row['first_steer_release_seen'] == 1.0
+    assert metric_values(rows, 'yield_validation_speed') == [263.5]
+
+
 def test_csv_layout_reports_duplicate_mapped_headers():
     header = [
         'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
@@ -401,6 +446,8 @@ def test_current_network_weight_count_and_test_rules():
     assert classify_test_outcome({'death': 'TIMEFINISHED', 'time': 60, 'fit': 30000}) == 'success'
     assert classify_test_outcome({'death': 'TIMEFINISHED', 'time': 59, 'fit': 30000}) == 'fail_time'
     assert classify_test_outcome({'death': 'STOP_VIOLATION', 'time': 60, 'fit': 30000}) == 'fail_death'
+    assert classify_test_outcome({'death': 'STOP_VIOLATION_EXIT', 'time': 60, 'fit': 30000}) == 'fail_death'
+    assert classify_test_outcome({'death': 'STOP_VIOLATION_TIMEOUT', 'time': 60, 'fit': 30000}) == 'fail_death'
     assert classify_test_outcome(
         {'death': 'TIMEFINISHED', 'time': 60, 'fit': 20000},
         use_fitness=True,
