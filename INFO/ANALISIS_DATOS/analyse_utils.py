@@ -8,6 +8,19 @@ No esta pensado para ejecutarse directamente.
 
 # ── Utilidades ──
 
+import csv
+import logging
+import math
+import os
+import re
+import unicodedata
+from collections import Counter, defaultdict
+from datetime import datetime
+from functools import lru_cache
+
+import numpy as np
+
+
 def clean(s):
     return s.replace('\ufeff', '').strip()
 
@@ -82,6 +95,12 @@ def detect_debug_schema(mapped_keys):
     keys = set(mapped_keys or [])
     if {'b', 'c', 'd', 'e'} & keys:
         return 'legacy-components'
+    diagnostics_0107 = {
+        'car_overlap_penalty',
+        'queue_wait_bonus',
+    }
+    if diagnostics_0107 & keys:
+        return '2026-07-01-overlap-penalty-queue-wait'
     diagnostics_3006 = {
         'yield_free_passes',
         'yield_validation_speed',
@@ -405,9 +424,16 @@ CORRELATION_EXPOSURE_FIELDS = {
     'round_exit1_throttle_avg': 'round_exit1_ticks',
     'round_exit2_throttle_avg': 'round_exit2_ticks',
     'round_exit3_throttle_avg': 'round_exit3_ticks',
+    'pen_v_per_life_sec': 'pen_v',
+    'pen_v_fit_share': 'pen_v',
+    'car_overlap_penalty': 'car_overlaps',
+    'car_overlap_penalty_per_overlap': 'car_overlaps',
     'car_overlap_per_sec': 'car_overlaps',
     'car_overlap_per_tick': 'car_overlaps',
     'car_overlap_shadow_per_overlap': 'car_overlaps',
+    'queue_wait_bonus': 'queue_wait_bonus',
+    'queue_wait_bonus_per_life_sec': 'queue_wait_bonus',
+    'queue_wait_bonus_fit_share': 'queue_wait_bonus',
     'yield_validation_speed': 'yield_validation_seen',
     'crossing_blocked_per_stop_tick': 'crossing_blocked_t',
     'crossing_blocked_per_life_sec': 'crossing_blocked_t',
@@ -422,6 +448,10 @@ METRIC_REQUIRED_FIELDS = {
     'round_completion_bonus_per_completion': 'round_completion_bonus',
     'round_entry_penalty_per_entry': 'round_entry_penalty',
     'round_throttle_penalty_per_tick': 'round_throttle_penalty',
+    'car_overlap_shadow_per_overlap': 'car_overlap_pen_shadow',
+    'car_overlap_penalty_per_overlap': 'car_overlap_penalty',
+    'queue_wait_bonus_per_life_sec': 'queue_wait_bonus',
+    'queue_wait_bonus_fit_share': 'queue_wait_bonus',
 }
 
 def correlation_sample(rows, key):
@@ -437,6 +467,9 @@ def correlation_sample(rows, key):
 
 def metric_value_for_row(row, key):
     """Valor por fila, devolviendo None cuando la metrica no aplica."""
+    required_key = METRIC_REQUIRED_FIELDS.get(key)
+    if required_key and required_key not in row.get('_available_fields', ()):
+        return None
     exposure_key = CORRELATION_EXPOSURE_FIELDS.get(key)
     if exposure_key and num(row.get(exposure_key, 0.0), 0.0) <= 0.0:
         return None
@@ -453,6 +486,9 @@ def metric_values(rows, key):
     return vals
 
 def metric_exposure_count(rows, key):
+    required_key = METRIC_REQUIRED_FIELDS.get(key)
+    if required_key and required_key not in debug_available_fields(rows):
+        return 0
     exposure_key = CORRELATION_EXPOSURE_FIELDS.get(key)
     if not exposure_key:
         return len(rows)

@@ -237,6 +237,9 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
         nav_pen = sum(r.get('pen_nav', 0.0) for r in dbg_rows)
         car_overlap_total = sum(r.get('car_overlaps', 0.0) for r in dbg_rows)
         car_overlap_rows = sum(1 for r in dbg_rows if r.get('car_overlaps', 0.0) > 0.0)
+        car_overlap_penalty_total = sum(r.get('car_overlap_penalty', 0.0) for r in dbg_rows)
+        queue_wait_bonus_total = sum(r.get('queue_wait_bonus', 0.0) for r in dbg_rows)
+        queue_wait_bonus_rows = sum(1 for r in dbg_rows if r.get('queue_wait_bonus', 0.0) > 0.0)
         yield_free_passes_total = sum(r.get('yield_free_passes', 0.0) for r in dbg_rows)
         crossing_blocked_total = sum(r.get('crossing_blocked_t', 0.0) for r in dbg_rows)
         crossing_blocked_rows = sum(1 for r in dbg_rows if r.get('crossing_blocked_t', 0.0) > 0.0)
@@ -262,6 +265,17 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
                     f'Sombra de penalty por solape 30/06: {car_overlap_shadow_total:.2f} '
                     f'({sdiv(car_overlap_shadow_total, car_overlap_total):.2f}/overlap).'
                 )
+            if debug_field_available(dbg_rows, 'car_overlap_penalty') and car_overlap_penalty_total > 0.0:
+                insights.append(
+                    f'Penalty real por solape 01/07: {car_overlap_penalty_total:.2f} '
+                    f'({sdiv(car_overlap_penalty_total, car_overlap_total):.2f}/overlap).'
+                )
+
+        if debug_field_available(dbg_rows, 'queue_wait_bonus') and queue_wait_bonus_total > 0.0:
+            insights.append(
+                f'QueueWaitBonus 01/07: {queue_wait_bonus_total:.2f} acumulado en '
+                f'{queue_wait_bonus_rows}/{n_dbg} coches ({sdiv(queue_wait_bonus_rows*100.0, n_dbg):.2f}%).'
+            )
 
         if debug_field_available(dbg_rows, 'yield_free_passes') and yield_free_passes_total > 0.0:
             insights.append(
@@ -301,6 +315,8 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
                 f'Completados: Stop={sdiv(stop_done_total, n_dbg):.2f}/coche (bonus {sdiv(stop_bonus_total, n_dbg):.2f}), '
                 f'Yield={sdiv(yield_done_total, n_dbg):.2f}/coche (bonus {sdiv(yield_bonus_total, n_dbg):.2f}).'
             )
+            if debug_field_available(dbg_rows, 'queue_wait_bonus') and queue_wait_bonus_total > 0.0:
+                insights.append(f'Bonus de espera en cola: {sdiv(queue_wait_bonus_total, n_dbg):.2f}/coche de media global.')
 
         if stop_zones_total > 0:
             stop_done_rate = sdiv(stop_done_total, stop_zones_total)
@@ -822,6 +838,10 @@ def report_external_ai_brief(
         R.p('  - No hay registros Debug seleccionados; las metricas por coche no son concluyentes.')
     if not summary_rows:
         R.p('  - No hay Summary seleccionado; la lectura de generacion/convergencia queda limitada.')
+        if mode == 'test':
+            R.p('  - En test 01/07 puede ser normal si se ejecuto el flujo de coche unico con MultiTestingMode desactivado.')
+
+    report_program_updates_0107(R, debug_rows)
 
     R.p(f'\n-- KPIs Principales --')
     if summary_rows:
@@ -904,6 +924,18 @@ def report_external_ai_brief(
             if debug_field_available(debug_rows, 'car_overlap_pen_shadow'):
                 shadow_total = sum(r.get('car_overlap_pen_shadow', 0.0) for r in debug_rows)
                 add_kv(R, 'Sombra penalty solapes', f'{shadow_total:.2f}; {sdiv(shadow_total, overlap_total):.2f}/overlap')
+            if debug_field_available(debug_rows, 'car_overlap_penalty'):
+                overlap_penalty = sum(r.get('car_overlap_penalty', 0.0) for r in debug_rows)
+                add_kv(R, 'Penalty real solapes', f'{overlap_penalty:.2f}; {sdiv(overlap_penalty, overlap_total):.2f}/overlap')
+        if debug_field_available(debug_rows, 'queue_wait_bonus'):
+            queue_wait_bonus = sum(r.get('queue_wait_bonus', 0.0) for r in debug_rows)
+            queue_wait_rows = sum(1 for r in debug_rows if r.get('queue_wait_bonus', 0.0) > 0.0)
+            add_kv(
+                R,
+                'QueueWaitBonus',
+                f'{queue_wait_bonus:.2f} total; {fmt_pct_ratio(queue_wait_rows, nd, 2)} '
+                f'({fmt_int(queue_wait_rows)}/{fmt_int(nd)} coches)',
+            )
         add_kv(R, 'Stop-context/ticks', fmt_pct_ratio(stop_ticks, total_ticks, 2))
         add_kv(R, 'Stop/Yield completados', f'{sum(r.get("stop_done_n", 0.0) for r in debug_rows):.0f} / {sum(r.get("yield_done_n", 0.0) for r in debug_rows):.0f}')
         add_kv(R, 'Stop/Yield bonus total', f'{sum(r.get("stop_bonus", 0.0) for r in debug_rows):.2f} / {sum(r.get("yield_bonus", 0.0) for r in debug_rows):.2f}')
@@ -1065,6 +1097,19 @@ def report_external_ai_brief(
         crossing_rows = sum(1 for r in debug_rows if r.get('crossing_blocked_t', 0.0) > 0.0)
         if crossing_total > 0.0:
             priority_lines.append(f'Bloqueo en cruce 30/06: {crossing_total:.2f}s concentrados en {crossing_rows}/{len(debug_rows)} coches.')
+    if debug_rows and debug_field_available(debug_rows, 'car_overlap_penalty'):
+        overlap_total = sum(r.get('car_overlaps', 0.0) for r in debug_rows)
+        overlap_penalty = sum(r.get('car_overlap_penalty', 0.0) for r in debug_rows)
+        if overlap_penalty > 0.0:
+            priority_lines.append(
+                f'Penalty real por solapes 01/07: {overlap_penalty:.2f} '
+                f'({sdiv(overlap_penalty, overlap_total):.2f}/overlap).'
+            )
+    if debug_rows and debug_field_available(debug_rows, 'queue_wait_bonus'):
+        queue_wait_bonus = sum(r.get('queue_wait_bonus', 0.0) for r in debug_rows)
+        queue_wait_rows = sum(1 for r in debug_rows if r.get('queue_wait_bonus', 0.0) > 0.0)
+        if queue_wait_bonus > 0.0:
+            priority_lines.append(f'QueueWaitBonus 01/07 activo: {queue_wait_bonus:.2f} en {queue_wait_rows}/{len(debug_rows)} coches.')
     if debug_rows and (debug_field_available(debug_rows, 'steer_app_wrong') or debug_field_available(debug_rows, 'steer_app_right')):
         wrong_total = sum(r.get('steer_app_wrong', 0.0) for r in debug_rows)
         right_total = sum(r.get('steer_app_right', 0.0) for r in debug_rows)
@@ -1083,6 +1128,11 @@ def report_external_ai_brief(
     R.p('  - RoundaboutBonus neto = bonus completado - penalty entrada - penalty throttle cuando el desglose existe.')
     R.p('  - NumCarOverlaps 26/06 mide solapes entre coches vivos; no equivale automaticamente a DeathReason COLLISION.')
     R.p('  - CarOverlapPenaltyShadow 30/06 es diagnostico sombra de solape; interpretarlo como severidad, no necesariamente como fitness aplicado.')
+    R.p('  - CarOverlapPenalty 01/07 si es penalty real aplicado al fitness; compararlo con NumCarOverlaps y no con muertes por colision.')
+    R.p('  - QueueWaitBonus 01/07 premia espera detras de coche/cola; es situacional y debe leerse solo donde hay exposicion real.')
+    R.p('  - Penalty_Velocidad 01/07 usa EffectiveObstacleDistance cuando hay coche cercano; no es solo sensor frontal estatico.')
+    R.p('  - Test single-car 01/07: con MultiTestingMode desactivado puede existir Debug sin Summary multi-coche completo.')
+    R.p('  - EndGeneration 01/07 limpia colas pendientes de stop/yield/crossing; no asumir bloqueo heredado entre generaciones.')
     R.p('  - SpeedAtYieldValidation 30/06 es la velocidad puntual al validar ceda, no un acumulado por coche.')
     R.p('  - STOP_VIOLATION_EXIT/TIMEOUT se agrupan como VIOLATION, pero el subtipo indica salida indebida vs espera agotada.')
     R.p('  - Mutacion 26/06: GenerationsWithoutImprovement no se exporta; el informe valida rangos esperados, no el valor exacto por individuo.')

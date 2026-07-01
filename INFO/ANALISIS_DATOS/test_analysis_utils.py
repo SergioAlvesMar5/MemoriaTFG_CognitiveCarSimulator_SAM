@@ -1,6 +1,7 @@
 import math
 import csv
 import os
+import runpy
 import tempfile
 import numpy as np
 from analyse_current import (
@@ -34,6 +35,13 @@ from analyse_current import (
     summarize_collision_deaths,
     summarize_test_results,
 )
+
+
+def test_analyse_utils_loads_with_own_imports():
+    path = os.path.join(os.path.dirname(__file__), 'analyse_utils.py')
+    ns = runpy.run_path(path)
+    assert ns['normalize_header_token']('Acum_PenaltyVelocidad') == 'acumpenaltyvelocidad'
+    assert callable(ns['detect_debug_schema'])
 
 
 def test_pctl_basic():
@@ -377,6 +385,46 @@ def test_debug_parser_supports_yield_crossing_diagnostics_30_06():
     assert metric_values(rows, 'yield_validation_speed') == [263.5]
 
 
+def test_debug_parser_supports_overlap_penalty_and_queue_wait_01_07():
+    header = [
+        'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
+        'Acum_PenaltyVelocidad', 'Ticks_Total', 'NumCarOverlaps', 'Acum_CarOverlapPenaltyShadow',
+        'Acum_CarOverlapPenalty', 'Acum_QueueWaitBonus',
+    ]
+    values = [
+        [1, 'Car1', 100, 20, 'Spawn1', 'COLLISION', 10.0, 200, 4, 50.0, 12.0, 6.0],
+        [1, 'Car2', 80, 10, 'Spawn1', 'TIMEFINISHED', 0.0, 100, 0, 0.0, 0.0, 0.0],
+    ]
+    path = ''
+    try:
+        with tempfile.NamedTemporaryFile('w', newline='', suffix='.csv', delete=False, encoding='utf-8') as tmp:
+            writer = csv.writer(tmp)
+            writer.writerow(header)
+            writer.writerows(values)
+            path = tmp.name
+        rows = parse_debug(path)
+    finally:
+        if path and os.path.exists(path):
+            os.unlink(path)
+
+    assert detect_debug_schema(['car_overlap_penalty', 'queue_wait_bonus']) == '2026-07-01-overlap-penalty-queue-wait'
+    assert len(rows) == 2
+    row = rows[0]
+    assert row['_schema'] == '2026-07-01-overlap-penalty-queue-wait'
+    assert row['car_overlap_penalty'] == 12.0
+    assert row['queue_wait_bonus'] == 6.0
+    assert row['car_overlap_penalty_per_overlap'] == 3.0
+    assert row['pen_v_per_life_sec'] == 0.5
+    assert row['queue_wait_bonus_per_life_sec'] == 0.3
+    assert row['queue_wait_bonus_fit_share'] == 6.0
+    assert metric_values(rows, 'car_overlap_penalty_per_overlap') == [3.0]
+    assert metric_exposure_count(rows, 'car_overlap_penalty_per_overlap') == 1
+    assert metric_values(rows, 'pen_v_per_life_sec') == [0.5]
+    assert metric_exposure_count(rows, 'pen_v_per_life_sec') == 1
+    assert metric_values(rows, 'queue_wait_bonus_per_life_sec') == [0.3]
+    assert metric_exposure_count(rows, 'queue_wait_bonus_per_life_sec') == 1
+
+
 def test_csv_layout_reports_duplicate_mapped_headers():
     header = [
         'Generacion', 'CarID', 'Fitness_Final', 'Tiempo_Vivo', 'SpawnID', 'Razon_Muerte',
@@ -497,21 +545,7 @@ def test_evolution_manager_mutation_profiles():
 
 
 if __name__ == "__main__":
-    test_pctl_basic()
-    test_pctl_with_nan()
-    test_pctl_all_nan()
-    test_sdiv()
-    test_rolling_matches_trailing_window_mean()
-    test_correlation_sample_excludes_rows_without_exposure()
-    test_metric_values_exclude_situational_zeros_without_exposure()
-    test_infer_label_from_debug_rows_prefers_phase_flags()
-    test_convergence_uses_every_summary_row()
-    test_predict_fitness_linear()
-    test_select_test_rows_from_traintest()
-    test_test_results_use_weighted_success_rate()
-    test_summary_parser_handles_accented_headers_by_alias()
-    test_new_debug_schema_does_not_shift_removed_components()
-    test_current_network_weight_count_and_test_rules()
-    test_incomplete_debug_generations_are_excluded()
-    test_evolution_manager_mutation_profiles()
+    for name, fn in sorted(globals().items()):
+        if name.startswith('test_') and callable(fn):
+            fn()
     print("All tests passed!")

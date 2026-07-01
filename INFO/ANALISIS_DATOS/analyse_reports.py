@@ -328,7 +328,7 @@ def compute_debug_aggregates(dbg):
     
     agg = {
         'fit': 0.0, 'a': 0.0, 'b': 0.0, 'c': 0.0, 'd': 0.0, 'e': 0.0,
-        'f': 0.0, 'wait_bonus': 0.0, 'net': 0.0,
+        'f': 0.0, 'wait_bonus': 0.0, 'queue_wait_bonus': 0.0, 'net': 0.0,
         'pen_m': 0.0, 'pen_v': 0.0, 'pen_cw': 0.0, 'pen_tv': 0.0, 'pen_nav': 0.0,
         'pen_creep': 0.0, 'pen_rev': 0.0, 'pen_lazy': 0.0, 'pen_swstop': 0.0,
         'pen_steer_app': 0.0, 'pen_align': 0.0, 't_norm': 0.0, 't_tot': 0.0,
@@ -340,7 +340,7 @@ def compute_debug_aggregates(dbg):
         'crossing_blocked_t': 0.0, 'crossing_blocked_rows': 0.0,
         'front_obst_death': 0.0, 'front_obst_death_rows': 0.0,
         'steer_app_wrong': 0.0, 'steer_app_right': 0.0, 'steer_app_total': 0.0,
-        'car_overlap_pen_shadow': 0.0,
+        'car_overlap_pen_shadow': 0.0, 'car_overlap_penalty': 0.0,
         'first_steer_release_ticks': 0.0, 'first_steer_release_rows': 0.0,
         't_stop_ctx': 0.0, 't_stop_ctx_tl': 0.0, 't_stop_ctx_stop': 0.0, 't_stop_ctx_yield': 0.0,
         'yield_val_t': 0.0, 'stop_val_t': 0.0,
@@ -378,6 +378,7 @@ def compute_debug_aggregates(dbg):
         agg['e'] += r.get('e', 0.0)
         agg['f'] += r.get('f', 0.0)
         agg['wait_bonus'] += r.get('wait_bonus', 0.0)
+        agg['queue_wait_bonus'] += r.get('queue_wait_bonus', 0.0)
         agg['net'] += r.get('net', 0.0)
         agg['pen_m'] += r.get('pen_m', 0.0)
         agg['pen_v'] += r.get('pen_v', 0.0)
@@ -418,6 +419,7 @@ def compute_debug_aggregates(dbg):
         agg['steer_app_right'] += r.get('steer_app_right', 0.0)
         agg['steer_app_total'] += r.get('steer_app_total', 0.0)
         agg['car_overlap_pen_shadow'] += r.get('car_overlap_pen_shadow', 0.0)
+        agg['car_overlap_penalty'] += r.get('car_overlap_penalty', 0.0)
         if r.get('first_steer_release_seen', 0.0) > 0.0:
             agg['first_steer_release_ticks'] += r.get('first_steer_release_ticks', 0.0)
             agg['first_steer_release_rows'] += 1.0
@@ -624,6 +626,7 @@ def report_debug(R, dbg):
         ('e', 'Acum_E (legacy)'),
         ('f', 'Acum_F'),
         ('wait_bonus', 'Acum_WaitBonus'),
+        ('queue_wait_bonus', 'Acum_QueueWaitBonus'),
         ('net', 'Acum_NetNormal'),
         ('stop_bonus', 'StopCompletionBonus'),
         ('yield_bonus', 'YieldCompletionBonus'),
@@ -643,6 +646,8 @@ def report_debug(R, dbg):
     R.p(f'  Penalty_SteerApproach:           {sdiv(agg["pen_steer_app"], nd):>10.4f}')
     if debug_field_available(dbg, 'pen_align'):
         R.p(f'  Penalty_Alignment:               {sdiv(agg["pen_align"], nd):>10.4f}')
+    if debug_field_available(dbg, 'pen_v'):
+        R.p(f'  Penalty_Velocidad/s exp.:        {mean(metric_values(dbg, "pen_v_per_life_sec")):>10.4f} (N={metric_exposure_count(dbg, "pen_v_per_life_sec")})')
     R.p(f'  Ticks Normal / Total:            {sdiv(agg["t_norm"], nd):>6.1f} / {sdiv(agg["t_tot"], nd):>6.1f}')
     R.p(f'  Acum_ThrottlePos:                {sdiv(agg["thr_pos"], nd):>10.4f}')
     R.p(f'  Acum_ThrottleDuringGraceTime:    {sdiv(agg["thr_grace"], nd):>10.4f}')
@@ -654,6 +659,9 @@ def report_debug(R, dbg):
         if debug_field_available(dbg, 'car_overlap_pen_shadow'):
             R.p(f'  CarOverlapPenaltyShadow:         {sdiv(agg["car_overlap_pen_shadow"], nd):>10.4f}')
             R.p(f'  Shadow/Overlap exp.:             {mean(metric_values(dbg, "car_overlap_shadow_per_overlap")):>10.4f} (N={metric_exposure_count(dbg, "car_overlap_shadow_per_overlap")})')
+        if debug_field_available(dbg, 'car_overlap_penalty'):
+            R.p(f'  CarOverlapPenalty real:          {sdiv(agg["car_overlap_penalty"], nd):>10.4f}')
+            R.p(f'  Penalty/Overlap exp.:            {mean(metric_values(dbg, "car_overlap_penalty_per_overlap")):>10.4f} (N={metric_exposure_count(dbg, "car_overlap_penalty_per_overlap")})')
     if debug_field_available(dbg, 'yield_free_passes'):
         R.p(f'  NumYieldFreePasses:              {sdiv(agg["yield_free_passes"], nd):>10.4f}')
         R.p(f'  Coches con YieldFreePass>0:      {agg["yield_free_pass_rows"]:>7.0f}/{nd} ({sdiv(agg["yield_free_pass_rows"]*100.0, nd):.2f}%)')
@@ -1214,6 +1222,13 @@ def report_quicksummary(R, rows, dbg):
             R.p(f'  CarOverlaps:      {overlap_total:.0f} ({overlap_rows}/{nd} coches)')
             if debug_field_available(dbg, 'car_overlap_pen_shadow'):
                 R.p(f'  OverlapShadow:    {sum(r.get("car_overlap_pen_shadow", 0.0) for r in dbg):.2f}')
+            if debug_field_available(dbg, 'car_overlap_penalty'):
+                overlap_pen_total = sum(r.get('car_overlap_penalty', 0.0) for r in dbg)
+                R.p(f'  OverlapPenalty:   {overlap_pen_total:.2f} ({sdiv(overlap_pen_total, overlap_total):.2f}/overlap)')
+        if debug_field_available(dbg, 'queue_wait_bonus'):
+            queue_wait_total = sum(r.get('queue_wait_bonus', 0.0) for r in dbg)
+            queue_wait_rows = sum(1 for r in dbg if r.get('queue_wait_bonus', 0.0) > 0.0)
+            R.p(f'  QueueWaitBonus:   {queue_wait_total:.2f} ({queue_wait_rows}/{nd} coches)')
         R.p(f'  Muerte #1:        {top_death[0]} ({sdiv(top_death[1]*100,nd):.0f}%)')
         if collision_stats['total'] > 0:
             R.p(
@@ -1293,6 +1308,100 @@ def report_input_quality(R, summary_meta, debug_meta):
             R.p(f'  Cabeceras duplicadas: {short_list(meta.get("duplicate_headers", []), 14)}')
         if meta.get('duplicate_mapped_keys'):
             R.p(f'  Campos mapeados duplicados: {short_list(meta.get("duplicate_mapped_keys", []), 14)}')
+
+
+def report_program_updates_0107(R, dbg):
+    """Describe semantic changes from the 01/07 program export when present."""
+    if not dbg:
+        return
+    has_overlap_penalty = debug_field_available(dbg, 'car_overlap_penalty')
+    has_queue_wait = debug_field_available(dbg, 'queue_wait_bonus')
+    has_speed_penalty = debug_field_available(dbg, 'pen_v')
+    has_schema_0107 = (
+        has_overlap_penalty
+        or has_queue_wait
+        or (dbg[0].get('_schema') == '2026-07-01-overlap-penalty-queue-wait')
+    )
+    if not has_schema_0107:
+        return
+
+    nd = len(dbg)
+    R.p(f'\n-- Novedades del Programa 01/07 --')
+    if has_speed_penalty:
+        speed_pen_total = sum(r.get('pen_v', 0.0) for r in dbg)
+        speed_pen_rows = sum(1 for r in dbg if r.get('pen_v', 0.0) > 0.0)
+        speed_pen_vals = metric_values(dbg, 'pen_v_per_life_sec')
+        R.p(
+            f'  PenaltyVelocidad: {speed_pen_total:.2f} total, '
+            f'exposicion {speed_pen_rows}/{nd} coches.'
+        )
+        R.p(
+            '  Interpretacion 01/07: el calculo usa EffectiveObstacleDistance; '
+            'si hay coche vivo cercano, la distancia efectiva depende de ClosestVehicleDistance '
+            'y de la velocidad de ese coche.'
+        )
+        R.p(
+            '  Implicacion: Acum_PenaltyVelocidad ya no es solo distancia frontal estatica; '
+            'tambien refleja seguimiento de trafico/colas sin exportar una columna propia.'
+        )
+        if speed_pen_vals:
+            R.p(
+                f'  PenaltyVelocidad/s exp. P50/P90: {pctl(speed_pen_vals, 50):.4f} / '
+                f'{pctl(speed_pen_vals, 90):.4f} (N={len(speed_pen_vals)}).'
+            )
+    if has_overlap_penalty:
+        overlap_total = sum(r.get('car_overlaps', 0.0) for r in dbg)
+        overlap_rows = sum(1 for r in dbg if r.get('car_overlaps', 0.0) > 0.0)
+        penalty_total = sum(r.get('car_overlap_penalty', 0.0) for r in dbg)
+        penalty_vals = metric_values(dbg, 'car_overlap_penalty_per_overlap')
+        shadow_total = sum(r.get('car_overlap_pen_shadow', 0.0) for r in dbg)
+        R.p(
+            f'  CarOverlapPenalty real: {penalty_total:.2f} total, '
+            f'{sdiv(penalty_total, overlap_total):.2f}/overlap; '
+            f'exposicion {overlap_rows}/{nd} coches.'
+        )
+        R.p(
+            '  Interpretacion: se descuenta fitness por solape entre coches vivos; '
+            'la base es velocidad relativa^2 / MaxSpeed.'
+        )
+        if debug_field_available(dbg, 'car_overlap_pen_shadow'):
+            R.p(
+                f'  Shadow vs real: shadow={shadow_total:.2f}, real={penalty_total:.2f}; '
+                'shadow mide severidad diagnostica, real mide fitness aplicado.'
+            )
+        if penalty_vals:
+            R.p(
+                f'  Penalty/overlap exp. P50/P90: {pctl(penalty_vals, 50):.2f} / '
+                f'{pctl(penalty_vals, 90):.2f} (N={len(penalty_vals)}).'
+            )
+    if has_queue_wait:
+        queue_total = sum(r.get('queue_wait_bonus', 0.0) for r in dbg)
+        queue_rows = sum(1 for r in dbg if r.get('queue_wait_bonus', 0.0) > 0.0)
+        queue_life_vals = metric_values(dbg, 'queue_wait_bonus_per_life_sec')
+        R.p(
+            f'  QueueWaitBonus: {queue_total:.2f} total, '
+            f'{sdiv(queue_total, nd):.2f}/coche global; exposicion {queue_rows}/{nd} coches.'
+        )
+        R.p(
+            '  Interpretacion: bonus positivo por esperar en cola detras de otro coche, '
+            'solo fuera de ForceStop/semaforo y con obstaculo frontal cercano.'
+        )
+        if queue_life_vals:
+            R.p(
+                f'  QueueWaitBonus/s exp. P50/P90: {pctl(queue_life_vals, 50):.4f} / '
+                f'{pctl(queue_life_vals, 90):.4f} (N={len(queue_life_vals)}).'
+            )
+    R.p(
+        '  Flujo test 01/07: si MultiTestingMode esta desactivado, el programa puede '
+        'lanzar un unico coche con el modelo cargado; en ese caso el Summary puede no '
+        'representar una generacion multi-coche completa.'
+    )
+    R.p(
+        '  Limpieza generacional 01/07: al cerrar generacion se vacian colas pendientes '
+        'de stop/yield/crossing; Acum_TimeBlockedAtCrossing se debe leer como bloqueo '
+        'de la sesion actual, no como arrastre entre generaciones.'
+    )
+
 
 def report_debug_scope(R, info):
     if not info:
@@ -1994,6 +2103,32 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
             shadow_vals = metric_values(dbg, 'car_overlap_shadow_per_overlap')
             R.p(f'  Shadow penalty total:      {shadow_total:.2f}')
             R.p(f'  Shadow/overlap exp.:       {mean(shadow_vals):.4f} (N={len(shadow_vals)})')
+        if debug_field_available(dbg, 'car_overlap_penalty'):
+            overlap_pen_total = sum(r.get('car_overlap_penalty', 0.0) for r in dbg)
+            overlap_pen_vals = metric_values(dbg, 'car_overlap_penalty_per_overlap')
+            R.p(f'  Penalty real total:        {overlap_pen_total:.2f}')
+            R.p(f'  Penalty real/overlap exp.: {mean(overlap_pen_vals):.4f} (N={len(overlap_pen_vals)})')
+        collision_rows = [r for r in dbg if is_collision_reason(r.get('death', ''))]
+        overlap_collision_rows = [r for r in collision_rows if r.get('car_overlaps', 0.0) > 0.0]
+        overlap_noncollision_rows = [
+            r for r in dbg
+            if not is_collision_reason(r.get('death', '')) and r.get('car_overlaps', 0.0) > 0.0
+        ]
+        if collision_rows:
+            R.p(
+                f'  Solapes en muerte COLLISION: {len(overlap_collision_rows)}/{len(collision_rows)} coches, '
+                f'eventos={sum(r.get("car_overlaps", 0.0) for r in overlap_collision_rows):.0f}'
+            )
+        if overlap_noncollision_rows:
+            R.p(
+                f'  Solapes sin muerte COLLISION: {len(overlap_noncollision_rows)} coches, '
+                f'eventos={sum(r.get("car_overlaps", 0.0) for r in overlap_noncollision_rows):.0f}'
+            )
+            if debug_field_available(dbg, 'car_overlap_penalty'):
+                R.p(
+                    f'  Penalty solape sin COLLISION: '
+                    f'{sum(r.get("car_overlap_penalty", 0.0) for r in overlap_noncollision_rows):.2f}'
+                )
         if overlap_rows:
             R.p(f'  Overlaps/coche afectado:   {sdiv(overlap_total, len(overlap_rows)):.4f}')
             R.p(f'  Overlaps/s medio afectado: {mean([r.get("car_overlap_per_sec", 0.0) for r in overlap_rows]):.4f}')
@@ -2056,6 +2191,54 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
                         f'({sdiv(affected_fam*100.0, nfam):.1f}%)'
                     )
 
+    if debug_field_available(dbg, 'queue_wait_bonus'):
+        queue_total = sum(r.get('queue_wait_bonus', 0.0) for r in dbg)
+        queue_rows = [r for r in dbg if r.get('queue_wait_bonus', 0.0) > 0.0]
+        R.p(f'\n-- Espera en Cola (QueueWaitBonus, 01/07+) --')
+        R.p(f'  Bonus total:              {queue_total:.2f}')
+        R.p(f'  Coches con bonus:         {len(queue_rows)}/{nd} ({sdiv(len(queue_rows)*100.0, nd):.2f}%)')
+        R.p(f'  Bonus/coche global:       {sdiv(queue_total, nd):.4f}')
+        if queue_rows:
+            R.p(f'  Bonus/coche expuesto:     {sdiv(queue_total, len(queue_rows)):.4f}')
+            R.p(f'  Bonus/s expuesto:         {mean(metric_values(dbg, "queue_wait_bonus_per_life_sec")):.4f}')
+            queue_by_gen = []
+            for g, rows_gen in by_gen.items():
+                total_gen = sum(r.get('queue_wait_bonus', 0.0) for r in rows_gen)
+                if total_gen > 0.0:
+                    affected_gen = sum(1 for r in rows_gen if r.get('queue_wait_bonus', 0.0) > 0.0)
+                    queue_by_gen.append((total_gen, affected_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
+            if queue_by_gen:
+                R.p('  Top generaciones por QueueWaitBonus:')
+                for total_gen, affected_gen, g, ngen, fit_med in sorted(queue_by_gen, reverse=True)[:min(TOP_ROWS, 10)]:
+                    R.p(
+                        f'    Gen {g:>5d}: bonus={total_gen:.2f}, coches={affected_gen}/{ngen} '
+                        f'({sdiv(affected_gen*100.0, ngen):.1f}%), fitMed={fit_med:.1f}'
+                    )
+            queue_by_spawn = []
+            for sp, rows_sp in by_spawn.items():
+                total_sp = sum(r.get('queue_wait_bonus', 0.0) for r in rows_sp)
+                if total_sp > 0.0:
+                    affected_sp = sum(1 for r in rows_sp if r.get('queue_wait_bonus', 0.0) > 0.0)
+                    queue_by_spawn.append((total_sp, affected_sp, sp, len(rows_sp), mean([r.get('fit', 0.0) for r in rows_sp])))
+            if queue_by_spawn:
+                R.p('  Top spawns por QueueWaitBonus:')
+                for total_sp, affected_sp, sp, nsp, fit_med in sorted(queue_by_spawn, reverse=True)[:min(TOP_ROWS, 10)]:
+                    R.p(
+                        f'    {sp.replace("TargetPoint","TP"):>15s}: bonus={total_sp:.2f}, '
+                        f'coches={affected_sp}/{nsp}, fitMed={fit_med:.1f}'
+                    )
+            queue_by_death = []
+            for death, rows_dr in by_death.items():
+                total_dr = sum(r.get('queue_wait_bonus', 0.0) for r in rows_dr)
+                if total_dr > 0.0:
+                    queue_by_death.append((total_dr, death, len(rows_dr)))
+            if queue_by_death:
+                R.p('  Top razones de muerte con QueueWaitBonus:')
+                for total_dr, death, ndr in sorted(queue_by_death, reverse=True)[:min(TOP_ROWS, 10)]:
+                    R.p(f'    {death:45s}: bonus={total_dr:.2f}, coches={ndr}')
+        else:
+            R.p('  Sin activaciones: la condicion de cola no aparecio en este lote.')
+
     # Familias de muerte
     R.p(f'\n-- Muertes por Familia (colisiones separadas) --')
     hdr = f'  {"Familia":>22s} | {"N":>7s} | {"Pct":>7s} | {"FitMed":>10s} | {"tMed":>7s} | {"PenM":>9s} | {"PenV":>9s} | {"PenSS":>9s}'
@@ -2099,9 +2282,14 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('round_exit1_death_rate', 'RoundExit1DeathRate', 'round_exit1_count'),
         ('round_exit2_death_rate', 'RoundExit2DeathRate', 'round_exit2_count'),
         ('round_exit3_death_rate', 'RoundExit3PlusDeathRate', 'round_exit3_count'),
+        ('pen_v_per_life_sec', 'PenaltyVelocidad/LifeSec', 'pen_v'),
+        ('pen_v_fit_share', 'PenaltyVelocidad/FitShare', 'pen_v'),
         ('car_overlap_per_sec', 'CarOverlaps/s', 'car_overlaps'),
         ('car_overlap_per_tick', 'CarOverlaps/tick', 'car_overlaps'),
         ('car_overlap_shadow_per_overlap', 'CarOverlapShadow/Overlap', 'car_overlaps'),
+        ('car_overlap_penalty_per_overlap', 'CarOverlapPenalty/Overlap', 'car_overlaps'),
+        ('queue_wait_bonus_per_life_sec', 'QueueWaitBonus/LifeSec', 'queue_wait_bonus'),
+        ('queue_wait_bonus_fit_share', 'QueueWaitBonus/FitShare', 'queue_wait_bonus'),
         ('yield_validation_speed', 'SpeedAtYieldValidation', 'yield_validation_seen'),
         ('crossing_blocked_per_stop_tick', 'BlockedCrossing/StopTick', 'crossing_blocked_t'),
         ('crossing_blocked_per_life_sec', 'BlockedCrossing/LifeSec', 'crossing_blocked_t'),
@@ -2142,6 +2330,8 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('net', 'Acum_NetNormal'),
         ('pen_m', 'Penalty_Muerte'),
         ('pen_v', 'Penalty_Velocidad'),
+        ('pen_v_per_life_sec', 'PenaltyVelocidadPerLifeSec'),
+        ('pen_v_fit_share', 'PenaltyVelocidadFitShare'),
         ('pen_tv', 'Penalty_TrafficViolation'),
         ('pen_nav', 'Penalty_NavViolation'),
         ('pen_creep', 'Penalty_Creeping'),
@@ -2199,6 +2389,11 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         ('car_overlap_per_tick', 'CarOverlapsPerTick'),
         ('car_overlap_pen_shadow', 'CarOverlapPenaltyShadow'),
         ('car_overlap_shadow_per_overlap', 'CarOverlapShadowPerOverlap'),
+        ('car_overlap_penalty', 'CarOverlapPenaltyReal'),
+        ('car_overlap_penalty_per_overlap', 'CarOverlapPenaltyPerOverlap'),
+        ('queue_wait_bonus', 'QueueWaitBonus'),
+        ('queue_wait_bonus_per_life_sec', 'QueueWaitBonusPerLifeSec'),
+        ('queue_wait_bonus_fit_share', 'QueueWaitBonusFitShare'),
         ('yield_free_passes', 'NumYieldFreePasses'),
         ('yield_validation_speed', 'SpeedAtYieldValidation'),
         ('crossing_blocked_t', 'TimeBlockedAtCrossing'),
@@ -2236,6 +2431,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         'time', 'steer_gap_abs', 'steer_in_avg', 'steer_abs_avg',
         'steer_gap_avg_abs', 'stop_bonus_per', 'yield_bonus_per',
         'stop_done_rate', 'yield_done_rate', 'fit_peak_gain',
+        'pen_v_per_life_sec', 'pen_v_fit_share',
         'round_completion_rate', 'round_collision_rate', 'round_entry_speed_avg',
         'round_entry_front_avg', 'round_bonus', 'round_bonus_per_entry',
         'round_bonus_per_completion', 'round_bonus_per_tick', 'round_bonus_fit_share',
@@ -2245,7 +2441,9 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         'round_exit1_death_rate', 'round_exit2_death_rate', 'round_exit3_death_rate',
         'round_exit1_steer_avg', 'round_exit2_steer_avg', 'round_exit3_steer_avg',
         'round_exit1_throttle_avg', 'round_exit2_throttle_avg', 'round_exit3_throttle_avg',
-        'car_overlap_shadow_per_overlap', 'yield_validation_speed',
+        'car_overlap_shadow_per_overlap', 'car_overlap_penalty_per_overlap',
+        'queue_wait_bonus_per_life_sec', 'queue_wait_bonus_fit_share',
+        'yield_validation_speed',
         'crossing_blocked_per_stop_tick', 'crossing_blocked_per_life_sec',
         'front_obst_death', 'steer_app_wrong_share', 'steer_app_wrong_per_tick',
         'steer_app_right_per_tick', 'first_steer_release_ticks',
@@ -2541,12 +2739,19 @@ def save_json_snapshot(
     yield_bonus_total = sum(r.get('yield_bonus', 0.0) for r in dbg_rows)
     stop_done_total = sum(r.get('stop_done_n', 0.0) for r in dbg_rows)
     yield_done_total = sum(r.get('yield_done_n', 0.0) for r in dbg_rows)
+    speed_penalty_life_avg, speed_penalty_life_n = exposed_mean(dbg_rows, 'pen_v_per_life_sec')
     car_overlap_total = sum(r.get('car_overlaps', 0.0) for r in dbg_rows)
     car_overlap_rows = sum(1 for r in dbg_rows if r.get('car_overlaps', 0.0) > 0.0)
     car_overlap_per_sec_avg, car_overlap_per_sec_n = exposed_mean(dbg_rows, 'car_overlap_per_sec')
     car_overlap_per_tick_avg, car_overlap_per_tick_n = exposed_mean(dbg_rows, 'car_overlap_per_tick')
     car_overlap_shadow_total = sum(r.get('car_overlap_pen_shadow', 0.0) for r in dbg_rows)
     car_overlap_shadow_avg, car_overlap_shadow_n = exposed_mean(dbg_rows, 'car_overlap_shadow_per_overlap')
+    car_overlap_penalty_total = sum(r.get('car_overlap_penalty', 0.0) for r in dbg_rows)
+    car_overlap_penalty_avg, car_overlap_penalty_n = exposed_mean(dbg_rows, 'car_overlap_penalty_per_overlap')
+    queue_wait_bonus_total = sum(r.get('queue_wait_bonus', 0.0) for r in dbg_rows)
+    queue_wait_bonus_rows = sum(1 for r in dbg_rows if r.get('queue_wait_bonus', 0.0) > 0.0)
+    queue_wait_bonus_life_avg, queue_wait_bonus_life_n = exposed_mean(dbg_rows, 'queue_wait_bonus_per_life_sec')
+    queue_wait_bonus_fit_share_avg, queue_wait_bonus_fit_share_n = exposed_mean(dbg_rows, 'queue_wait_bonus_fit_share')
     yield_free_passes_total = sum(r.get('yield_free_passes', 0.0) for r in dbg_rows)
     yield_validation_speed_avg, yield_validation_speed_n = exposed_mean(dbg_rows, 'yield_validation_speed')
     crossing_blocked_total = sum(r.get('crossing_blocked_t', 0.0) for r in dbg_rows)
@@ -2588,6 +2793,8 @@ def save_json_snapshot(
     round_collisions_total = sum(r.get('round_collisions', 0.0) for r in dbg_rows)
     round_ticks_total = sum(r.get('round_ticks', 0.0) for r in dbg_rows)
     collision_stats = summarize_collision_deaths(dbg_rows)
+    debug_schema = dbg_rows[0].get('_schema', '') if dbg_rows else ''
+    debug_schema_0107 = debug_schema == '2026-07-01-overlap-penalty-queue-wait'
 
     by_spawn = defaultdict(list)
     for r in dbg_rows:
@@ -2641,6 +2848,41 @@ def save_json_snapshot(
         'yield_stuck_detection': yield_stuck or {},
         'stop_stuck_detection': stop_stuck or {},
         'auto_insights': auto_insights or [],
+        'program_updates_0107': {
+            'schema_detected': debug_schema,
+            'single_car_test_mode_note': (
+                'When MultiTestingMode is false, EvolutionManager can spawn one loaded-brain car; '
+                'Summary may be empty or not represent a full multi-car generation.'
+            ) if debug_schema_0107 else '',
+            'pending_signal_queues_cleared_on_generation_end': debug_schema_0107,
+            'crossing_blocked_time_semantics': (
+                'EndGeneration clears pending stop/yield/crossing queues; Acum_TimeBlockedAtCrossing '
+                'should be read as current-session waiting, not cross-generation carryover.'
+            ) if debug_schema_0107 else '',
+            'speed_penalty_effective_obstacle_distance': debug_schema_0107 and debug_field_available(dbg_rows, 'pen_v'),
+            'speed_penalty_semantics': (
+                'Acum_PenaltyVelocidad uses EffectiveObstacleDistance; when a live closest vehicle exists, '
+                'the effective distance is ClosestVehicleDistance scaled by that vehicle speed.'
+            ) if debug_schema_0107 else '',
+            'speed_penalty_total': sum(r.get('pen_v', 0.0) for r in dbg_rows),
+            'speed_penalty_rows': sum(1 for r in dbg_rows if r.get('pen_v', 0.0) > 0.0),
+            'speed_penalty_per_life_sec_exposed_avg': speed_penalty_life_avg,
+            'speed_penalty_per_life_sec_exposed_n': speed_penalty_life_n,
+            'car_overlap_penalty_available': debug_field_available(dbg_rows, 'car_overlap_penalty'),
+            'car_overlap_penalty_formula': 'relative_speed^2 / MaxSpeed; subtracts real fitness',
+            'car_overlap_events': car_overlap_total,
+            'car_overlap_penalty_real': car_overlap_penalty_total,
+            'car_overlap_penalty_per_overlap_exposed_avg': car_overlap_penalty_avg,
+            'car_overlap_penalty_per_overlap_exposed_n': car_overlap_penalty_n,
+            'car_overlap_shadow_is_diagnostic_only': True,
+            'queue_wait_bonus_available': debug_field_available(dbg_rows, 'queue_wait_bonus'),
+            'queue_wait_bonus_condition': 'not ForceStop, not traffic light, front obstacle < 0.3, low speed behind car',
+            'queue_wait_bonus_total': queue_wait_bonus_total,
+            'queue_wait_bonus_rows': queue_wait_bonus_rows,
+            'queue_wait_bonus_rows_pct': sdiv(queue_wait_bonus_rows * 100.0, len(dbg_rows)),
+            'queue_wait_bonus_per_life_sec_exposed_avg': queue_wait_bonus_life_avg,
+            'queue_wait_bonus_per_life_sec_exposed_n': queue_wait_bonus_life_n,
+        },
         'summary_metrics': summarize_session(
             summary_rows,
             dbg_rows_count=len(dbg_rows),
@@ -2672,6 +2914,17 @@ def save_json_snapshot(
             'car_overlap_penalty_shadow': car_overlap_shadow_total,
             'avg_car_overlap_shadow_per_overlap': car_overlap_shadow_avg,
             'avg_car_overlap_shadow_per_overlap_n': car_overlap_shadow_n,
+            'car_overlap_penalty_real': car_overlap_penalty_total,
+            'avg_car_overlap_penalty_per_overlap': car_overlap_penalty_avg,
+            'avg_car_overlap_penalty_per_overlap_n': car_overlap_penalty_n,
+            'queue_wait_bonus': queue_wait_bonus_total,
+            'queue_wait_bonus_rows': queue_wait_bonus_rows,
+            'queue_wait_bonus_rows_pct': sdiv(queue_wait_bonus_rows * 100.0, len(dbg_rows)),
+            'avg_queue_wait_bonus': sdiv(queue_wait_bonus_total, len(dbg_rows)),
+            'avg_queue_wait_bonus_per_life_sec_exposed': queue_wait_bonus_life_avg,
+            'avg_queue_wait_bonus_per_life_sec_exposed_n': queue_wait_bonus_life_n,
+            'avg_queue_wait_bonus_fit_share_exposed': queue_wait_bonus_fit_share_avg,
+            'avg_queue_wait_bonus_fit_share_exposed_n': queue_wait_bonus_fit_share_n,
             'yield_free_passes': yield_free_passes_total,
             'avg_yield_free_passes': sdiv(yield_free_passes_total, len(dbg_rows)),
             'avg_yield_validation_speed_exposed': yield_validation_speed_avg,
@@ -2699,6 +2952,8 @@ def save_json_snapshot(
             'avg_pen_rev': sdiv(rev_total, len(dbg_rows)),
             'avg_pen_lazy': sdiv(lazy_total, len(dbg_rows)),
             'avg_pen_swstop': sdiv(steer_stop_total, len(dbg_rows)),
+            'avg_pen_speed_per_life_sec_exposed': speed_penalty_life_avg,
+            'avg_pen_speed_per_life_sec_exposed_n': speed_penalty_life_n,
             'avg_pen_nav': sdiv(sum(r.get('pen_nav', 0.0) for r in dbg_rows), len(dbg_rows)),
             'avg_pen_steer_app': sdiv(steer_approach_total, len(dbg_rows)),
             'avg_pen_alignment': sdiv(alignment_total, len(dbg_rows)),

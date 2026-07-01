@@ -197,6 +197,13 @@ DEBUG_ALIASES = {
     'debugfirststeerafterreleaseticks': 'first_steer_release_ticks',
     'firststeerafterreleaseticksaicontroller': 'first_steer_release_ticks',
     'debugfirststeerafterreleaseticksaicontroller': 'first_steer_release_ticks',
+    # metricas reales aplicadas al fitness (01-07-2026)
+    'acumcaroverlappenalty': 'car_overlap_penalty',
+    'debugacumcaroverlappenalty': 'car_overlap_penalty',
+    'caroverlappenalty': 'car_overlap_penalty',
+    'acumqueuewaitbonus': 'queue_wait_bonus',
+    'debugacumqueuewaitbonus': 'queue_wait_bonus',
+    'queuewaitbonus': 'queue_wait_bonus',
     'ticksnormal': 't_norm',
     'tickstotal': 't_tot',
     # nuevas metricas de control (07-04-2026+)

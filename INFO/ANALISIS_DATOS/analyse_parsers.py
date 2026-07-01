@@ -22,6 +22,7 @@ def analyze_fitness_components_correlation(debug_rows):
         'e': 'E (legacy)',
         'f': 'F (velocidad y obstaculo)',
         'wait_bonus': 'Wait bonus',
+        'queue_wait_bonus': 'Queue wait bonus',
         'stop_bonus': 'Stop completion bonus',
         'yield_bonus': 'Yield completion bonus',
         'round_bonus': 'Roundabout bonus neto',
@@ -45,7 +46,7 @@ def analyze_fitness_components_correlation(debug_rows):
         component_counts[key] = len(vals)
         contributions[key] = sdiv(component_means[key], fit_mean) if fit_mean != 0 else 0.0
 
-    penalty_keys = ('pen_m', 'pen_v', 'pen_tv', 'pen_nav', 'pen_lazy', 'pen_steer_app', 'pen_align')
+    penalty_keys = ('pen_m', 'pen_v', 'pen_tv', 'pen_nav', 'pen_lazy', 'pen_steer_app', 'pen_align', 'car_overlap_penalty')
     penalty_labels = {
         'pen_m': 'Penalty_Muerte',
         'pen_v': 'Penalty_Velocidad',
@@ -54,6 +55,7 @@ def analyze_fitness_components_correlation(debug_rows):
         'pen_lazy': 'Penalty_Lazy',
         'pen_steer_app': 'Penalty_SteerApproach',
         'pen_align': 'Penalty_Alignment',
+        'car_overlap_penalty': 'CarOverlapPenalty',
     }
     pen_means = [
         (penalty_labels.get(key, key), mean([r.get(key, 0.0) for r in debug_rows]))
@@ -294,6 +296,8 @@ def parse_debug(path):
             'steer_app_wrong': to_num(parts, header_map.get('steer_app_wrong'), float),
             'steer_app_right': to_num(parts, header_map.get('steer_app_right'), float),
             'car_overlap_pen_shadow': to_num(parts, header_map.get('car_overlap_pen_shadow'), float),
+            'car_overlap_penalty': to_num(parts, header_map.get('car_overlap_penalty'), float),
+            'queue_wait_bonus': to_num(parts, header_map.get('queue_wait_bonus'), float),
             'first_steer_release_ticks': to_num(parts, header_map.get('first_steer_release_ticks'), int),
             'training': parse_bool_token(parts[t_idx]) if t_idx is not None and t_idx < len(parts) else None,
         }
@@ -359,11 +363,22 @@ def parse_debug(path):
         r['brake_share'] = sdiv(r.get('brake_in', 0.0), r.get('brake_in', 0.0) + r.get('thr_pos', 0.0))
         r['grace_brake_share'] = sdiv(r.get('brake_grace', 0.0), r.get('brake_grace', 0.0) + r.get('thr_grace', 0.0))
         r['stop_brake_share'] = sdiv(r.get('stop_brake', 0.0), r.get('stop_brake', 0.0) + r.get('stop_throttle', 0.0))
+        r['pen_v_per_life_sec'] = sdiv(r.get('pen_v', 0.0), max(r.get('time', 0.0), 1.0))
+        r['pen_v_fit_share'] = sdiv(r.get('pen_v', 0.0) * 100.0, max(abs(r.get('fit', 0.0)), 1.0))
         r['car_overlap_per_sec'] = sdiv(r.get('car_overlaps', 0.0), max(r.get('time', 0.0), 1.0))
         r['car_overlap_per_tick'] = sdiv(r.get('car_overlaps', 0.0), t_tot)
         r['car_overlap_shadow_per_overlap'] = sdiv(
             r.get('car_overlap_pen_shadow', 0.0),
             max(r.get('car_overlaps', 0.0), 1.0),
+        )
+        r['car_overlap_penalty_per_overlap'] = sdiv(
+            r.get('car_overlap_penalty', 0.0),
+            max(r.get('car_overlaps', 0.0), 1.0),
+        )
+        r['queue_wait_bonus_per_life_sec'] = sdiv(r.get('queue_wait_bonus', 0.0), max(r.get('time', 0.0), 1.0))
+        r['queue_wait_bonus_fit_share'] = sdiv(
+            r.get('queue_wait_bonus', 0.0) * 100.0,
+            max(abs(r.get('fit', 0.0)), 1.0),
         )
         r['yield_validation_seen'] = 1.0 if (
             r.get('yield_validation_speed', 0.0) > 0.0

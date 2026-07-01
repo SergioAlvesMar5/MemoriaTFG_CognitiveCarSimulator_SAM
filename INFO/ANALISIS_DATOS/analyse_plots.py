@@ -401,8 +401,8 @@ def plot_debug(dbg):
 
     # ── 7. Componentes fitness por gen ──
     if len(gens) >= 1:
-        g_a, g_e, g_f, g_wait, g_stop_bonus, g_yield_bonus = [], [], [], [], [], []
-        g_pm, g_pv, g_ptv, g_pn, g_pc, g_pr, g_pl, g_ps, g_pa, g_net, g_fit = [], [], [], [], [], [], [], [], [], [], []
+        g_a, g_e, g_f, g_wait, g_queue_wait, g_stop_bonus, g_yield_bonus = [], [], [], [], [], [], []
+        g_pm, g_pv, g_ptv, g_pn, g_pc, g_pr, g_pl, g_ps, g_pa, g_poverlap, g_net, g_fit = [], [], [], [], [], [], [], [], [], [], [], []
         for g in gens:
             gc = by_gen[g]  # O(1) lookup
             ng = len(gc)
@@ -410,6 +410,7 @@ def plot_debug(dbg):
             g_e.append(sdiv(sum(r['e'] for r in gc), ng))
             g_f.append(sdiv(sum(r['f'] for r in gc), ng))
             g_wait.append(sdiv(sum(r.get('wait_bonus', 0.0) for r in gc), ng))
+            g_queue_wait.append(sdiv(sum(r.get('queue_wait_bonus', 0.0) for r in gc), ng))
             g_stop_bonus.append(sdiv(sum(r.get('stop_bonus', 0.0) for r in gc), ng))
             g_yield_bonus.append(sdiv(sum(r.get('yield_bonus', 0.0) for r in gc), ng))
             g_pm.append(sdiv(sum(r['pen_m'] for r in gc), ng))
@@ -421,6 +422,7 @@ def plot_debug(dbg):
             g_pl.append(sdiv(sum(r.get('pen_lazy', 0.0) for r in gc), ng))
             g_ps.append(sdiv(sum(r.get('pen_swstop', 0.0) for r in gc), ng))
             g_pa.append(sdiv(sum(r.get('pen_align', 0.0) for r in gc), ng))
+            g_poverlap.append(sdiv(sum(r.get('car_overlap_penalty', 0.0) for r in gc), ng))
             g_net.append(sdiv(sum(r['net'] for r in gc), ng))
             g_fit.append(sdiv(sum(r['fit'] for r in gc), ng))
 
@@ -439,6 +441,8 @@ def plot_debug(dbg):
             ax.plot(gens, g_f, f'c-{mk}', markersize=ms, label='F', linewidth=1.0)
         if debug_field_available(dbg, 'wait_bonus'):
             ax.plot(gens, g_wait, color='tab:olive', linewidth=1.2, label='Wait bonus')
+        if debug_field_available(dbg, 'queue_wait_bonus'):
+            ax.plot(gens, g_queue_wait, color='tab:green', linestyle=':', linewidth=1.4, label='Queue wait bonus')
         if debug_field_available(dbg, 'stop_bonus'):
             ax.plot(gens, g_stop_bonus, color='tab:blue', linewidth=1.2, label='Stop bonus')
         if debug_field_available(dbg, 'yield_bonus'):
@@ -459,6 +463,8 @@ def plot_debug(dbg):
         ax.plot(gens, g_ps, color='tab:cyan', linestyle='-', marker=mk or None, markersize=ms, label='Pen SteeringStop', linewidth=1.2)
         if debug_field_available(dbg, 'pen_align'):
             ax.plot(gens, g_pa, color='black', linestyle='--', marker=mk or None, markersize=ms, label='Pen Alignment', linewidth=1.2)
+        if debug_field_available(dbg, 'car_overlap_penalty'):
+            ax.plot(gens, g_poverlap, color='tab:red', linestyle=':', marker=mk or None, markersize=ms, label='Pen CarOverlap real', linewidth=1.3)
         ax.set_title('Penalizaciones (media por gen)')
         ax.set_xlabel(GEN_XLABEL); ax.set_ylabel('Valor'); ax.legend(); ax.grid(True, alpha=0.3)
 
@@ -708,16 +714,17 @@ def plot_debug(dbg):
         plt.tight_layout()
         saved.append(save_fig(fig, '13_completion_bonus.png'))
 
-    # 13b. Diagnosticos 30/06: ceda, cruce, release y steer approach
+    # 13b. Diagnosticos 30/06-01/07: ceda, cruce, release, steer approach y solapes
     if len(gens) >= 1 and (
         debug_field_available(dbg, 'yield_free_passes')
         or debug_field_available(dbg, 'crossing_blocked_t')
         or debug_field_available(dbg, 'first_steer_release_ticks')
         or debug_field_available(dbg, 'steer_app_wrong')
+        or debug_field_available(dbg, 'car_overlap_penalty')
     ):
         g_yield_free, g_yield_done = [], []
         g_cross_blocked, g_yield_speed = [], []
-        g_release_ticks, g_wrong_share, g_overlap_shadow = [], [], []
+        g_release_ticks, g_wrong_share, g_overlap_shadow, g_overlap_penalty = [], [], [], []
         for g in gens:
             gc = by_gen[g]
             ng = len(gc)
@@ -728,11 +735,12 @@ def plot_debug(dbg):
             g_release_ticks.append(mean(metric_values(gc, 'first_steer_release_ticks')))
             g_wrong_share.append(mean(metric_values(gc, 'steer_app_wrong_share')) * 100.0)
             g_overlap_shadow.append(mean(metric_values(gc, 'car_overlap_shadow_per_overlap')))
+            g_overlap_penalty.append(mean(metric_values(gc, 'car_overlap_penalty_per_overlap')))
 
         mk = 'o' if len(gens) <= 300 else ''
         ms = 3 if len(gens) <= 300 else 1
         fig, axes = plt.subplots(3, 1, figsize=(15, 12))
-        fig.suptitle(f'{LABEL} - Diagnosticos 30/06: Ceda, Cruce y Release', fontsize=13, fontweight='bold')
+        fig.suptitle(f'{LABEL} - Diagnosticos 30/06-01/07: Ceda, Cruce, Release y Solapes', fontsize=13, fontweight='bold')
 
         ax = axes[0]
         if debug_field_available(dbg, 'yield_free_passes'):
@@ -774,6 +782,9 @@ def plot_debug(dbg):
             ax.legend(h1 + h2, l1 + l2, fontsize=8, loc='upper left')
         if debug_field_available(dbg, 'car_overlap_pen_shadow'):
             ax.plot(gens, g_overlap_shadow, color='black', linestyle=':', marker=mk or None, markersize=ms, label='OverlapShadow/overlap exp.')
+            ax.legend(fontsize=8, loc='upper left')
+        if debug_field_available(dbg, 'car_overlap_penalty'):
+            ax.plot(gens, g_overlap_penalty, color='tab:red', linestyle='-.', marker=mk or None, markersize=ms, label='OverlapPenalty/overlap exp.')
             ax.legend(fontsize=8, loc='upper left')
         ax.set_title('Reaccion tras release, direccion de approach y solapes')
         ax.set_xlabel(GEN_XLABEL)
