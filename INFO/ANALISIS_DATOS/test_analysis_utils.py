@@ -4,6 +4,7 @@ import os
 import runpy
 import tempfile
 import numpy as np
+import analyse_current as ac
 from analyse_current import (
     DEBUG_ALIASES,
     DEBUG_REQUIRED_KEYS,
@@ -34,6 +35,7 @@ from analyse_current import (
     select_test_summary_rows,
     summarize_collision_deaths,
     summarize_test_results,
+    wilson_ci,
 )
 
 
@@ -42,6 +44,54 @@ def test_analyse_utils_loads_with_own_imports():
     ns = runpy.run_path(path)
     assert ns['normalize_header_token']('Acum_PenaltyVelocidad') == 'acumpenaltyvelocidad'
     assert callable(ns['detect_debug_schema'])
+
+
+def test_external_ai_brief_accepts_test_without_summary():
+    class DummyReport:
+        def __init__(self):
+            self.lines = []
+
+        def p(self, line):
+            self.lines.append(line)
+
+    old_state = ac.MODE, ac.LABEL, ac.SUMMARY_FILE, ac.DEBUG_FILE
+    try:
+        ac.MODE = 'test'
+        ac.LABEL = 'TEST'
+        ac.SUMMARY_FILE = 'Test_Summary.csv'
+        ac.DEBUG_FILE = 'Fitness_Debug.csv'
+
+        R = DummyReport()
+        ac.report_external_ai_brief(
+            R,
+            summary_rows=[],
+            debug_rows=[],
+            summary_meta={'mapped_keys': []},
+            debug_meta={'mapped_keys': []},
+            debug_scope={'raw_total': 0, 'selected_total': 0},
+            data_coherence={
+                'status': 'ok',
+                'summary_rows': 0,
+                'summary_gens': 0,
+                'summary_gen_min': 0,
+                'summary_gen_max': 0,
+                'debug_rows': 0,
+                'debug_gens': 0,
+                'debug_gen_min': 0,
+                'debug_gen_max': 0,
+                'expected_debug_rows': 0,
+                'warnings': [],
+            },
+            detected_info={'mode': 'test', 'reason': 'unit test'},
+            gen_norm_info={'summary_count': 0, 'debug_count': 0},
+            auto_insights=[],
+        )
+    finally:
+        ac.MODE, ac.LABEL, ac.SUMMARY_FILE, ac.DEBUG_FILE = old_state
+
+    text = '\n'.join(R.lines)
+    assert 'No hay Summary seleccionado' in text
+    assert 'MultiTestingMode desactivado' in text
 
 
 def test_pctl_basic():
@@ -67,6 +117,12 @@ def test_pctl_all_nan():
 def test_sdiv():
     assert sdiv(10, 2) == 5
     assert sdiv(1, 0) == 0
+
+
+def test_wilson_ci_clamps_out_of_range_counts():
+    lo, hi = wilson_ci(31, 29)
+    assert 0.0 <= lo <= hi <= 1.0
+    assert hi == 1.0
 
 
 def test_rolling_matches_trailing_window_mean():

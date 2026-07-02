@@ -838,7 +838,7 @@ def report_external_ai_brief(
         R.p('  - No hay registros Debug seleccionados; las metricas por coche no son concluyentes.')
     if not summary_rows:
         R.p('  - No hay Summary seleccionado; la lectura de generacion/convergencia queda limitada.')
-        if mode == 'test':
+        if MODE == 'test':
             R.p('  - En test 01/07 puede ser normal si se ejecuto el flujo de coche unico con MultiTestingMode desactivado.')
 
     report_program_updates_0107(R, debug_rows)

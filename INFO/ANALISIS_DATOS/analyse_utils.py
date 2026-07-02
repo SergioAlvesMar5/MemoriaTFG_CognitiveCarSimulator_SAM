@@ -2111,8 +2111,18 @@ def cvar(vals, alpha=10):
 
 def wilson_ci(k, n, z=1.96):
     """Intervalo de confianza Wilson para una proporcion binomial."""
+    try:
+        n = float(n)
+        k = float(k)
+    except (TypeError, ValueError):
+        return (0.0, 0.0)
     if n <= 0:
         return (0.0, 0.0)
+    # Some exported diagnostic counters can be slightly inconsistent
+    # (for example roundabout exit deaths > exposed exit count). Wilson is
+    # binomial, so clamp only for the CI calculation and let the report show
+    # the raw ratio separately.
+    k = min(max(k, 0.0), n)
     phat = k / n
     den = 1.0 + (z*z)/n
     center = (phat + (z*z)/(2*n)) / den

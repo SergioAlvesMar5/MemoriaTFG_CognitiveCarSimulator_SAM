@@ -838,6 +838,8 @@ def report_debug(R, dbg):
                 ticks = agg[f'round_exit{exit_num}_ticks']
                 death_ci = wilson_ci(deaths, count)
                 ci_text = f'{death_ci[0]*100:.1f}-{death_ci[1]*100:.1f}%' if count > 0 else 'sin datos'
+                if count > 0 and deaths > count:
+                    ci_text += ' cap'
                 R.p(
                     f'  {label:>8s} | {count:7.0f} | {deaths:7.0f} | '
                     f'{sdiv(deaths*100.0, count):6.2f}% | {ci_text:>15s} | {ticks:9.0f} | '
