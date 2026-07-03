@@ -1,0 +1,14 @@
+VARIAS COSAS:
+
+
+
+tengo la duda si el get sensors data tenie o no que estar dentro del for loop
+
+
+
+El initializerandombrain está puesto de esa forma, para que el coche empiece acelerando a tope y con el volante a 0.0 como medida de ahorrarnos paso en los que el coche empezaba marcha atrás o asi, pero que me recomiendas hacer?
+
+
+
+para el tanh ayudame a crear un nodo personalizado, creo que puedes usar algo de contenido que aparece en FGenericPlatformMath::Tanh() en c++
+
