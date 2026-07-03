@@ -10,7 +10,33 @@ Durante el desarrollo se utilizaron asistentes de inteligencia artificial como a
 
 El seguimiento operativo se registró en GitLab mediante issues y milestones. El CSV depurado contiene 40 issues cerradas agrupadas en 15 sprints, desde el 7 de noviembre de 2025 hasta el 1 de julio de 2026. Esta fuente no sustituye a las actas de reunión ni a los resultados experimentales, pero sí aporta una trazabilidad intermedia: permite relacionar fechas, tareas cerradas y cambios técnicos concretos.
 
-\Needspace{18\baselineskip}
+\section{Planificación temporal}
+
+La planificación real del proyecto puede entenderse como un diagrama de Gantt incremental. Las primeras semanas estuvieron dedicadas a comprender el proyecto heredado, ordenar assets y crear una primera señalización funcional. Después se concentró el esfuerzo en el vehículo autónomo, el entrenamiento evolutivo y el entorno de pruebas. A partir de marzo el trabajo se desplazó hacia la instrumentación, la separación entre entrenamiento y test, las intersecciones, la señalización avanzada y, finalmente, la interacción física entre vehículos.
+
+{\small
+\begin{table}[htbp]
+\centering
+\caption{Diagrama de Gantt simplificado del desarrollo.}
+\label{tab:gantt}
+\begin{tabularx}{0.98\textwidth}{L{2.55cm}L{1.55cm}L{1.15cm}X}
+\toprule
+\textbf{Fase} & \textbf{Periodo} & \textbf{Esf.} & \textbf{Resultado principal}\\
+\midrule
+Arranque y limpieza del proyecto & Nov.-dic. & \rule{0.9cm}{1.05ex} & Carpeta \texttt{CarSimulator}, assets ordenados y revisión del estado heredado.\\
+Señalización y vehículo inicial & Dic.-ene. & \rule{0.9cm}{1.05ex} & Semáforos, señales verticales, primer coche con sensores y salidas continuas.\\
+Línea de pruebas y aprendizaje básico & Ene.-feb. & \rule{0.9cm}{1.05ex} & Entrenamiento de centrado, corrección de desviación, curvas y primeros checkpoints.\\
+Spawns, bordes e instrumentación & Feb.-mar. & \rule{0.9cm}{1.05ex} & Puntos de aparición distribuidos, bordes virtuales y primeros CSV de diagnóstico.\\
+Train/test y señalización en la red & Mar.-abr. & \rule{0.9cm}{1.05ex} & Separación de modos, contexto one-hot, zonas de espera y cruce.\\
+Fitness avanzado y persistencia & Abr.-may. & \rule{0.9cm}{1.05ex} & Penalizaciones, modelos persistentes, elitismo y mutación dinámica.\\
+Rotondas y análisis de regresión & Jun. & \rule{0.55cm}{1.05ex} & Métricas por salida, balances de recompensa y test reproducibles.\\
+Interacción física entre vehículos & Jun.-jul. & \rule{0.9cm}{1.05ex} & Solapes, distancia de seguridad, cedas con cola y simulación libre con respawn.\\
+\bottomrule
+\end{tabularx}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, milestones, issues y descripciones fechadas.}}
+\end{table}
+}
+
 \section{Seguimiento en GitLab}
 
 La tabla~\ref{tab:milestones-gitlab} resume las milestones registradas en GitLab. Se han agrupado por sprint para evitar una lista excesiva de issues individuales y para conservar la lectura global de la evolución.
@@ -37,8 +63,8 @@ La tabla~\ref{tab:milestones-gitlab} resume las milestones registradas en GitLab
 0 & 07/11 a 27/11/2025 & 2 & Reorganización inicial de \texttt{Content}, creación de \texttt{CarSimulator} y limpieza de assets heredados o importados.\\
 1 & 27/11 a 11/12/2025 & 3 & Familiarización con la IA existente, semáforo dinámico y primeras señales verticales con zonas de detección y parada.\\
 2 & 11/12 a 24/12/2025 & 3 & Primer vehículo autónomo con red inicial, mapeo de sensores y definición preliminar de perfiles de conducción con ASPAYM.\\
-3 & 25/12/2025 a 08/01/2026 & 2 & Gestor evolutivo, persistencia de modelos y restricciones básicas para evitar estrategias de conducción no deseadas.\\
-4 & 08/01 a 16/01/2026 & 2 & Primeros entrenamientos y tests centrados en corrección de desviación, junto con documentación de prácticas.\\
+3 & 25/12/2025 a 08/01/2026 & 2 & Milestone redefinida como \textit{Gestor evolutivo, persistencia y restricciones de conducción}. Agrupa el sistema evolutivo de evaluación/guardado y las restricciones de velocidad, dirección, marcha atrás y centrado en carril.\\
+4 & 08/01 a 16/01/2026 & 2 & Milestone redefinida como \textit{Validación inicial del modelo y documentación de prácticas}. Agrupa los primeros ciclos train/test sobre desviación y carril junto con la memoria de prácticas externas.\\
 5 & 16/01 a 29/01/2026 & 2 & Ajuste de la red para mantener carril y entrenamiento inicial en curvas en ambos sentidos.\\
 6 & 18/02 a 04/03/2026 & 4 & Bordes virtuales de intersección, mayor variedad de spawns, análisis de datos y multiraytracing.\\
 7 & 05/03 a 19/03/2026 & 4 & Modo test, exportación ampliada de datos, normalización del fitness por spawn y mejora de puntos de aparición.\\
@@ -52,6 +78,7 @@ La tabla~\ref{tab:milestones-gitlab} resume las milestones registradas en GitLab
 \end{longtable}
 }
 
+\Needspace{18\baselineskip}
 \section{Cronología de decisiones}
 
 La tabla~\ref{tab:cronologia} sintetiza los principales hitos recogidos en las actas de seguimiento.
@@ -83,7 +110,6 @@ La tabla~\ref{tab:cronologia} sintetiza los principales hitos recogidos en las a
 19/03/2026 & Segunda demostración con navegación ya estable en buena parte del mapa. & Se acepta la base técnica, se planifica la reorganización del repositorio y se preparan la compilación para Windows y las siguientes mejoras.\\
 \end{longtable}
 
-\Needspace{16\baselineskip}
 \section{Línea evolutiva del desarrollo}
 
 Además de los hitos de reunión, el proyecto ha seguido una evolución técnica marcada por pruebas que no siempre dieron un resultado utilizable a la primera. Esa evolución es relevante porque explica por qué la solución actual no se limita a una red neuronal aislada, sino que integra sensores, reglas de tráfico, persistencia de modelos, análisis de CSV y pruebas de regresión.
@@ -119,16 +145,29 @@ Junio-julio & Separación train/test, rotondas y análisis de regresión. & Se d
 \end{longtable}
 }
 
+\section{Entorno de pruebas inicial}
+
+Una parte decisiva del desarrollo fue construir una línea de pruebas pequeña antes de intentar que los vehículos circularan por toda la ciudad. Esa zona inicial reducía deliberadamente el problema: un mismo punto de aparición, carril reconocible, bordes controlados, checkpoints simples y una función de fitness centrada en avanzar, mantenerse dentro del carril, corregir desviaciones y aprender a girar. El objetivo no era representar todavía todo el tráfico urbano, sino aislar los conceptos mínimos que un coche físico necesitaba dominar antes de enfrentarse a intersecciones y señales.
+
+Esta decisión evitó mezclar demasiadas causas de fallo en la misma prueba. Cuando el coche no giraba o se salía del carril, la explicación estaba en sensores, red, suavizado o fitness, no en una rotonda mal delimitada o en un stop situado demasiado cerca del spawn. Por eso la línea inicial funcionó como un banco de ensayo: permitió comprobar la conexión entre entradas, pesos, salidas y físicas de Chaos Vehicle, y también obligó a abandonar fórmulas de fitness que premiaban estrategias visualmente pobres.
+
+El salto posterior a puntos de aparición dinámicos alrededor del mapa cambió el problema de escala. El gestor dejó de evaluar una habilidad local y pasó a distribuir la población entre zonas heterogéneas, con curvas, cruces, semáforos, stops y cedas. La introducción de \texttt{SpawnBag}, marcas \texttt{ValidForTrain}/\texttt{ValidForTest} y normalización por spawn convirtió el entrenamiento en un proceso mucho más representativo, pero también más exigente: una mejora en un punto fácil podía dejar de ser dominante si no se sostenía en puntos de mayor dificultad. Ese cambio revolucionó el manager evolutivo porque obligó a seleccionar modelos por robustez espacial, no solo por el máximo de fitness alcanzado en una línea controlada.
+
 \section{Alcance}
 
 El alcance funcional completado se centra en conseguir que los vehículos de tráfico puedan aprender y circular dentro del escenario existente. El trabajo no modifica el vehículo conducido por el paciente ni rediseña la ciudad: actúa sobre los coches autónomos, su controlador y los elementos del mapa que les proporcionan información. El resultado es un controlador capaz de transformar las salidas de la red neuronal en dirección, aceleración y frenado sobre el sistema físico de Unreal Engine.
 
-\Needspace{9\baselineskip}
 Para alimentar ese controlador se ha incorporado percepción local mediante raycasting y se han normalizado las variables que entran en la red. El aprendizaje se realiza con poblaciones de vehículos, selección, mutación y elitismo. Los pesos obtenidos pueden guardarse y cargarse en sesiones posteriores, lo que evita reiniciar el proceso cada vez que se abre el simulador. La evaluación se apoya en una función de fitness que combina avance, centrado, velocidad, cumplimiento de señales y penalizaciones por comportamientos no deseados.
 
 Incluye además semáforos, stops, cedas, líneas de parada y validación de maniobras. En cruces y rotondas se registran trayectorias, entrada, salida, giro, colisiones y recompensa, con puntos de aparición separados para entrenamiento y test. Los CSV resultantes permiten comparar ejecuciones y localizar fallos repetidos por zona.
 
 No forman parte de esta versión la implementación completa de peatones, bicicletas y animales, ni los perfiles de conductor diferenciados previstos en la propuesta inicial. Tampoco se aborda todavía una validación con pacientes. Estas ampliaciones requieren primero consolidar la navegación vehicular y disponer de un protocolo de prueba estable, por lo que se mantienen como trabajo posterior.
+
+\section{Complejidad del cambio de mapa}
+
+El cambio o ampliación de mapa no fue un simple problema de que la red neuronal tuviera que aprender curvas nuevas. La dificultad temporal más importante estuvo en preparar manualmente la geometría útil para la percepción: colocar bordes de calzada, volúmenes de navegación, triggers de intersección, cajas de espera, zonas de cruce, flechas de parada y propiedades específicas de cada actor. Si un borde quedaba asociado a la dirección equivocada, si un volumen se solapaba con una zona válida o si una línea de stop no estaba bien orientada, el coche recibía una lectura incoherente aunque la política neuronal fuese razonable.
+
+Esta carga de configuración explica por qué algunas regresiones se concentraron en actores concretos, como bordes de intersección o \texttt{NavModifierVolume}. La red podía responder de forma aceptable ante una curva o rotonda nueva cuando los sensores recibían límites consistentes; en cambio, una propiedad mal asignada en el escenario convertía el entrenamiento en ruido. Por ello, el trabajo de mapa debe considerarse parte del sistema de IA: define qué percibe el agente, qué cuenta como salida de calzada, qué trayectoria está habilitada y cuándo una espera se valida como legal. En futuras ampliaciones convendría automatizar parte de esta configuración o crear herramientas de verificación visual antes de lanzar entrenamientos largos.
 
 \section{Gestión de riesgos}
 
@@ -157,12 +196,12 @@ Rigidez de navegación determinista & Comportamiento poco realista y baja utilid
 Fitness mal calibrado & Aprendizaje de estrategias no deseadas & Alta & Instrumentar componentes, exportar CSV y analizar penalizaciones por familia de muerte.\\
 Coste computacional & Entrenamientos lentos y dependencia de GPU/CPU & Media & Poblaciones moderadas, análisis offline y propuesta futura de modo sin renderizado.\\
 Complejidad de intersecciones & Colisiones y violaciones normativas en cruces & Alta & Bordes dinámicos, zonas de cruce, validación de stops/cedas y separación train/test.\\
+Configuración manual del mapa & Lecturas sensoriales incoherentes y regresiones localizadas & Alta & Revisar propiedades de bordes, volúmenes, triggers y líneas de parada antes de cada entrenamiento largo; documentar hotspots por actor.\\
 Sobreajuste a spawns concretos & Buen rendimiento local pero mala generalización & Media & Normalización por punto de aparición y test con spawns diferenciados.\\
 Pérdida de conocimiento entrenado & Reinicio de aprendizaje entre sesiones & Media & Persistencia de modelos \texttt{SuperCarModel} y \texttt{SessionCarModel}.\\
 \end{longtable}
 }
 
-\Needspace{16\baselineskip}
 \section{Estimación de recursos y presupuesto}
 
 El proyecto se ha desarrollado durante las prácticas y el TFG, sin contratación externa ni compra específica de material. El recurso principal ha sido el tiempo dedicado a implementar Blueprints, ejecutar entrenamientos, revisar resultados y documentar cambios. Parte de ese tiempo no es programación directa: los entrenamientos ocupan el equipo durante periodos prolongados y obligan a repetir pruebas cuando cambia el fitness o la geometría de una intersección.
