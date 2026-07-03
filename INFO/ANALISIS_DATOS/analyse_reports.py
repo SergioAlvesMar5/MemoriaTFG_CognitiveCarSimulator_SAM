@@ -1296,6 +1296,10 @@ def report_input_quality(R, summary_meta, debug_meta):
         R.p(f'  Modificado:      {meta.get("mtime", "")}')
         R.p(f'  Filas datos:     {meta.get("data_rows", 0)}')
         R.p(f'  Filas cargadas:  {meta.get("loaded_rows", 0)}')
+        if meta.get('synthetic_from_debug'):
+            R.p(f'  Reconstruido:    SI, desde {meta.get("synthetic_source", "Fitness_Debug.csv")}')
+            R.p(f'  Filas reconstr.: {meta.get("synthetic_rows", meta.get("loaded_rows", 0))}')
+            R.p(f'  Debug usado rec.: {meta.get("synthetic_debug_rows", 0)} registros')
         if 'selected_rows' in meta:
             R.p(f'  Filas seleccionadas (modo): {meta.get("selected_rows", 0)}')
         R.p(f'  Filas descart.:  {meta.get("discarded_rows", 0)}')
@@ -1403,6 +1407,94 @@ def report_program_updates_0107(R, dbg):
         'de stop/yield/crossing; Acum_TimeBlockedAtCrossing se debe leer como bloqueo '
         'de la sesion actual, no como arrastre entre generaciones.'
     )
+
+
+def report_program_updates_0307(R, dbg):
+    """Describe semantic changes from the 03/07 program version when present."""
+    if not dbg:
+        return
+    debug_schema = dbg[0].get('_schema', '')
+    looks_current = (
+        debug_schema == '2026-07-01-overlap-penalty-queue-wait'
+        or debug_field_available(dbg, 'queue_wait_bonus')
+        or debug_field_available(dbg, 'crossing_blocked_t')
+    )
+    if not looks_current:
+        return
+
+    nd = len(dbg)
+    tl_ticks = sum(r.get('t_stop_ctx_tl', 0.0) for r in dbg)
+    stop_ticks = sum(r.get('t_stop_ctx_stop', 0.0) for r in dbg)
+    yield_ticks = sum(r.get('t_stop_ctx_yield', 0.0) for r in dbg)
+    wait_bonus_total = sum(r.get('wait_bonus', 0.0) for r in dbg)
+    wait_bonus_rows = sum(1 for r in dbg if r.get('wait_bonus', 0.0) > 0.0)
+    creep_total = sum(r.get('pen_creep', 0.0) for r in dbg)
+    creep_rows = sum(1 for r in dbg if r.get('pen_creep', 0.0) > 0.0)
+    correcting_wrong_total = sum(r.get('pen_cw', 0.0) for r in dbg)
+    correcting_wrong_rows = sum(1 for r in dbg if r.get('pen_cw', 0.0) > 0.0)
+    reverse_total = sum(r.get('pen_rev', 0.0) for r in dbg)
+    reverse_rows = sum(1 for r in dbg if r.get('pen_rev', 0.0) > 0.0)
+    crossing_blocked_total = sum(r.get('crossing_blocked_t', 0.0) for r in dbg)
+    crossing_blocked_rows = sum(1 for r in dbg if r.get('crossing_blocked_t', 0.0) > 0.0)
+
+    R.p(f'\n-- Novedades del Programa 03/07 --')
+    R.p(
+        '  FreeRun: si IsFreeRunMode esta activo, EvolutionManager crea un coche por '
+        'spawn con TrainingMode=false, bBypassLifetimeLimit=true y cerebro cargado. '
+        'Leer esas ejecuciones como simulacion libre/debug, no como test estadistico '
+        'multi-coche si el Summary no acompana.'
+    )
+    R.p(
+        '  Red neuronal: el input DistToStopLine se mezcla con ReleaseFadeAlpha y '
+        'vuelve gradualmente a 1.0 tras liberar ForceStop. FirstSteerAfterRelease '
+        'sigue midiendo reaccion, pero ya no implica que la red siga viendo la '
+        'distancia real a la linea durante todo el grace.'
+    )
+    R.p(
+        '  Semaforo/stop/yield: las validaciones usan umbrales aprendidos desde '
+        'muestras legales cuando existen. STOP anade ventana dinamica antes de linea '
+        '(AllowedStopBeforeLine) y tiempo minimo aprendido.'
+    )
+    R.p(
+        '  Fitness stop 03/07: STOP death penalty incluye exceso tras la linea con '
+        'SignedDistanceToStopLine; StopCompletionBonus depende del tiempo minimo '
+        'aprendido, no de una constante fija.'
+    )
+    R.p(
+        '  Creeping/WaitBonus: CreepingPenalty solo aplica en semaforo/stop antes de '
+        'la linea (SignedDistanceToStopLine <= 0) y no en yield; WaitBonus queda '
+        'acotado por la ventana temporal de aproximacion.'
+    )
+    R.p(
+        '  Yield 03/07: separa validacion libre, bloqueada y liberacion. '
+        'Acum_TimeBlockedAtCrossing mezcla incrementos de stop (0.5s) y yield '
+        'crossing/release (0.1/0.3s), asi que conviene interpretarlo como tiempo '
+        'bloqueado total por contexto, no como contador homogeneo.'
+    )
+    R.p(
+        '  Reverse 03/07: REVERSING_WRONG exige riesgo de ir marcha atras y steering '
+        'en direccion incorrecta; REVERSE queda para el riesgo de marcha atras sin ese '
+        'segundo componente; Penalty_CorrectingWrong cubre el caso de steering mal '
+        'dirigido sin riesgo de reverse.'
+    )
+    if tl_ticks + stop_ticks + yield_ticks > 0.0:
+        R.p(
+            f'  Exposicion stop-context: semaforo={tl_ticks:.0f} ticks, '
+            f'stop={stop_ticks:.0f}, yield={yield_ticks:.0f}.'
+        )
+    if crossing_blocked_total > 0.0:
+        R.p(
+            f'  TimeBlockedAtCrossing observado: {crossing_blocked_total:.2f}s en '
+            f'{crossing_blocked_rows}/{nd} coches.'
+        )
+    if wait_bonus_total > 0.0 or creep_total > 0.0 or reverse_total > 0.0 or correcting_wrong_total > 0.0:
+        R.p(
+            f'  Totales clave 03/07: WaitBonus={wait_bonus_total:.2f} '
+            f'({wait_bonus_rows}/{nd}), Creeping={creep_total:.2f} '
+            f'({creep_rows}/{nd}), Reverse={reverse_total:.2f} '
+            f'({reverse_rows}/{nd}), CorrectingWrong={correcting_wrong_total:.2f} '
+            f'({correcting_wrong_rows}/{nd}).'
+        )
 
 
 def report_debug_scope(R, info):
@@ -2884,6 +2976,57 @@ def save_json_snapshot(
             'queue_wait_bonus_rows_pct': sdiv(queue_wait_bonus_rows * 100.0, len(dbg_rows)),
             'queue_wait_bonus_per_life_sec_exposed_avg': queue_wait_bonus_life_avg,
             'queue_wait_bonus_per_life_sec_exposed_n': queue_wait_bonus_life_n,
+        },
+        'program_updates_0307': {
+            'schema_detected': debug_schema,
+            'notes_are_semantic_not_new_csv_columns': debug_schema_0107,
+            'free_run_mode_note': (
+                'If IsFreeRunMode is enabled, EvolutionManager spawns one loaded-brain car per spawn '
+                'with TrainingMode=false and bBypassLifetimeLimit=true. Interpret as free simulation/debug '
+                'unless Summary confirms a regular train/test batch.'
+            ) if debug_schema_0107 else '',
+            'release_fade_distance_input': (
+                'DistToStopLine network input fades back to neutral 1.0 through ReleaseFadeAlpha after ForceStop '
+                'release; FirstSteerAfterRelease remains a reaction metric, not persistent stop-line visibility.'
+            ) if debug_schema_0107 else '',
+            'learned_legal_thresholds': (
+                'Traffic light, stop and yield validation can use thresholds learned from legal samples; '
+                'fallbacks still exist when there are not enough samples.'
+            ) if debug_schema_0107 else '',
+            'dynamic_stop_window': (
+                'STOP validation uses a dynamic allowed distance before the line and a learned minimum wait time.'
+            ) if debug_schema_0107 else '',
+            'stop_death_penalty_signed_distance': (
+                'STOP death penalty includes excess after the stop line through SignedDistanceToStopLine.'
+            ) if debug_schema_0107 else '',
+            'creeping_condition': (
+                'CreepingPenalty applies only for traffic-light/stop contexts before the line '
+                '(SignedDistanceToStopLine <= 0), not for yield.'
+            ) if debug_schema_0107 else '',
+            'wait_bonus_condition': (
+                'WaitBonus is bounded by the approach-time window; it should not be read as unlimited waiting reward.'
+            ) if debug_schema_0107 else '',
+            'crossing_blocked_time_semantics': (
+                'Acum_TimeBlockedAtCrossing aggregates stop and yield waiting increments with different step sizes '
+                '(stop 0.5s, yield crossing/release 0.1/0.3s).'
+            ) if debug_schema_0107 else '',
+            'reverse_wrong_semantics': (
+                'REVERSING_WRONG combines reverse risk and wrong steering direction; REVERSE alone is only reverse risk; '
+                'Penalty_CorrectingWrong covers wrong steering without reverse risk.'
+            ) if debug_schema_0107 else '',
+            'stop_context_ticks_traffic_light': sum(r.get('t_stop_ctx_tl', 0.0) for r in dbg_rows),
+            'stop_context_ticks_stop': sum(r.get('t_stop_ctx_stop', 0.0) for r in dbg_rows),
+            'stop_context_ticks_yield': sum(r.get('t_stop_ctx_yield', 0.0) for r in dbg_rows),
+            'wait_bonus_total': sum(r.get('wait_bonus', 0.0) for r in dbg_rows),
+            'wait_bonus_rows': sum(1 for r in dbg_rows if r.get('wait_bonus', 0.0) > 0.0),
+            'creeping_penalty_total': creep_total,
+            'creeping_penalty_rows': sum(1 for r in dbg_rows if r.get('pen_creep', 0.0) > 0.0),
+            'reverse_penalty_total': rev_total,
+            'reverse_penalty_rows': sum(1 for r in dbg_rows if r.get('pen_rev', 0.0) > 0.0),
+            'correcting_wrong_penalty_total': sum(r.get('pen_cw', 0.0) for r in dbg_rows),
+            'correcting_wrong_penalty_rows': sum(1 for r in dbg_rows if r.get('pen_cw', 0.0) > 0.0),
+            'crossing_blocked_time': crossing_blocked_total,
+            'crossing_blocked_rows': crossing_blocked_rows,
         },
         'summary_metrics': summarize_session(
             summary_rows,

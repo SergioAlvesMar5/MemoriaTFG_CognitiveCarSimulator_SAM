@@ -21,6 +21,157 @@ def build_combined_summary(train_summary, test_summary):
         r['gen'] = i
     return rows
 
+def build_synthetic_summary_from_debug(debug_rows, mode):
+    """Build Summary-like rows from Fitness_Debug when Summary CSV is missing/empty."""
+    if not debug_rows:
+        return [], [], {}
+
+    raw_gens = [int(num(r.get('gen', 0), 0.0)) for r in debug_rows]
+    unique_raw = sorted(set(raw_gens)) or [0]
+    if all(g > 0 for g in unique_raw):
+        raw_to_gen = {g: g for g in unique_raw}
+    else:
+        raw_to_gen = {g: i + 1 for i, g in enumerate(unique_raw)}
+
+    debug_copy = []
+    by_gen = defaultdict(list)
+    for r in debug_rows:
+        rr = dict(r)
+        raw_gen = int(num(rr.get('gen', 0), 0.0))
+        analysis_gen = raw_to_gen.get(raw_gen, 1)
+        rr['gen_debug_raw'] = raw_gen
+        rr['gen'] = analysis_gen
+        rr['summary_synthetic_from_debug'] = True
+        debug_copy.append(rr)
+        by_gen[analysis_gen].append(rr)
+
+    include_test_kpis = mode in ('test', 'traintest')
+    summary_rows = []
+    for gen in sorted(by_gen):
+        rows = by_gen[gen]
+        n = len(rows)
+        best_row = max(rows, key=lambda r: r.get('fit', 0.0))
+        deaths = Counter(r.get('death', '') or 'UNKNOWN' for r in rows)
+        pop_death, pop_count = deaths.most_common(1)[0] if deaths else ('UNKNOWN', 0)
+        rec = {
+            'gen': gen,
+            'best': best_row.get('fit', 0.0),
+            'mean': mean([r.get('fit', 0.0) for r in rows]),
+            'time': mean([r.get('time', 0.0) for r in rows]),
+            'best_death': best_row.get('death', ''),
+            'pop_death': pop_death,
+            'pop_count': pop_count,
+            'eval_n': n,
+            'source_phase': mode,
+            'synthetic_from_debug': True,
+            'synthetic_source': 'Fitness_Debug.csv',
+            'debug_raw_generations': sorted(set(r.get('gen_debug_raw', 0) for r in rows)),
+        }
+        if include_test_kpis:
+            outcomes = Counter(classify_test_outcome(r) for r in rows)
+            success_count = outcomes.get('success', 0)
+            fail_count = n - success_count
+            fail_collision_count = sum(
+                1 for r in rows
+                if classify_test_outcome(r) != 'success' and death_family(r.get('death', '')) == 'COLLISION'
+            )
+            fail_early_count = outcomes.get('fail_time', 0)
+            fail_hard_count = max(0, fail_count - fail_collision_count - fail_early_count)
+            wilson_lo, _ = wilson_ci(success_count, n)
+            rec.update({
+                'success_count': success_count,
+                'fail_count': fail_count,
+                'fail_hard_count': fail_hard_count,
+                'fail_early_count': fail_early_count,
+                'fail_collision_count': fail_collision_count,
+                'success_rate': sdiv(success_count * 100.0, n),
+                'fail_rate': sdiv(fail_count * 100.0, n),
+                'hard_fail_rate': sdiv(fail_hard_count * 100.0, n),
+                'score': wilson_lo * 100.0,
+                'outcome_success': outcomes.get('success', 0),
+                'outcome_fail_death': outcomes.get('fail_death', 0),
+                'outcome_fail_time': outcomes.get('fail_time', 0),
+                'outcome_fail_fitness': outcomes.get('fail_fitness', 0),
+            })
+        summary_rows.append(rec)
+
+    info = {
+        'enabled': True,
+        'mode': mode,
+        'source': 'Fitness_Debug.csv',
+        'rows': len(summary_rows),
+        'debug_rows': len(debug_copy),
+        'raw_generations': unique_raw,
+        'gen_map': [{'raw': raw, 'synthetic': raw_to_gen[raw]} for raw in unique_raw],
+        'includes_test_kpis': include_test_kpis,
+    }
+    return summary_rows, debug_copy, info
+
+def save_reconstructed_summary_csv(path, rows):
+    if not rows:
+        return ''
+    has_kpi = any('success_rate' in r for r in rows)
+    headers = [
+        'Generacion',
+        'MejorFitnessNorm',
+        'FitnessMedio',
+        'TiempoMedio',
+        'RazonMuerteMejorCoche',
+        'RazonMuerteMasPopular',
+        'MuertosPorRazonMasPopular',
+    ]
+    if has_kpi:
+        headers += [
+            'Exito',
+            'Fracaso',
+            'SuccessRate',
+            'FailRate',
+            'N',
+            'FracasoDuro',
+            'FracasoTemprano',
+            'FracasoColision',
+            'HardFailRate',
+            'Score',
+        ]
+    else:
+        headers += ['N']
+    headers += ['Origen', 'GeneracionesDebugRaw']
+
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        for r in rows:
+            row = [
+                r.get('gen', 0),
+                f'{r.get("best", 0.0):.6f}',
+                f'{r.get("mean", 0.0):.6f}',
+                f'{r.get("time", 0.0):.6f}',
+                r.get('best_death', ''),
+                r.get('pop_death', ''),
+                int(r.get('pop_count', 0)),
+            ]
+            if has_kpi:
+                row += [
+                    int(r.get('success_count', 0)),
+                    int(r.get('fail_count', 0)),
+                    f'{r.get("success_rate", 0.0):.6f}',
+                    f'{r.get("fail_rate", 0.0):.6f}',
+                    int(r.get('eval_n', 0)),
+                    int(r.get('fail_hard_count', 0)),
+                    int(r.get('fail_early_count', 0)),
+                    int(r.get('fail_collision_count', 0)),
+                    f'{r.get("hard_fail_rate", 0.0):.6f}',
+                    f'{r.get("score", 0.0):.6f}',
+                ]
+            else:
+                row += [int(r.get('eval_n', 0))]
+            row += [
+                r.get('synthetic_source', 'Fitness_Debug.csv'),
+                '|'.join(str(x) for x in r.get('debug_raw_generations', [])),
+            ]
+            writer.writerow(row)
+    return path
+
 def reindex_generations_for_analysis(summary_rows, debug_rows):
     def to_int(v, default=0):
         try:
@@ -745,6 +896,12 @@ def report_external_ai_brief(
     add_kv(R, 'Summary usado', os.path.basename(SUMMARY_FILE) if SUMMARY_FILE else '-')
     add_kv(R, 'Debug usado', os.path.basename(DEBUG_FILE))
     add_kv(R, 'Training/Test Summary filas', f'{train_summary_rows}/{test_summary_rows}')
+    if summary_meta.get('synthetic_from_debug'):
+        add_kv(
+            R,
+            'Summary reconstruido',
+            f'{summary_meta.get("synthetic_rows", len(summary_rows))} fila(s) desde Fitness_Debug.csv',
+        )
 
     schema = debug_rows[0].get('_schema', 'unknown') if debug_rows else detect_debug_schema(debug_meta.get('mapped_keys', []))
     mapped_summary = len(summary_meta.get('mapped_keys', []))
@@ -836,12 +993,16 @@ def report_external_ai_brief(
         R.p('  - No hay alertas fuertes de alineacion entre Summary y Debug.')
     if not debug_rows:
         R.p('  - No hay registros Debug seleccionados; las metricas por coche no son concluyentes.')
-    if not summary_rows:
+    if summary_meta.get('synthetic_from_debug'):
+        R.p('  - El Summary CSV no tenia filas utiles; se ha reconstruido un Summary equivalente desde Fitness_Debug.')
+        R.p('  - Las metricas de acierto/fallo reconstruidas usan las reglas locales de classify_test_outcome.')
+    elif not summary_rows:
         R.p('  - No hay Summary seleccionado; la lectura de generacion/convergencia queda limitada.')
         if MODE == 'test':
             R.p('  - En test 01/07 puede ser normal si se ejecuto el flujo de coche unico con MultiTestingMode desactivado.')
 
     report_program_updates_0107(R, debug_rows)
+    report_program_updates_0307(R, debug_rows)
 
     R.p(f'\n-- KPIs Principales --')
     if summary_rows:
@@ -1133,6 +1294,12 @@ def report_external_ai_brief(
     R.p('  - Penalty_Velocidad 01/07 usa EffectiveObstacleDistance cuando hay coche cercano; no es solo sensor frontal estatico.')
     R.p('  - Test single-car 01/07: con MultiTestingMode desactivado puede existir Debug sin Summary multi-coche completo.')
     R.p('  - EndGeneration 01/07 limpia colas pendientes de stop/yield/crossing; no asumir bloqueo heredado entre generaciones.')
+    R.p('  - FreeRun 03/07: si se activa IsFreeRunMode, hay coches por spawn con lifetime ilimitado; no leerlo como test estadistico normal sin Summary consistente.')
+    R.p('  - Red 03/07: DistToStopLine se desvanece a 1.0 con ReleaseFadeAlpha tras liberar ForceStop; FirstSteerAfterRelease mide reaccion, no distancia persistente.')
+    R.p('  - Stop/Semaforo/Yield 03/07: los umbrales pueden ser aprendidos desde muestras legales; STOP usa ventana dinamica antes de linea y tiempo minimo aprendido.')
+    R.p('  - CreepingPenalty 03/07 solo aplica en semaforo/stop antes de linea; no atribuirlo a yield ni a comportamiento despues de cruzar la linea.')
+    R.p('  - TimeBlockedAtCrossing 03/07 mezcla pasos de stop y yield; usarlo como tiempo bloqueado agregado, no como contador uniforme.')
+    R.p('  - Reverse 03/07 separa REVERSE, REVERSING_WRONG y Penalty_CorrectingWrong; no agruparlos sin mirar el contexto de direccion/obstaculo.')
     R.p('  - SpeedAtYieldValidation 30/06 es la velocidad puntual al validar ceda, no un acumulado por coche.')
     R.p('  - STOP_VIOLATION_EXIT/TIMEOUT se agrupan como VIOLATION, pero el subtipo indica salida indebida vs espera agotada.')
     R.p('  - Mutacion 26/06: GenerationsWithoutImprovement no se exporta; el informe valida rangos esperados, no el valor exacto por individuo.')
@@ -1283,6 +1450,27 @@ def run_analysis_variant(
             completion_alignment['excluded_rows'],
             completion_alignment['excluded_generations'],
         )
+
+    synthetic_summary_info = {}
+    if not summary_rows and debug_rows:
+        summary_rows, debug_rows, synthetic_summary_info = build_synthetic_summary_from_debug(debug_rows, mode)
+        if synthetic_summary_info.get('enabled'):
+            summary_meta_template = copy.deepcopy(summary_meta_template)
+            summary_meta_template['synthetic_from_debug'] = True
+            summary_meta_template['synthetic_source'] = synthetic_summary_info.get('source', 'Fitness_Debug.csv')
+            summary_meta_template['synthetic_rows'] = synthetic_summary_info.get('rows', 0)
+            summary_meta_template['synthetic_debug_rows'] = synthetic_summary_info.get('debug_rows', 0)
+            summary_meta_template['synthetic_includes_test_kpis'] = synthetic_summary_info.get('includes_test_kpis', False)
+            summary_meta_template['synthetic_generation_map'] = synthetic_summary_info.get('gen_map', [])
+            debug_scope['selected_total'] = len(debug_rows)
+            debug_scope['summary_synthetic_from_debug'] = True
+            debug_scope['summary_synthetic_rows'] = len(summary_rows)
+            logging.info(
+                '[%s] Summary reconstruido desde Fitness_Debug: %d fila(s), %d registros Debug.',
+                mode.upper(),
+                len(summary_rows),
+                len(debug_rows),
+            )
 
     data_coherence = analyze_data_coherence(mode, summary_rows, debug_rows, debug_scope)
     summary_rows_idx, debug_rows_idx, gen_norm_info = reindex_generations_for_analysis(summary_rows, debug_rows)
@@ -1450,6 +1638,23 @@ def run_analysis_variant(
                 R.p(f'  {model_name}: {mod_date}')
         if savegame_info.get('missing'):
             R.p(f'  Modelos no encontrados: {savegame_info["missing"]}')
+
+    reconstructed_summary_path = ''
+    if summary_meta.get('synthetic_from_debug') and summary_rows_idx:
+        reconstructed_name = {
+            'train': 'Training_Summary_reconstruido.csv',
+            'test': 'Test_Summary_reconstruido.csv',
+            'traintest': 'TrainTest_Summary_reconstruido.csv',
+        }.get(mode, 'Summary_reconstruido.csv')
+        os.makedirs(OUT_DIR, exist_ok=True)
+        reconstructed_summary_path = save_reconstructed_summary_csv(
+            os.path.join(OUT_DIR, reconstructed_name),
+            summary_rows_idx,
+        )
+        R.p(f'\n-- Summary reconstruido --')
+        R.p(f'  Origen: Fitness_Debug.csv')
+        R.p(f'  Archivo: {reconstructed_summary_path}')
+        R.p('  Nota: contiene metricas equivalentes al Summary, derivadas de los registros Debug seleccionados.')
     
     R.p(f'  Carpeta: {os.path.abspath(OUT_DIR)}')
     R.p(f'{"="*76}\n')
@@ -1523,4 +1728,5 @@ def run_analysis_variant(
         'stop_stuck': stop_stuck_info,
         'metrics': metrics,
         'savegame_models': savegame_info,
+        'reconstructed_summary': reconstructed_summary_path,
     }

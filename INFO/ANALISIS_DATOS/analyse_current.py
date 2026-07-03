@@ -439,7 +439,7 @@ def main():
     if not debug_raw and not train_summary and not test_summary:
         logging.error('FATAL: No data loaded from any source (debug_raw, train_summary, test_summary all empty)')
     elif not combined_summary:
-        logging.warning('WARNING: No summary data loaded (train/test both empty), using debug data as fallback')
+        logging.warning('WARNING: No summary data loaded (train/test both empty); se reconstruira desde Fitness_Debug si hay datos')
 
     detected_mode, detected_info = detect_mode_from_inputs(debug_raw, train_summary, test_summary)
 

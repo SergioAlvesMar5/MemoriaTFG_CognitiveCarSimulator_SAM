@@ -94,6 +94,72 @@ def test_external_ai_brief_accepts_test_without_summary():
     assert 'MultiTestingMode desactivado' in text
 
 
+def test_program_updates_0307_report_documents_semantic_changes():
+    class DummyReport:
+        def __init__(self):
+            self.lines = []
+
+        def p(self, line):
+            self.lines.append(line)
+
+    R = DummyReport()
+    ac.report_program_updates_0307(
+        R,
+        [
+            {
+                '_schema': '2026-07-01-overlap-penalty-queue-wait',
+                '_available_fields': {
+                    'queue_wait_bonus',
+                    'crossing_blocked_t',
+                    't_stop_ctx_tl',
+                    't_stop_ctx_stop',
+                    't_stop_ctx_yield',
+                },
+                't_stop_ctx_tl': 3.0,
+                't_stop_ctx_stop': 5.0,
+                't_stop_ctx_yield': 7.0,
+                'crossing_blocked_t': 0.4,
+                'wait_bonus': 1.0,
+                'pen_creep': 2.0,
+                'pen_rev': 3.0,
+                'pen_cw': 4.0,
+            }
+        ],
+    )
+
+    text = '\n'.join(R.lines)
+    assert 'Novedades del Programa 03/07' in text
+    assert 'FreeRun' in text
+    assert 'ReleaseFadeAlpha' in text
+    assert 'ventana dinamica' in text
+    assert 'REVERSING_WRONG' in text
+
+
+def test_build_synthetic_summary_from_debug_reconstructs_test_kpis():
+    rows = [
+        {'gen': 0, 'car': 'A', 'fit': 100.0, 'time': 120.0, 'death': 'TIMEFINISHED'},
+        {'gen': 0, 'car': 'B', 'fit': 20.0, 'time': 5.0, 'death': 'LAZY'},
+        {'gen': 0, 'car': 'C', 'fit': -10.0, 'time': 50.0, 'death': 'COLLISION_WITH_WALL'},
+    ]
+
+    summary, debug, info = ac.build_synthetic_summary_from_debug(rows, 'test')
+
+    assert info['enabled'] is True
+    assert info['rows'] == 1
+    assert {r['gen'] for r in debug} == {1}
+    assert debug[0]['gen_debug_raw'] == 0
+    assert len(summary) == 1
+    row = summary[0]
+    assert row['gen'] == 1
+    assert row['eval_n'] == 3
+    assert row['best'] == 100.0
+    assert row['success_count'] == 1
+    assert row['fail_count'] == 2
+    assert row['fail_collision_count'] == 1
+    assert abs(row['success_rate'] - (100.0 / 3.0)) < 1e-9
+    assert row['synthetic_from_debug'] is True
+
+
 def test_pctl_basic():
     vals = [0, 1, 2, 3, 4]
     assert pctl(vals, 50) == 2
