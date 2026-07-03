@@ -24,11 +24,24 @@ def summarize_test_results(summary_rows):
     total_n = sum(m['n'] for m in derived)
     total_success = sum(int(num(r.get('success_count', 0), 0.0)) for r in rows)
     total_fail = sum(int(num(r.get('fail_count', 0), 0.0)) for r in rows)
+    total_censored = sum(int(num(r.get('censored_count', 0), 0.0)) for r in rows)
     rates = [m['success_rate'] for m in derived]
+    upper_rates = [m.get('success_rate_upper', m['success_rate']) for m in derived]
+    observed_rates = [m.get('success_rate_observed', m['success_rate']) for m in derived]
     weighted_rate = (
         sdiv(total_success * 100.0, total_n)
-        if total_n > 0 and (total_success + total_fail) > 0
+        if total_n > 0 and (total_success + total_fail + total_censored) > 0
         else mean(rates)
+    )
+    upper_weighted_rate = (
+        sdiv((total_success + total_censored) * 100.0, total_n)
+        if total_n > 0 and total_censored > 0
+        else weighted_rate
+    )
+    observed_weighted_rate = (
+        sdiv(total_success * 100.0, total_success + total_fail)
+        if (total_success + total_fail) > 0
+        else weighted_rate
     )
     lo, hi = wilson_ci(total_success, total_n) if total_n > 0 else (0.0, 0.0)
     best_idx = max(range(len(rows)), key=lambda i: rates[i])
@@ -41,12 +54,18 @@ def summarize_test_results(summary_rows):
         'total_n': total_n,
         'total_success': total_success,
         'total_fail': total_fail,
+        'total_censored': total_censored,
+        'censored_pct': sdiv(total_censored * 100.0, total_n),
         'success_rate': weighted_rate,
+        'success_rate_upper': upper_weighted_rate,
+        'success_rate_observed': observed_weighted_rate,
         'success_mean': mean(rates),
+        'success_upper_mean': mean(upper_rates),
+        'success_observed_mean': mean(observed_rates),
         'success_median': pctl(rates, 50),
         'success_std': stdev(rates),
         'success_min': min(rates),
-        'success_max': max(rates),
+        'success_max': max(upper_rates) if total_censored > 0 else max(rates),
         'best_gen': rows[best_idx].get('gen_phase', rows[best_idx].get('gen', 0)),
         'worst_gen': rows[worst_idx].get('gen_phase', rows[worst_idx].get('gen', 0)),
         'wilson_lo': lo * 100.0,

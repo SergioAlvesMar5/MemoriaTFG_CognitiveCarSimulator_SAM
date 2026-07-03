@@ -30,11 +30,38 @@ def save_fig(fig, name):
     plt.close(fig)
     return p
 
-def lifetime_distribution_bins(debug_rows, step_pct=10):
+def _extract_censored_age_estimates(debug_rows):
+    estimates = []
+    for r in debug_rows or []:
+        raw = r.get('free_run_censored_age_estimates')
+        if not isinstance(raw, (list, tuple)):
+            continue
+        for value in raw:
+            age = num(value, 0.0)
+            if math.isfinite(age) and age >= 0.0:
+                estimates.append(age)
+        if estimates:
+            break
+    return estimates
+
+def lifetime_distribution_bins(debug_rows, step_pct=10, censored_count=None, censored_age_estimates=None):
     step_pct = max(1, min(100, int(step_pct or 10)))
     if 100 % step_pct != 0:
         step_pct = 10
     n_bins = max(1, 100 // step_pct)
+    if censored_age_estimates is None:
+        censored_age_estimates = _extract_censored_age_estimates(debug_rows)
+    censored_age_estimates = [
+        max(0.0, num(v, 0.0))
+        for v in (censored_age_estimates or [])
+        if math.isfinite(num(v, 0.0))
+    ]
+    if censored_count is None:
+        censored_count = max(
+            [int(num(r.get('free_run_censored_alive_count', 0), 0.0)) for r in (debug_rows or [])] or [0]
+        )
+    censored_count = max(0, int(censored_count or 0), len(censored_age_estimates))
+    censored_unbinned_count = max(0, censored_count - len(censored_age_estimates))
 
     rows = []
     for r in debug_rows or []:
@@ -46,11 +73,19 @@ def lifetime_distribution_bins(debug_rows, step_pct=10):
             'max_time': 0.0,
             'max_row': {},
             'total': 0,
+            'observed_total': 0,
+            'censored_count': censored_count,
+            'censored_age_estimate_count': len(censored_age_estimates),
+            'censored_unbinned_count': censored_unbinned_count,
             'bins': [],
         }
 
-    max_time, max_row = max(rows, key=lambda item: item[0])
+    max_observed_time, max_row = max(rows, key=lambda item: item[0])
+    max_censored_time = max(censored_age_estimates or [0.0])
+    max_time = max(max_observed_time, max_censored_time)
+    max_source = 'censored_estimated' if max_censored_time > max_observed_time else 'observed_terminal'
     counts = [0 for _ in range(n_bins)]
+    censored_counts = [0 for _ in range(n_bins)]
     for t, _ in rows:
         if max_time <= 0.0:
             idx = 0
@@ -58,11 +93,21 @@ def lifetime_distribution_bins(debug_rows, step_pct=10):
             pct = sdiv(t * 100.0, max_time)
             idx = min(n_bins - 1, int(pct // step_pct))
         counts[idx] += 1
+    for t in censored_age_estimates:
+        if max_time <= 0.0:
+            idx = 0
+        else:
+            pct = sdiv(t * 100.0, max_time)
+            idx = min(n_bins - 1, int(pct // step_pct))
+        censored_counts[idx] += 1
 
-    total = len(rows)
+    observed_total = len(rows)
+    total = observed_total + censored_count
     bins = []
     accum = 0
     for i, count in enumerate(counts):
+        cens_count = censored_counts[i]
+        total_count = count + cens_count
         pct_start = i * step_pct
         pct_end_exclusive = min(100, (i + 1) * step_pct)
         pct_label = f'{pct_start}-{pct_end_exclusive - 1}%'
@@ -71,7 +116,7 @@ def lifetime_distribution_bins(debug_rows, step_pct=10):
 
         sec_start = max_time * pct_start / 100.0
         sec_end = max_time * pct_end_exclusive / 100.0
-        accum += count
+        accum += total_count
         bins.append({
             'pct_start': pct_start,
             'pct_end': pct_end_exclusive,
@@ -79,14 +124,26 @@ def lifetime_distribution_bins(debug_rows, step_pct=10):
             'sec_start': sec_start,
             'sec_end': sec_end,
             'count': count,
-            'car_pct': sdiv(count * 100.0, total),
+            'censored_count': cens_count,
+            'total_count': total_count,
+            'car_pct': sdiv(total_count * 100.0, total),
+            'observed_total_pct': sdiv(count * 100.0, total),
+            'censored_pct': sdiv(cens_count * 100.0, total),
+            'observed_pct': sdiv(count * 100.0, observed_total),
             'accum_pct': sdiv(accum * 100.0, total),
         })
 
     return {
         'max_time': max_time,
+        'max_observed_time': max_observed_time,
+        'max_censored_time': max_censored_time,
+        'max_source': max_source,
         'max_row': max_row,
         'total': total,
+        'observed_total': observed_total,
+        'censored_count': censored_count,
+        'censored_age_estimate_count': len(censored_age_estimates),
+        'censored_unbinned_count': censored_unbinned_count,
         'bins': bins,
     }
 
@@ -105,22 +162,56 @@ def plot_lifetime_distribution(dbg):
     if not bins:
         return saved
 
+    freerun = is_freerun_analysis(debug_rows=dbg)
     max_time = info.get('max_time', 0.0)
+    max_observed_time = info.get('max_observed_time', max_time)
     max_row = info.get('max_row', {}) or {}
+    censored_count = int(info.get('censored_count', 0) or 0)
+    censored_est_count = int(info.get('censored_age_estimate_count', 0) or 0)
+    censored_unbinned_count = int(info.get('censored_unbinned_count', 0) or 0)
+    has_censored_estimates = censored_est_count > 0
+    observed_total = int(info.get('observed_total', info.get('total', 0)) or 0)
+    total_with_censored = int(info.get('total', observed_total) or 0)
     labels = [b['pct_label'] for b in bins]
+    observed_values = [b.get('observed_total_pct', sdiv(b['count'] * 100.0, total_with_censored)) for b in bins]
+    censored_values = [b.get('censored_pct', 0.0) for b in bins]
     values = [b['car_pct'] for b in bins]
-    counts = [b['count'] for b in bins]
+    counts = [b.get('total_count', b['count']) for b in bins]
+    observed_counts = [b['count'] for b in bins]
+    censored_counts = [b.get('censored_count', 0) for b in bins]
     sec_labels = [
         f'{b["sec_start"]:.1f}-{b["sec_end"]:.1f}s'
         for b in bins
     ]
     xlabels = [f'{label}\n{seconds}' for label, seconds in zip(labels, sec_labels)]
-    max_detail = (
-        f'Coche maximo: {max_time:.2f}s | Gen {max_row.get("gen", "-")} | '
-        f'{max_row.get("car", "-")} | '
-        f'{str(max_row.get("spawn", "-")).replace("TargetPoint", "TP")} | '
-        f'{short_death_reason(max_row.get("death", "-"))}'
-    )
+    if censored_unbinned_count > 0:
+        labels.append('Cens.')
+        observed_values.append(0.0)
+        censored_values.append(sdiv(censored_unbinned_count * 100.0, total_with_censored))
+        values.append(sdiv(censored_unbinned_count * 100.0, total_with_censored))
+        counts.append(censored_unbinned_count)
+        observed_counts.append(0)
+        censored_counts.append(censored_unbinned_count)
+        xlabels.append('Cens.\nvivos sin fin')
+    if info.get('max_source') == 'censored_estimated':
+        max_detail = (
+            f'Maximo estimado censurado: {max_time:.2f}s | '
+            f'max observado exportado: {max_observed_time:.2f}s | '
+            f'{observed_total} terminales'
+        )
+    else:
+        axis_label = 'Evento terminal' if freerun else f'Gen {max_row.get("gen", "-")}'
+        max_detail = (
+            f'Coche maximo observado: {max_time:.2f}s | {axis_label} | '
+            f'{max_row.get("car", "-")} | '
+            f'{str(max_row.get("spawn", "-")).replace("TargetPoint", "TP")} | '
+            f'{short_death_reason(max_row.get("death", "-"))}'
+        )
+    title_suffix = f'100% = {max_time:.2f}s'
+    if has_censored_estimates:
+        title_suffix = f'100% est. = {max_time:.2f}s; {censored_est_count} vivos censurados ubicados'
+    elif censored_count > 0:
+        title_suffix = f'100% obs. = {max_time:.2f}s; +{censored_count} vivos censurados'
 
     fig = plt.figure(figsize=(16, 11.2))
     grid = fig.add_gridspec(3, 1, height_ratios=[3.05, 0.58, 1.78], hspace=0.0)
@@ -130,7 +221,7 @@ def plot_lifetime_distribution(dbg):
     ax_table = fig.add_subplot(grid[2])
     ax_gap.axis('off')
     fig.suptitle(
-        f'{LABEL} - Distribucion porcentual del tiempo vivo (100% = {max_time:.2f}s)',
+        f'{LABEL} - Distribucion porcentual del tiempo vivo ({title_suffix})',
         fontsize=15,
         fontweight='bold',
         y=0.982,
@@ -145,28 +236,52 @@ def plot_lifetime_distribution(dbg):
         color='#374151',
     )
 
-    colors = plt.cm.Blues(np.linspace(0.38, 0.86, len(bins)))
-    bars = ax.bar(range(len(bins)), values, color=colors, edgecolor='#1f2937', linewidth=0.8)
+    x = np.arange(len(values))
+    colors = list(plt.cm.Blues(np.linspace(0.38, 0.86, len(bins))))
+    if censored_unbinned_count > 0:
+        colors.append('#d1d5db')
+    bars = ax.bar(x, observed_values, color=colors, edgecolor='#1f2937', linewidth=0.8, label='Terminales observados')
+    cens_bars = None
+    if censored_count > 0:
+        cens_bars = ax.bar(
+            x,
+            censored_values,
+            bottom=observed_values,
+            color='#9ca3af',
+            edgecolor='#374151',
+            linewidth=0.8,
+            hatch='//',
+            label='Vivos censurados estimados' if has_censored_estimates else 'Vivos censurados sin tiempo',
+        )
     if bars:
-        bars[-1].set_edgecolor('black')
-        bars[-1].set_linewidth(1.6)
+        observed_last_idx = len(bins) - 1
+        bars[observed_last_idx].set_edgecolor('black')
+        bars[observed_last_idx].set_linewidth(1.6)
+        if censored_unbinned_count > 0 and cens_bars is not None:
+            cens_bars[-1].set_edgecolor('#111827')
+            cens_bars[-1].set_linewidth(1.4)
 
     y_max = max(values) if values else 0.0
     ax.set_ylim(0, max(5.0, y_max * 1.22))
-    ax.set_xticks(range(len(bins)))
+    ax.set_xticks(x)
     ax.set_xticklabels(xlabels, fontsize=8)
     ax.set_ylabel('% de coches')
     ax.set_xlabel('Tramo de vida respecto al coche mas longevo (100%)')
     ax.xaxis.labelpad = 12
     ax.margins(x=0.045)
     ax.grid(True, axis='y', alpha=0.3)
+    if censored_count > 0:
+        ax.legend(loc='upper right', fontsize=8, frameon=True)
 
     for i, bar in enumerate(bars):
-        h = bar.get_height()
+        h = values[i]
+        detail = f'N={counts[i]}'
+        if censored_count > 0:
+            detail = f'T={observed_counts[i]} C={censored_counts[i]}'
         ax.text(
             bar.get_x() + bar.get_width() / 2.0,
             h + max(0.25, y_max * 0.015),
-            f'{values[i]:.1f}%\nN={counts[i]}',
+            f'{values[i]:.1f}%\n{detail}',
             ha='center',
             va='bottom',
             fontsize=8,
@@ -179,16 +294,39 @@ def plot_lifetime_distribution(dbg):
             sec_range = f'{b["sec_start"]:.2f} <= t <= {b["sec_end"]:.2f}s'
         else:
             sec_range = f'{b["sec_start"]:.2f} <= t < {b["sec_end"]:.2f}s'
+        if censored_count > 0:
+            table_rows.append([
+                b['pct_label'],
+                sec_range,
+                str(b['count']),
+                str(b.get('censored_count', 0)),
+                f'{b["car_pct"]:.2f}%',
+                f'{b["accum_pct"]:.2f}%',
+            ])
+        else:
+            table_rows.append([
+                b['pct_label'],
+                sec_range,
+                str(b['count']),
+                f'{b["car_pct"]:.2f}%',
+                f'{b["accum_pct"]:.2f}%',
+            ])
+    if censored_unbinned_count > 0:
         table_rows.append([
-            b['pct_label'],
-            sec_range,
-            str(b['count']),
-            f'{b["car_pct"]:.2f}%',
-            f'{b["accum_pct"]:.2f}%',
+            'Cens.',
+            'vivo al cierre; tiempo exacto no exportado',
+            '0',
+            str(censored_unbinned_count),
+            f'{sdiv(censored_unbinned_count * 100.0, total_with_censored):.2f}%',
+            '100.00%',
         ])
     table = ax_table.table(
         cellText=table_rows,
-        colLabels=['Tramo %', 'Rango en segundos', 'Coches', '% coches', '% acum.'],
+        colLabels=(
+            ['Tramo %', 'Rango en segundos', 'Terminales', 'Cens. est.', '% total', '% acum.']
+            if censored_count > 0 else
+            ['Tramo %', 'Rango en segundos', 'Coches', '% coches', '% acum.']
+        ),
         cellLoc='center',
         colLoc='center',
         bbox=[0.02, 0.04, 0.96, 0.92],
@@ -206,11 +344,299 @@ def plot_lifetime_distribution(dbg):
     fig.text(
         0.075,
         0.025,
+        (
+            'Los tramos incluyen terminales observados y vivos censurados estimados por ciclo de spawn. '
+            'La edad censurada es aproximada: Fitness_Debug no exporta respawn wait ni cierre exacto.'
+        ) if has_censored_estimates else (
+            'Los tramos son relativos al tiempo maximo observado entre coches exportados. '
+            'En FreeRun los vivos al cierre son censurados: existen, pero no tienen tiempo final exacto en Fitness_Debug.'
+        ) if censored_count > 0 else
         'Los tramos son relativos al tiempo maximo real del lote; por eso el rango en segundos cambia entre ejecuciones.',
         fontsize=8,
         color='#4b5563',
     )
     saved.append(save_fig(fig, '01b_distribucion_tiempo_vida.png'))
+    return saved
+
+def plot_freerun_dashboard(dbg):
+    saved = []
+    if not dbg:
+        return saved
+
+    def short_spawn_name(spawn):
+        text = str(spawn or '-').strip()
+        if text.startswith('BP_SpawnPoint'):
+            return 'SP' + text.replace('BP_SpawnPoint', '')
+        if text.startswith('TargetPoint'):
+            return 'TP' + text.replace('TargetPoint', '')
+        return text[:18] + ('...' if len(text) > 18 else '')
+
+    def style_panel(ax):
+        ax.set_facecolor('white')
+        for spine in ax.spines.values():
+            spine.set_color('#d1d5db')
+        ax.tick_params(colors='#374151', labelsize=9)
+        return ax
+
+    def add_value_labels_h(ax, values, xpad=None):
+        vmax = max(values or [0.0])
+        pad = xpad if xpad is not None else max(0.8, vmax * 0.015)
+        for i, value in enumerate(values):
+            ax.text(value + pad, i, fmt_int(value), va='center', ha='left', fontsize=8, color='#111827')
+
+    def dashboard_death_label(reason):
+        label = short_death_reason(reason)
+        replacements = {
+            'STOP_VIOLATION_EXIT': 'STOP EXIT',
+            'STOP_VIOLATION_TIMEOUT': 'STOP TIMEOUT',
+            'YIELD_VIOLATION_EXIT': 'YIELD EXIT',
+            'COLLISION_NORMAL': 'COLLISION',
+            'COLLISION_ROUNDABOUT': 'COLL. ROTONDA',
+        }
+        return replacements.get(label, label[:18])
+
+    terminal_count = len(dbg)
+    censored_count = max([int(num(r.get('free_run_censored_alive_count', 0), 0.0)) for r in dbg] or [0])
+    total_attempts = terminal_count + censored_count
+    session_elapsed = max([num(r.get('free_run_session_elapsed_estimate_s', 0.0), 0.0) for r in dbg] or [0.0])
+    age_p50 = max([num(r.get('free_run_censored_age_p50_s', 0.0), 0.0) for r in dbg] or [0.0])
+    age_p90 = max([num(r.get('free_run_censored_age_p90_s', 0.0), 0.0) for r in dbg] or [0.0])
+    censored_age_estimates = _extract_censored_age_estimates(dbg)
+    age_max = max(
+        censored_age_estimates
+        or [num(r.get('free_run_censored_age_max_s', 0.0), 0.0) for r in dbg]
+        or [0.0]
+    )
+    spawns = sorted({r.get('spawn', '') for r in dbg if r.get('spawn', '')}, key=_spawn_sort_key)
+    death_counts = Counter(death_family_detail_for_row(r) for r in dbg)
+    success_count = sum(1 for r in dbg if classify_test_outcome(r) == 'success')
+    observed_success_rate = sdiv(success_count * 100.0, terminal_count)
+    lower_success_rate = sdiv(success_count * 100.0, total_attempts)
+    upper_success_rate = sdiv((success_count + censored_count) * 100.0, total_attempts)
+
+    by_spawn = defaultdict(list)
+    for r in dbg:
+        by_spawn[r.get('spawn', '')].append(r)
+    spawn_rows = []
+    for spawn, rows_sp in by_spawn.items():
+        if not spawn:
+            continue
+        age_est = max([num(r.get('free_run_spawn_censored_age_est_s', 0.0), 0.0) for r in rows_sp] or [0.0])
+        period_p50 = max([num(r.get('free_run_spawn_death_period_p50_s', 0.0), 0.0) for r in rows_sp] or [0.0])
+        spawn_rows.append({
+            'spawn': spawn,
+            'terminal_count': len(rows_sp),
+            'age_est': age_est,
+            'period_p50': period_p50,
+            'fit_mean': mean([r.get('fit', 0.0) for r in rows_sp]),
+            'fit_p50': pctl([r.get('fit', 0.0) for r in rows_sp], 50),
+            'time_p50': pctl([r.get('time', 0.0) for r in rows_sp], 50),
+            'lazy_pct': sdiv(sum(1 for r in rows_sp if is_lazy_reason(r.get('death', ''))) * 100.0, len(rows_sp)),
+            'collision_pct': sdiv(sum(1 for r in rows_sp if is_collision_reason(r.get('death', ''))) * 100.0, len(rows_sp)),
+            'legal_pct': sdiv(sum(1 for r in rows_sp if death_family(r.get('death', '')) == 'VIOLATION') * 100.0, len(rows_sp)),
+        })
+    top_spawns = sorted(spawn_rows, key=lambda x: (x['terminal_count'], x['lazy_pct']), reverse=True)[:10]
+    oldest_spawns = sorted(spawn_rows, key=lambda x: x['age_est'], reverse=True)[:10]
+    watch_spawns = sorted(
+        spawn_rows,
+        key=lambda x: (x['terminal_count'], x['lazy_pct'], x['age_est'], -x['fit_p50']),
+        reverse=True,
+    )[:10]
+
+    fig = plt.figure(figsize=(20, 13.2), facecolor='#f4f6f8')
+    grid = fig.add_gridspec(4, 12, height_ratios=[0.72, 2.05, 2.25, 1.62], hspace=0.58, wspace=0.78)
+    fig.subplots_adjust(left=0.055, right=0.975, top=0.91, bottom=0.065)
+    fig.suptitle(f'{LABEL} - Dashboard FreeRun (sesion, spawns y censura viva)', fontsize=18, fontweight='bold', y=0.988)
+    fig.text(
+        0.5,
+        0.958,
+        'Fitness_Debug exporta solo eventos terminales; los coches vivos al cierre se estiman como censurados por ciclos de spawn.',
+        ha='center',
+        fontsize=9,
+        color='#4b5563',
+    )
+
+    cards = [
+        ('TERMINALES OBS.', fmt_int(terminal_count), f'{len(spawns)} spawns con eventos'),
+        ('VIVOS CENSURADOS', fmt_int(censored_count), f'N total est. {fmt_int(total_attempts)}'),
+        ('SESION EST.', f'{session_elapsed:.1f}s', f'vivos P50/P90 {age_p50:.0f}/{age_p90:.0f}s'),
+        ('ACIERTO OBS/RANGO', f'{observed_success_rate:.1f}%', f'{lower_success_rate:.1f}-{upper_success_rate:.1f}% con censura'),
+    ]
+    for col, (label, value, detail) in enumerate(cards):
+        ax = fig.add_subplot(grid[0, col * 3:(col + 1) * 3])
+        style_panel(ax)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.text(0.5, 0.76, label, ha='center', va='center', fontsize=9, color='#6b7280', fontweight='bold')
+        ax.text(0.5, 0.43, value, ha='center', va='center', fontsize=21, color='#111827', fontweight='bold')
+        ax.text(0.5, 0.14, detail, ha='center', va='center', fontsize=9, color='#4b5563')
+
+    ax = fig.add_subplot(grid[1, :4])
+    style_panel(ax)
+    term_pct = sdiv(terminal_count * 100.0, total_attempts)
+    cens_pct = sdiv(censored_count * 100.0, total_attempts)
+    ax.barh(['Intentos est.'], [term_pct], color='#2563eb', alpha=0.86, label='Terminales')
+    ax.barh(['Intentos est.'], [cens_pct], left=[term_pct], color='#9ca3af', alpha=0.86, label='Vivos censurados')
+    ax.set_xlim(0, 100)
+    ax.set_title('Cobertura de intentos FreeRun')
+    ax.set_xlabel('% del total estimado')
+    ax.grid(True, axis='x', alpha=0.25)
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.32), ncol=2, frameon=False, fontsize=8)
+    if term_pct >= 8:
+        ax.text(term_pct / 2.0, 0, f'{terminal_count} terminales\n{term_pct:.1f}%', ha='center', va='center', color='white', fontweight='bold', fontsize=9)
+    if cens_pct >= 8:
+        if cens_pct >= 20:
+            ax.text(term_pct + cens_pct / 2.0, 0, f'{censored_count} vivos\n{cens_pct:.1f}%', ha='center', va='center', color='#111827', fontweight='bold', fontsize=9)
+        else:
+            ax.text(
+                0.03,
+                0.82,
+                f'Censurados: {fmt_int(censored_count)} ({cens_pct:.1f}%)',
+                transform=ax.transAxes,
+                ha='left',
+                va='top',
+                color='#374151',
+                fontsize=8.5,
+            )
+
+    ax = fig.add_subplot(grid[1, 4:8])
+    style_panel(ax)
+    grouped = death_counts.most_common(8)
+    if grouped:
+        labels = [dashboard_death_label(k) for k, _ in grouped]
+        values = [v for _, v in grouped]
+        ax.barh(labels, values, color=[death_group_color(k) for k, _ in grouped], alpha=0.85)
+        ax.invert_yaxis()
+        add_value_labels_h(ax, values)
+        ax.set_xlim(0, max(values) * 1.18)
+    ax.set_title('Terminales por causa')
+    ax.set_xlabel('Eventos')
+    ax.grid(True, axis='x', alpha=0.25)
+
+    ax = fig.add_subplot(grid[1, 8:12])
+    style_panel(ax)
+    if top_spawns:
+        names = [short_spawn_name(r['spawn']) for r in top_spawns]
+        vals = [r['terminal_count'] for r in top_spawns]
+        ax.barh(names, vals, color='#0f766e', alpha=0.82)
+        ax.invert_yaxis()
+        add_value_labels_h(ax, vals)
+        ax.set_xlim(0, max(vals) * 1.20)
+    ax.set_title('Spawns con mas terminales')
+    ax.set_xlabel('Terminales')
+    ax.grid(True, axis='x', alpha=0.25)
+
+    ax = fig.add_subplot(grid[2, :5])
+    style_panel(ax)
+    if oldest_spawns:
+        names = [short_spawn_name(r['spawn']) for r in oldest_spawns]
+        vals = [r['age_est'] for r in oldest_spawns]
+        ax.barh(names, vals, color='#7c3aed', alpha=0.78)
+        ax.invert_yaxis()
+        add_value_labels_h(ax, vals, xpad=max(4.0, max(vals) * 0.012))
+        ax.set_xlim(0, max(vals) * 1.18)
+    ax.set_title('Vivos censurados con mayor edad estimada')
+    ax.set_xlabel('Segundos vivos al cierre (estimado)')
+    ax.grid(True, axis='x', alpha=0.25)
+
+    ax = fig.add_subplot(grid[2, 5:12])
+    style_panel(ax)
+    if top_spawns:
+        x = [r['period_p50'] for r in top_spawns]
+        y = [r['age_est'] for r in top_spawns]
+        sizes = [max(55, r['terminal_count'] * 12) for r in top_spawns]
+        colors = [r['lazy_pct'] for r in top_spawns]
+        sc = ax.scatter(x, y, s=sizes, c=colors, cmap='YlOrRd', alpha=0.78, edgecolor='#374151')
+        label_candidates = sorted(top_spawns, key=lambda r: (r['terminal_count'], r['age_est']), reverse=True)[:5]
+        for r in label_candidates:
+            ax.annotate(
+                short_spawn_name(r['spawn']),
+                (r['period_p50'], r['age_est']),
+                xytext=(5, 5),
+                textcoords='offset points',
+                fontsize=8,
+                color='#111827',
+                bbox=dict(boxstyle='round,pad=0.18', facecolor='white', edgecolor='#d1d5db', alpha=0.82),
+            )
+        cbar = plt.colorbar(sc, ax=ax, pad=0.012, fraction=0.045)
+        cbar.set_label('LAZY% spawn')
+    ax.set_title('Ritmo terminal vs edad censurada por spawn')
+    ax.set_xlabel('Periodo terminal P50 est. (s)')
+    ax.set_ylabel('Edad vivo censurado est. (s)')
+    ax.grid(True, alpha=0.25)
+
+    ax_table = fig.add_subplot(grid[3, :8])
+    ax_table.axis('off')
+    ax_table.set_title('Spawns a revisar primero', loc='left', fontsize=12, fontweight='bold', color='#111827', pad=8)
+    table_rows = []
+    for r in watch_spawns:
+        table_rows.append([
+            short_spawn_name(r['spawn']),
+            fmt_int(r['terminal_count']),
+            f'{r["age_est"]:.0f}s',
+            f'{r["period_p50"]:.0f}s',
+            f'{r["lazy_pct"]:.0f}%',
+            f'{r["legal_pct"]:.0f}%',
+            f'{r["collision_pct"]:.0f}%',
+            f'{r["fit_p50"]:.0f}',
+        ])
+    if table_rows:
+        table = ax_table.table(
+            cellText=table_rows,
+            colLabels=['Spawn', 'Term.', 'Vivo est.', 'Periodo', 'LAZY', 'Legal', 'Col.', 'Fit P50'],
+            cellLoc='center',
+            colLoc='center',
+            bbox=[0.0, 0.0, 1.0, 0.90],
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(8)
+        table.scale(1.0, 1.18)
+        for (row, col), cell in table.get_celld().items():
+            cell.set_edgecolor('#d1d5db')
+            if row == 0:
+                cell.set_facecolor('#dbeafe')
+                cell.set_text_props(weight='bold', color='#111827')
+            elif row % 2 == 0:
+                cell.set_facecolor('#f8fafc')
+
+    ax_note = fig.add_subplot(grid[3, 8:12])
+    style_panel(ax_note)
+    ax_note.set_xticks([])
+    ax_note.set_yticks([])
+    dominant_death = death_counts.most_common(1)[0] if death_counts else ('-', 0)
+    top_spawn = top_spawns[0] if top_spawns else None
+    note_lines = [
+        'Lectura rapida',
+        f'- Causa dominante: {short_death_reason(dominant_death[0])} ({sdiv(dominant_death[1]*100.0, terminal_count):.1f}%).',
+        f'- Acierto observado terminal: {observed_success_rate:.1f}%; rango con censura: {lower_success_rate:.1f}-{upper_success_rate:.1f}%.',
+        f'- Edad viva censurada P50/P90/max: {age_p50:.0f}/{age_p90:.0f}/{age_max:.0f}s.',
+    ]
+    if top_spawn:
+        note_lines.append(
+            f'- Spawn con mas terminales: {short_spawn_name(top_spawn["spawn"])} '
+            f'({top_spawn["terminal_count"]}, LAZY {top_spawn["lazy_pct"]:.0f}%).'
+        )
+    note_lines.append('- Sin eje generacional: gen 0/1 es identificador tecnico.')
+    ax_note.text(
+        0.04,
+        0.92,
+        '\n'.join(note_lines),
+        transform=ax_note.transAxes,
+        va='top',
+        ha='left',
+        fontsize=9.2,
+        color='#111827',
+        linespacing=1.45,
+    )
+
+    fig.text(
+        0.055,
+        0.024,
+        'Nota: los vivos censurados son estimaciones por ciclos de spawn. Fitness_Debug no exporta espera de respawn, bloqueo de spawn ni cierre exacto de cada coche vivo.',
+        fontsize=9,
+        color='#4b5563',
+    )
+    saved.append(save_fig(fig, '00_freerun_dashboard.png'))
     return saved
 
 def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None):
@@ -222,9 +648,11 @@ def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None)
     derived = stats['derived']
     gens = [r.get('gen_phase', r.get('gen', i + 1)) for i, r in enumerate(rows)]
     rates = [m['success_rate'] for m in derived]
+    upper_rates = [m.get('success_rate_upper', m['success_rate']) for m in derived]
     fitness = [r.get('mean', 0.0) for r in rows]
     times = [r.get('time', 0.0) for r in rows]
     window = max(2, min(5, len(rows)))
+    has_censored = stats.get('total_censored', 0) > 0
 
     fig = plt.figure(figsize=(20, 12), facecolor='#f4f6f8')
     grid = fig.add_gridspec(
@@ -238,12 +666,19 @@ def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None)
     if model_dates:
         model_text = ' | '.join(f'{name}: {date}' for name, date in sorted(model_dates.items()))
     title = f'TEST - Comparativa rapida del modelo ({stats["gens"]} generaciones, N={stats["total_n"]})'
+    if has_censored:
+        title += f' | censurados={stats["total_censored"]}'
     fig.suptitle(title, fontsize=18, fontweight='bold', y=0.985)
     if model_text:
         fig.text(0.5, 0.952, model_text, ha='center', fontsize=9, color='#4b5563')
 
+    global_value = f'{stats["success_rate"]:.1f}%'
+    global_detail = f'IC95% {stats["wilson_lo"]:.1f}-{stats["wilson_hi"]:.1f}%'
+    if has_censored:
+        global_value = f'{stats["success_rate"]:.1f}-{stats["success_rate_upper"]:.1f}%'
+        global_detail = f'obs {stats["total_success"]}/{stats["total_success"] + stats["total_fail"]}; cens {stats["total_censored"]}'
     cards = [
-        ('ACIERTO GLOBAL', f'{stats["success_rate"]:.1f}%', f'IC95% {stats["wilson_lo"]:.1f}-{stats["wilson_hi"]:.1f}%'),
+        ('ACIERTO GLOBAL', global_value, global_detail),
         ('MEDIANA / ESTABILIDAD', f'{stats["success_median"]:.1f}%', f'desv. {stats["success_std"]:.1f} pp'),
         ('MEJOR GENERACION', f'{stats["success_max"]:.1f}%', f'generacion {stats["best_gen"]}'),
         ('FITNESS / TIEMPO', f'{stats["fitness_mean"]:,.0f}', f'{stats["time_mean"]:.1f} s de media'),
@@ -261,8 +696,13 @@ def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None)
 
     ax = fig.add_subplot(grid[1, :9])
     colors = ['#16a34a' if v >= stats['success_rate'] else '#f59e0b' for v in rates]
-    ax.bar(gens, rates, color=colors, alpha=0.78, label='Acierto por generacion')
+    ax.bar(gens, rates, color=colors, alpha=0.78, label='Acierto minimo' if has_censored else 'Acierto por generacion')
     ax.plot(gens, rates, color='#1f2937', marker='o', linewidth=1.4, markersize=4)
+    if has_censored:
+        ax.plot(gens, upper_rates, color='#059669', marker='^', linewidth=1.8, linestyle='--', label='Max si censurados sobreviven')
+        for x, lo, hi in zip(gens, rates, upper_rates):
+            if hi > lo:
+                ax.vlines(x, lo, hi, color='#059669', alpha=0.55, linewidth=2.0)
     if len(rates) >= 2:
         ax.plot(gens, rolling(rates, window), color='#2563eb', linewidth=2.8, label=f'Media movil {window}')
     ax.axhline(stats['success_rate'], color='#dc2626', linestyle='--', linewidth=2,
@@ -275,14 +715,20 @@ def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None)
     ax.legend(loc='upper left', ncols=3, fontsize=9, framealpha=0.92)
 
     ax = fig.add_subplot(grid[1, 9:12])
-    ax.bar(['Aciertos', 'Fallos'], [stats['total_success'], stats['total_fail']],
-           color=['#16a34a', '#dc2626'], alpha=0.85)
+    count_labels = ['Aciertos', 'Fallos']
+    count_values = [stats['total_success'], stats['total_fail']]
+    count_colors = ['#16a34a', '#dc2626']
+    if has_censored:
+        count_labels.append('Censurados')
+        count_values.append(stats['total_censored'])
+        count_colors.append('#9ca3af')
+    ax.bar(count_labels, count_values, color=count_colors, alpha=0.85)
     ax.set_title('Resultado acumulado')
     ax.set_ylabel('Evaluaciones')
     ax.grid(True, axis='y', alpha=0.25)
-    count_max = max(stats['total_success'], stats['total_fail'], 1)
+    count_max = max(count_values or [1])
     ax.set_ylim(0, count_max * 1.16)
-    for i, value in enumerate((stats['total_success'], stats['total_fail'])):
+    for i, value in enumerate(count_values):
         ax.text(i, value + count_max * 0.025, str(value), ha='center', va='bottom', fontweight='bold')
 
     ax = fig.add_subplot(grid[2, :7])
@@ -340,6 +786,7 @@ def plot_test_model_dashboard(summary, previous_sessions=None, model_dates=None)
 def plot_debug(dbg):
     saved = []
     gens = sorted(set(r['gen'] for r in dbg))
+    freerun = is_freerun_analysis(debug_rows=dbg)
 
     # Pre-agrupar para evitar loops O(n²)
     by_gen = defaultdict(list)
@@ -400,7 +847,7 @@ def plot_debug(dbg):
         saved.append(save_fig(fig, '06_spawn_ranking.png'))
 
     # ── 7. Componentes fitness por gen ──
-    if len(gens) >= 1:
+    if len(gens) >= 1 and not freerun:
         g_a, g_e, g_f, g_wait, g_queue_wait, g_stop_bonus, g_yield_bonus = [], [], [], [], [], [], []
         g_pm, g_pv, g_ptv, g_pn, g_pc, g_pr, g_pl, g_ps, g_pa, g_poverlap, g_net, g_fit = [], [], [], [], [], [], [], [], [], [], [], []
         for g in gens:
@@ -595,7 +1042,7 @@ def plot_debug(dbg):
         saved.append(save_fig(fig, '11_heatmap_spawn.png'))
 
     # ── 12. Inputs de control y contexto de parada por gen ──
-    if len(gens) >= 1:
+    if len(gens) >= 1 and not freerun:
         g_thr, g_grace, g_grace_br, g_brake, g_coast = [], [], [], [], []
         g_stop_brake, g_stop_thr, g_stop_ticks = [], [], []
         g_yield_val, g_stop_val = [], []
@@ -681,7 +1128,7 @@ def plot_debug(dbg):
         saved.append(save_fig(fig, '12_control_inputs.png'))
 
     # ── 13. Bonos y completados de stop/yield por gen ──
-    if len(gens) >= 1:
+    if len(gens) >= 1 and not freerun:
         g_stop_bonus, g_yield_bonus = [], []
         g_stop_done, g_yield_done = [], []
         for g in gens:
@@ -715,7 +1162,7 @@ def plot_debug(dbg):
         saved.append(save_fig(fig, '13_completion_bonus.png'))
 
     # 13b. Diagnosticos 30/06-01/07: ceda, cruce, release, steer approach y solapes
-    if len(gens) >= 1 and (
+    if len(gens) >= 1 and not freerun and (
         debug_field_available(dbg, 'yield_free_passes')
         or debug_field_available(dbg, 'crossing_blocked_t')
         or debug_field_available(dbg, 'first_steer_release_ticks')
@@ -899,7 +1346,7 @@ def plot_debug(dbg):
         saved.append(save_fig(fig, '15_stop_spawn_percentiles.png'))
 
     # ── 16. Foco Penalty_Lazy (tendencia + hotspots por spawn) ──
-    if len(gens) >= 1 and spawn_rows:
+    if len(gens) >= 1 and spawn_rows and not freerun:
         g_lazy_mean, g_lazy_p90, g_lazy_pct = [], [], []
         for g in gens:
             gc = by_gen[g]
@@ -984,7 +1431,7 @@ def plot_debug(dbg):
     ytrap = detect_yield_stuck_candidates(dbg) if ytrap_plot_enabled else {}
     has_ytrap = ytrap_plot_enabled and ytrap.get('timefinished_rows', 0) > 0
     
-    gen_rows = sorted(ytrap.get('gens', []), key=lambda x: x.get('gen', 0)) if has_ytrap else []
+    gen_rows = [] if freerun else (sorted(ytrap.get('gens', []), key=lambda x: x.get('gen', 0)) if has_ytrap else [])
     spawn_rows_y = ytrap.get('spawns', []) if has_ytrap else []
 
     fig, axes = plt.subplots(2, 1, figsize=(15, max(9, min(16, 7 + len(spawn_rows_y) * 0.22))))
@@ -1013,9 +1460,10 @@ def plot_debug(dbg):
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = axb.get_legend_handles_labels()
         ax.legend(h1 + h2, l1 + l2, fontsize=8, loc='upper left')
-    ax.set_title('Deteccion por generacion' if gen_rows else 'Sin datos de YieldTrap')
+    ax.set_title('Eje generacional no aplicable en FreeRun' if freerun else ('Deteccion por generacion' if gen_rows else 'Sin datos de YieldTrap'))
     if not gen_rows:
-        ax.text(0.5, 0.5, 'No hay candidatos de YieldTrap', ha='center', va='center', fontsize=12, transform=ax.transAxes)
+        msg = 'FreeRun: revisar YieldTrap por spawn, no por generacion' if freerun else 'No hay candidatos de YieldTrap'
+        ax.text(0.5, 0.5, msg, ha='center', va='center', fontsize=12, transform=ax.transAxes)
 
     ax = axes[1]
     if spawn_rows_y:
@@ -1056,7 +1504,7 @@ def plot_debug(dbg):
     strap = detect_stop_stuck_candidates(dbg) if strap_plot_enabled else {}
     has_strap = strap_plot_enabled and strap.get('timefinished_rows', 0) > 0
 
-    gen_rows_s = sorted(strap.get('gens', []), key=lambda x: x.get('gen', 0)) if has_strap else []
+    gen_rows_s = [] if freerun else (sorted(strap.get('gens', []), key=lambda x: x.get('gen', 0)) if has_strap else [])
     spawn_rows_s = strap.get('spawns', []) if has_strap else []
 
     fig, axes = plt.subplots(2, 1, figsize=(15, max(9, min(16, 7 + len(spawn_rows_s) * 0.22))))
@@ -1085,9 +1533,10 @@ def plot_debug(dbg):
         h1, l1 = ax.get_legend_handles_labels()
         h2, l2 = axb.get_legend_handles_labels()
         ax.legend(h1 + h2, l1 + l2, fontsize=8, loc='upper left')
-    ax.set_title('Deteccion por generacion' if gen_rows_s else 'Sin datos de StopTrap')
+    ax.set_title('Eje generacional no aplicable en FreeRun' if freerun else ('Deteccion por generacion' if gen_rows_s else 'Sin datos de StopTrap'))
     if not gen_rows_s:
-        ax.text(0.5, 0.5, 'No hay candidatos de StopTrap', ha='center', va='center', fontsize=12, transform=ax.transAxes)
+        msg = 'FreeRun: revisar StopTrap por spawn, no por generacion' if freerun else 'No hay candidatos de StopTrap'
+        ax.text(0.5, 0.5, msg, ha='center', va='center', fontsize=12, transform=ax.transAxes)
 
     ax = axes[1]
     if spawn_rows_s:
@@ -1124,7 +1573,7 @@ def plot_debug(dbg):
     saved.append(save_fig(fig, '18_stop_trap_focus.png'))
 
     # ── 19. Diagnostico de steering suavizado/lag ──
-    if any(abs(r.get('steer_abs', 0.0)) > 0.0 or abs(r.get('steer_target', 0.0)) > 0.0 for r in dbg):
+    if (not freerun) and any(abs(r.get('steer_abs', 0.0)) > 0.0 or abs(r.get('steer_target', 0.0)) > 0.0 for r in dbg):
         g_fit = []
         g_abs = []
         g_gap = []
@@ -1159,7 +1608,7 @@ def plot_debug(dbg):
         saved.append(save_fig(fig, '19_steering_diagnostics.png'))
 
     # ── 20. Foco Penalty_SteerApproach ──
-    if any(r.get('pen_steer_app', 0.0) > 0.0 for r in dbg):
+    if (not freerun) and any(r.get('pen_steer_app', 0.0) > 0.0 for r in dbg):
         g_app_mean, g_app_p90, g_app_pct = [], [], []
         for g in gens:
             rows_g = by_gen[g]
@@ -1235,7 +1684,7 @@ def plot_debug(dbg):
 
     # ── 21. INVALID_BRAIN por generacion y spawn (siempre se genera, aunque esté vacío) ──
     invalid_rows = [r for r in dbg if is_invalid_brain_reason(r.get('death', ''))]
-    inv_by_gen = Counter(int(r.get('gen', 0)) for r in invalid_rows) if invalid_rows else Counter()
+    inv_by_gen = Counter() if freerun else (Counter(int(r.get('gen', 0)) for r in invalid_rows) if invalid_rows else Counter())
     inv_by_spawn = Counter(r.get('spawn', '') for r in invalid_rows if r.get('spawn', '')) if invalid_rows else Counter()
     top_spawns = inv_by_spawn.most_common(20) if inv_by_spawn else []
     
@@ -1252,7 +1701,8 @@ def plot_debug(dbg):
         ax1.set_title('Muertes INVALID_BRAIN por generacion')
         ax1.grid(True, alpha=0.3, axis='y')
     else:
-        ax1.text(0.5, 0.5, 'No hay muertes INVALID_BRAIN', ha='center', va='center', fontsize=12, transform=ax1.transAxes)
+        msg = 'FreeRun: eje generacional no aplicable' if freerun else 'No hay muertes INVALID_BRAIN'
+        ax1.text(0.5, 0.5, msg, ha='center', va='center', fontsize=12, transform=ax1.transAxes)
         ax1.set_xticks([])
         ax1.set_yticks([])
 
@@ -1891,12 +2341,24 @@ def plot_roundabout_bonus(dbg):
 
 def plot_all(summary, dbg):
     saved = []
+    freerun = is_freerun_analysis(summary_rows=summary, debug_rows=dbg)
 
     # Si no hay summary, aun asi intenta generar las graficas de debug.
     if not summary:
         if dbg:
             saved += plot_lifetime_distribution(dbg)
             saved += plot_debug(dbg)
+        return saved
+
+    if freerun:
+        if dbg:
+            saved += plot_freerun_dashboard(dbg)
+            saved += plot_lifetime_distribution(dbg)
+            saved += plot_debug(dbg)
+            saved += plot_mutation_distributions(dbg)
+            saved += plot_mutation_fit_scatter(dbg)
+            saved += plot_correlation_heatmap(dbg)
+            saved += plot_mutation_family_summary(dbg)
         return saved
 
     gens = [r['gen'] for r in summary]

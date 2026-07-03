@@ -23,9 +23,13 @@ def report_summary(R, rows):
     if n == 0:
         R.p(f'  No hay datos en {SUMMARY_FILE}')
         return
+    freerun = is_freerun_analysis(summary_rows=rows)
 
     R.p(f'\n{"="*76}')
-    R.p(f'  ANALISIS {LABEL} - {n} generaciones')
+    if freerun:
+        R.p(f'  ANALISIS {LABEL} - FREE RUN (snapshot sin eje generacional)')
+    else:
+        R.p(f'  ANALISIS {LABEL} - {n} generaciones')
     R.p(f'  Fecha: {datetime.now().strftime("%d/%m/%Y %H:%M")}')
     R.p(f'{"="*76}')
 
@@ -43,15 +47,23 @@ def report_summary(R, rows):
     pop_den = estimate_population_size(rows)
 
     R.p(f'\n-- Estadisticas Generales --')
-    R.p(f'  Generaciones:     {rows[0]["gen"]} - {rows[-1]["gen"]} ({n} total)')
-    R.p(f'  BestFit max:      {br["best"]:.6f}  (gen {br["gen"]})')
-    R.p(f'  BestFit medio:    {avg_best:.6f}')
-    R.p(f'  MeanFit max:      {mr["mean"]:.6f}  (gen {mr["gen"]})')
-    R.p(f'  MeanFit medio:    {avg_mean:.6f}')
-    R.p(f'  MeanFit min:      {wr["mean"]:.6f}  (gen {wr["gen"]})')
+    if freerun:
+        R.p('  Generaciones:     n/a en FreeRun (gen 0/1 constante; snapshot reconstruido)')
+        R.p(f'  BestFit terminal: {br["best"]:.6f}')
+        R.p(f'  BestFit medio:    {avg_best:.6f}')
+        R.p(f'  MeanFit terminal: {avg_mean:.6f}')
+        R.p(f'  MeanFit P50:      {p50_mean:.6f}')
+    else:
+        R.p(f'  Generaciones:     {rows[0]["gen"]} - {rows[-1]["gen"]} ({n} total)')
+        R.p(f'  BestFit max:      {br["best"]:.6f}  (gen {br["gen"]})')
+        R.p(f'  BestFit medio:    {avg_best:.6f}')
+        R.p(f'  MeanFit max:      {mr["mean"]:.6f}  (gen {mr["gen"]})')
+        R.p(f'  MeanFit medio:    {avg_mean:.6f}')
+        R.p(f'  MeanFit min:      {wr["mean"]:.6f}  (gen {wr["gen"]})')
     R.p(f'  MeanFit P25/P50/P75: {p25_mean:.4f} / {p50_mean:.4f} / {p75_mean:.4f}')
     R.p(f'  MeanFit < 0:      {neg}/{n} ({sdiv(neg*100,n):.1f}%)')
-    R.p(f'  TiempoMedio:      {min(r["time"] for r in rows):.2f}s - {max(r["time"] for r in rows):.2f}s (media {avg_time:.2f}s)')
+    time_label = 'Tiempo terminal' if freerun else 'TiempoMedio'
+    R.p(f'  {time_label}:      {min(r["time"] for r in rows):.2f}s - {max(r["time"] for r in rows):.2f}s (media {avg_time:.2f}s)')
     R.p(f'  PopDeaths medio:  {avg_pop:.1f}/{pop_den}')
 
     # KPIs de testing (si el CSV trae columnas extendidas)
@@ -82,6 +94,8 @@ def report_summary(R, rows):
                 for r in kpi_rows
             )
         total_success = sum(r.get('success_count', 0) for r in kpi_rows)
+        total_fail = sum(r.get('fail_count', 0) for r in kpi_rows)
+        total_censored = sum(int(num(r.get('censored_count', 0), 0.0)) for r in kpi_rows)
         lo_s, hi_s = wilson_ci(total_success, total_eval)
 
         # Distribucion entre generaciones para estabilidad
@@ -94,13 +108,22 @@ def report_summary(R, rows):
             p50_score = pctl([r['score'] for r in kpi_rows if 'score' in r], 50)
             p90_score = pctl([r['score'] for r in kpi_rows if 'score' in r], 90)
 
-        R.p(f'\n-- KPI de Test (promedio) --')
+        R.p(f'\n-- KPI de Test ({"FreeRun reconstruido" if freerun else "promedio"}) --')
         R.p(f'  N evaluado medio: {avg_n:.1f}')
         R.p(f'  Aciertos (%):     {avg_success:.2f}%')
         R.p(f'  Errores (%):      {avg_fail:.2f}%')
         R.p(f'  Score (Acierto):  {avg_score_success:.2f}')
         R.p(f'  Score (WilsonLB): {avg_score_wilson:.2f}')
-        R.p(f'  Success P10/P50/P90: {p10_success:.2f}% / {p50_success:.2f}% / {p90_success:.2f}%')
+        if not freerun:
+            R.p(f'  Success P10/P50/P90: {p10_success:.2f}% / {p50_success:.2f}% / {p90_success:.2f}%')
+        if total_censored > 0:
+            success_upper = sdiv((total_success + total_censored) * 100.0, total_eval)
+            observed_rate = sdiv(total_success * 100.0, total_success + total_fail)
+            R.p(f'  Censurados vivos: {total_censored}/{total_eval} ({sdiv(total_censored*100.0, total_eval):.2f}%)')
+            R.p(f'  Acierto observado terminal: {observed_rate:.2f}%')
+            R.p(f'  Rango acierto con censura:  {avg_success:.2f}% - {success_upper:.2f}%')
+            if freerun:
+                R.p('  Nota FreeRun: los censurados no son exitos cerrados; representan coches vivos al cortar la simulacion.')
         if has_csv_score:
             R.p(f'  ScoreCSV P10/P50/P90:    {p10_score:.2f} / {p50_score:.2f} / {p90_score:.2f}')
         R.p(f'  IC95 Aciertos (global): [{lo_s*100:.2f}%, {hi_s*100:.2f}%]')
@@ -185,13 +208,22 @@ def report_summary(R, rows):
 
     # Top 10
     top_n = min(10, n)
-    R.p(f'\n-- Top {top_n} (BestFit) --')
-    for r in sorted(rows, key=lambda x:-x['best'])[:top_n]:
-        R.p(f'  Gen {r["gen"]:>5d}: Best={r["best"]:.4f}  Mean={r["mean"]:.4f}  t={r["time"]:.2f}s  {r["best_death"]}')
+    if freerun:
+        R.p(f'\n-- Snapshot FreeRun (BestFit terminal) --')
+        for idx, r in enumerate(sorted(rows, key=lambda x:-x['best'])[:top_n], start=1):
+            R.p(f'  Snapshot {idx:>2d}: Best={r["best"]:.4f}  Mean={r["mean"]:.4f}  t={r["time"]:.2f}s  {r["best_death"]}')
 
-    R.p(f'\n-- Top {top_n} (MeanFit) --')
-    for r in sorted(rows, key=lambda x:-x['mean'])[:top_n]:
-        R.p(f'  Gen {r["gen"]:>5d}: Mean={r["mean"]:.4f}  Best={r["best"]:.4f}  t={r["time"]:.2f}s')
+        R.p(f'\n-- Snapshot FreeRun (MeanFit terminal) --')
+        for idx, r in enumerate(sorted(rows, key=lambda x:-x['mean'])[:top_n], start=1):
+            R.p(f'  Snapshot {idx:>2d}: Mean={r["mean"]:.4f}  Best={r["best"]:.4f}  t={r["time"]:.2f}s')
+    else:
+        R.p(f'\n-- Top {top_n} (BestFit) --')
+        for r in sorted(rows, key=lambda x:-x['best'])[:top_n]:
+            R.p(f'  Gen {r["gen"]:>5d}: Best={r["best"]:.4f}  Mean={r["mean"]:.4f}  t={r["time"]:.2f}s  {r["best_death"]}')
+
+        R.p(f'\n-- Top {top_n} (MeanFit) --')
+        for r in sorted(rows, key=lambda x:-x['mean'])[:top_n]:
+            R.p(f'  Gen {r["gen"]:>5d}: Mean={r["mean"]:.4f}  Best={r["best"]:.4f}  t={r["time"]:.2f}s')
 
 def report_convergence_analysis(R, summary_rows):
     """Reporte detallado de convergencia y estabilidad."""
@@ -492,8 +524,12 @@ def report_debug(R, dbg):
         return
 
     gens = sorted(set(r['gen'] for r in dbg))
+    freerun = is_freerun_analysis(debug_rows=dbg)
     R.p(f'\n{"="*76}')
-    R.p(f'  ANALISIS DETALLADO (Fitness_Debug) - {len(dbg)} registros, {len(gens)} gens')
+    if freerun:
+        R.p(f'  ANALISIS DETALLADO (Fitness_Debug) - FreeRun, {len(dbg)} eventos terminales')
+    else:
+        R.p(f'  ANALISIS DETALLADO (Fitness_Debug) - {len(dbg)} registros, {len(gens)} gens')
     R.p(f'{"="*76}')
 
     # Pre-agrupar para evitar escaneos repetidos O(n*G)
@@ -985,24 +1021,28 @@ def report_debug(R, dbg):
             )
             R.p(f'  Top spawns by mut_rate (N>={MIN_SPAWN_N}): {top_tags}')
 
-    R.p(f'\n-- Mutation por Generacion --')
-    hdr_m = f'  {"Gen":>5s} | {"MutRate%":>8s} | {"MutMag":>8s} | {"Large%":>8s} | {"Strength":>9s} | {"FitMed":>9s}'
-    R.p(hdr_m)
-    R.p(f'  {"-"*(len(hdr_m)-2)}')
-    gen_mut = []
-    for g in gens:
-        gc = by_gen[g]
-        ng = len(gc)
-        if ng == 0:
-            continue
-        g_mut_rate = mean([x.get('mut_rate', 0.0) for x in gc]) * 100.0
-        g_mut_mag = mean([x.get('mut_avg_mag', 0.0) for x in gc])
-        g_mut_large = mean([x.get('mut_large_share', 0.0) for x in gc]) * 100.0
-        g_mut_strength = mean([x.get('mut_strength', 0.0) for x in gc])
-        g_fit_med = pctl([x.get('fit', 0.0) for x in gc], 50)
-        gen_mut.append((g, g_mut_rate, g_mut_mag, g_mut_large, g_mut_strength, g_fit_med))
-    for g, r_m, m_m, l_m, s_m, f_m in gen_mut[:MUTATION_TOP_GENS]:
-        R.p(f'  {g:5d} | {r_m:8.2f} | {m_m:8.4f} | {l_m:8.2f} | {s_m:9.5f} | {f_m:9.2f}')
+    if not freerun:
+        R.p(f'\n-- Mutation por Generacion --')
+        hdr_m = f'  {"Gen":>5s} | {"MutRate%":>8s} | {"MutMag":>8s} | {"Large%":>8s} | {"Strength":>9s} | {"FitMed":>9s}'
+        R.p(hdr_m)
+        R.p(f'  {"-"*(len(hdr_m)-2)}')
+        gen_mut = []
+        for g in gens:
+            gc = by_gen[g]
+            ng = len(gc)
+            if ng == 0:
+                continue
+            g_mut_rate = mean([x.get('mut_rate', 0.0) for x in gc]) * 100.0
+            g_mut_mag = mean([x.get('mut_avg_mag', 0.0) for x in gc])
+            g_mut_large = mean([x.get('mut_large_share', 0.0) for x in gc]) * 100.0
+            g_mut_strength = mean([x.get('mut_strength', 0.0) for x in gc])
+            g_fit_med = pctl([x.get('fit', 0.0) for x in gc], 50)
+            gen_mut.append((g, g_mut_rate, g_mut_mag, g_mut_large, g_mut_strength, g_fit_med))
+        for g, r_m, m_m, l_m, s_m, f_m in gen_mut[:MUTATION_TOP_GENS]:
+            R.p(f'  {g:5d} | {r_m:8.2f} | {m_m:8.4f} | {l_m:8.2f} | {s_m:9.5f} | {f_m:9.2f}')
+    else:
+        R.p(f'\n-- Mutation por Generacion --')
+        R.p('  Omitido en FreeRun: la generacion del Debug es constante y no representa evolucion.')
     R.p(f'  ShareBrake (Throttle+Brake):     {sdiv(agg["brake_in"], agg["cmd_total"]):>10.4f}')
     R.p(f'  ShareGraceBrake (GraceContext):  {sdiv(agg["brake_grace"], agg["grace_cmd_total"]):>10.4f}')
     R.p(f'  ShareStopBrake (StopContext):    {sdiv(agg["stop_brake"], agg["stop_cmd_total"]):>10.4f}')
@@ -1016,81 +1056,85 @@ def report_debug(R, dbg):
     R.p(f'  Fitness CVaR10 (peor 10%):       {cvar(fits_all,10):>10.2f}')
     R.p(f'  Tiempo P10/P50/P90:              {pctl(times_all,10):>10.2f} / {pctl(times_all,50):>10.2f} / {pctl(times_all,90):>10.2f}')
 
-    # Componentes por gen
-    show_gens = gens[:20]
-    if len(gens) > 25:
-        show_gens += ['...'] + gens[-5:]
-    elif len(gens) > 20:
-        show_gens = gens
+    if not freerun:
+        # Componentes por gen
+        show_gens = gens[:20]
+        if len(gens) > 25:
+            show_gens += ['...'] + gens[-5:]
+        elif len(gens) > 20:
+            show_gens = gens
 
-    R.p(f'\n-- Componentes por Generacion --')
-    hdr2 = f'  {"Gen":>5s} | {"NetNorm":>9s} | {"A":>8s} | {"E":>8s} | {"F":>8s} | {"PenM":>9s} | {"PenV":>8s} | {"PenTV":>8s} | {"PenNav":>8s} | {"PenCr":>8s} | {"PenRv":>8s} | {"PenLz":>8s} | {"PenSS":>8s} | {"FitMed":>9s}'
-    R.p(hdr2)
-    R.p(f'  {"-"*(len(hdr2)-2)}')
-    for g in show_gens:
-        if g == '...':
-            R.p(f'  {"...":>5s}')
-            continue
-        gc = by_gen[g]
-        ng = len(gc)
-        R.p('  {:>5d} | {:>9.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.2f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.2f}'.format(
-            g,
-            sdiv(sum(r['net'] for r in gc), ng),
-            sdiv(sum(r['a'] for r in gc), ng),
-            sdiv(sum(r['e'] for r in gc), ng),
-            sdiv(sum(r['f'] for r in gc), ng),
-            sdiv(sum(r['pen_m'] for r in gc), ng),
-            sdiv(sum(r['pen_v'] for r in gc), ng),
-            sdiv(sum(r.get('pen_tv', 0.0) for r in gc), ng),
-            sdiv(sum(r.get('pen_nav', 0.0) for r in gc), ng),
-            sdiv(sum(r.get('pen_creep', 0.0) for r in gc), ng),
-            sdiv(sum(r.get('pen_rev', 0.0) for r in gc), ng),
-            sdiv(sum(r.get('pen_lazy', 0.0) for r in gc), ng),
-            sdiv(sum(r.get('pen_swstop', 0.0) for r in gc), ng),
-            sdiv(sum(r['fit'] for r in gc), ng)))
+        R.p(f'\n-- Componentes por Generacion --')
+        hdr2 = f'  {"Gen":>5s} | {"NetNorm":>9s} | {"A":>8s} | {"E":>8s} | {"F":>8s} | {"PenM":>9s} | {"PenV":>8s} | {"PenTV":>8s} | {"PenNav":>8s} | {"PenCr":>8s} | {"PenRv":>8s} | {"PenLz":>8s} | {"PenSS":>8s} | {"FitMed":>9s}'
+        R.p(hdr2)
+        R.p(f'  {"-"*(len(hdr2)-2)}')
+        for g in show_gens:
+            if g == '...':
+                R.p(f'  {"...":>5s}')
+                continue
+            gc = by_gen[g]
+            ng = len(gc)
+            R.p('  {:>5d} | {:>9.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.2f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.2f}'.format(
+                g,
+                sdiv(sum(r['net'] for r in gc), ng),
+                sdiv(sum(r['a'] for r in gc), ng),
+                sdiv(sum(r['e'] for r in gc), ng),
+                sdiv(sum(r['f'] for r in gc), ng),
+                sdiv(sum(r['pen_m'] for r in gc), ng),
+                sdiv(sum(r['pen_v'] for r in gc), ng),
+                sdiv(sum(r.get('pen_tv', 0.0) for r in gc), ng),
+                sdiv(sum(r.get('pen_nav', 0.0) for r in gc), ng),
+                sdiv(sum(r.get('pen_creep', 0.0) for r in gc), ng),
+                sdiv(sum(r.get('pen_rev', 0.0) for r in gc), ng),
+                sdiv(sum(r.get('pen_lazy', 0.0) for r in gc), ng),
+                sdiv(sum(r.get('pen_swstop', 0.0) for r in gc), ng),
+                sdiv(sum(r['fit'] for r in gc), ng)))
 
-    R.p(f'\n-- Control por Generacion --')
-    hdr3 = f'  {"Gen":>5s} | {"Thr+":>8s} | {"GraceThr":>8s} | {"GraceBr":>8s} | {"Brake":>8s} | {"Coast":>8s} | {"StopB":>8s} | {"StopT":>8s} | {"StopTicks":>9s} | {"YldVal":>8s} | {"StopVal":>8s} | {"SteerIn":>8s} | {"SteerTgt":>8s} | {"GapAbs":>8s} | {"StopBrake%":>10s} | {"GraceBr%":>9s}'
-    R.p(hdr3)
-    R.p(f'  {"-"*(len(hdr3)-2)}')
-    for g in show_gens:
-        if g == '...':
-            R.p(f'  {"...":>5s}')
-            continue
-        gc = by_gen[g]
-        ng = len(gc)
-        g_thr = sdiv(sum(r.get('thr_pos', 0.0) for r in gc), ng)
-        g_grace = sdiv(sum(r.get('thr_grace', 0.0) for r in gc), ng)
-        g_grace_br = sdiv(sum(r.get('brake_grace', 0.0) for r in gc), ng)
-        g_brake = sdiv(sum(r.get('brake_in', 0.0) for r in gc), ng)
-        g_coast = sdiv(sum(r.get('coast_t', 0.0) for r in gc), ng)
-        g_stop_b = sdiv(sum(r.get('stop_brake', 0.0) for r in gc), ng)
-        g_stop_t = sdiv(sum(r.get('stop_throttle', 0.0) for r in gc), ng)
-        g_stop_ticks = sdiv(sum(r.get('t_stop_ctx', 0.0) for r in gc), ng)
-        g_yield_val = sdiv(sum(r.get('yield_val_t', 0.0) for r in gc), ng)
-        g_stop_val = sdiv(sum(r.get('stop_val_t', 0.0) for r in gc), ng)
-        g_steer_in = sdiv(sum(r.get('steer_in', 0.0) for r in gc), ng)
-        g_steer_tgt = sdiv(sum(r.get('steer_target', 0.0) for r in gc), ng)
-        g_steer_gap = sdiv(sum(abs(r.get('steer_in', 0.0) - r.get('steer_target', 0.0)) for r in gc), ng)
-        g_stop_share = sdiv(g_stop_b, g_stop_b + g_stop_t)
-        g_grace_br_share = sdiv(g_grace_br, g_grace + g_grace_br)
-        R.p('  {:>5d} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.3f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.2f}% | {:>8.2f}%'.format(
-            g, g_thr, g_grace, g_grace_br, g_brake, g_coast, g_stop_b, g_stop_t, g_stop_ticks, g_yield_val, g_stop_val, g_steer_in, g_steer_tgt, g_steer_gap, g_stop_share * 100.0, g_grace_br_share * 100.0))
+        R.p(f'\n-- Control por Generacion --')
+        hdr3 = f'  {"Gen":>5s} | {"Thr+":>8s} | {"GraceThr":>8s} | {"GraceBr":>8s} | {"Brake":>8s} | {"Coast":>8s} | {"StopB":>8s} | {"StopT":>8s} | {"StopTicks":>9s} | {"YldVal":>8s} | {"StopVal":>8s} | {"SteerIn":>8s} | {"SteerTgt":>8s} | {"GapAbs":>8s} | {"StopBrake%":>10s} | {"GraceBr%":>9s}'
+        R.p(hdr3)
+        R.p(f'  {"-"*(len(hdr3)-2)}')
+        for g in show_gens:
+            if g == '...':
+                R.p(f'  {"...":>5s}')
+                continue
+            gc = by_gen[g]
+            ng = len(gc)
+            g_thr = sdiv(sum(r.get('thr_pos', 0.0) for r in gc), ng)
+            g_grace = sdiv(sum(r.get('thr_grace', 0.0) for r in gc), ng)
+            g_grace_br = sdiv(sum(r.get('brake_grace', 0.0) for r in gc), ng)
+            g_brake = sdiv(sum(r.get('brake_in', 0.0) for r in gc), ng)
+            g_coast = sdiv(sum(r.get('coast_t', 0.0) for r in gc), ng)
+            g_stop_b = sdiv(sum(r.get('stop_brake', 0.0) for r in gc), ng)
+            g_stop_t = sdiv(sum(r.get('stop_throttle', 0.0) for r in gc), ng)
+            g_stop_ticks = sdiv(sum(r.get('t_stop_ctx', 0.0) for r in gc), ng)
+            g_yield_val = sdiv(sum(r.get('yield_val_t', 0.0) for r in gc), ng)
+            g_stop_val = sdiv(sum(r.get('stop_val_t', 0.0) for r in gc), ng)
+            g_steer_in = sdiv(sum(r.get('steer_in', 0.0) for r in gc), ng)
+            g_steer_tgt = sdiv(sum(r.get('steer_target', 0.0) for r in gc), ng)
+            g_steer_gap = sdiv(sum(abs(r.get('steer_in', 0.0) - r.get('steer_target', 0.0)) for r in gc), ng)
+            g_stop_share = sdiv(g_stop_b, g_stop_b + g_stop_t)
+            g_grace_br_share = sdiv(g_grace_br, g_grace + g_grace_br)
+            R.p('  {:>5d} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.3f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>8.4f} | {:>9.2f}% | {:>8.2f}%'.format(
+                g, g_thr, g_grace, g_grace_br, g_brake, g_coast, g_stop_b, g_stop_t, g_stop_ticks, g_yield_val, g_stop_val, g_steer_in, g_steer_tgt, g_steer_gap, g_stop_share * 100.0, g_grace_br_share * 100.0))
 
-    # Mejor coche por gen
-    show_best = gens[:30]
-    if len(gens) > 35:
-        show_best += ['...'] + gens[-5:]
-    elif len(gens) > 30:
-        show_best = gens
-    R.p(f'\n-- Mejor Coche por Generacion (raw fitness) --')
-    for g in show_best:
-        if g == '...':
-            R.p('  ...')
-            continue
-        gc = by_gen[g]
-        best = max(gc, key=lambda x: x['fit'])
-        R.p(f'  Gen {g:>4d}: fit={best["fit"]:>10.2f} spawn={best["spawn"].replace("TargetPoint","TP"):>8s} t={best["time"]}s death={best["death"]}')
+        # Mejor coche por gen
+        show_best = gens[:30]
+        if len(gens) > 35:
+            show_best += ['...'] + gens[-5:]
+        elif len(gens) > 30:
+            show_best = gens
+        R.p(f'\n-- Mejor Coche por Generacion (raw fitness) --')
+        for g in show_best:
+            if g == '...':
+                R.p('  ...')
+                continue
+            gc = by_gen[g]
+            best = max(gc, key=lambda x: x['fit'])
+            R.p(f'  Gen {g:>4d}: fit={best["fit"]:>10.2f} spawn={best["spawn"].replace("TargetPoint","TP"):>8s} t={best["time"]}s death={best["death"]}')
+    else:
+        R.p(f'\n-- Tablas por Generacion --')
+        R.p('  Omitidas en FreeRun: la generacion del Debug es constante; usar rankings por spawn y ciclos censurados.')
 
 # ── Resumen rapido para comparacion ──
 
@@ -1099,6 +1143,7 @@ def report_quicksummary(R, rows, dbg):
     n = len(rows)
     if n == 0 and not dbg:
         return
+    freerun = is_freerun_analysis(summary_rows=rows, debug_rows=dbg)
 
     R.p(f'\n{"="*76}')
     R.p(f'  RESUMEN RAPIDO (copiar para comparar)')
@@ -1112,14 +1157,20 @@ def report_quicksummary(R, rows, dbg):
         avg_mean = sdiv(sum(r['mean'] for r in rows), n)
         avg_time = sdiv(sum(r['time'] for r in rows), n)
         neg = sum(1 for r in rows if r['mean'] < 0)
-        R.p(f'  Generaciones:     {n}')
-        R.p(f'  BestFit max:      {br["best"]:.6f} (gen {br["gen"]})')
+        if freerun:
+            R.p('  Eje:              FreeRun session/spawn (sin generaciones)')
+            R.p(f'  Snapshot summary: {n} fila agregada')
+            R.p(f'  BestFit terminal: {br["best"]:.6f}')
+        else:
+            R.p(f'  Generaciones:     {n}')
+            R.p(f'  BestFit max:      {br["best"]:.6f} (gen {br["gen"]})')
         R.p(f'  BestFit medio:    {avg_best:.6f}')
-        R.p(f'  MeanFit max:      {mr["mean"]:.6f} (gen {mr["gen"]})')
+        if not freerun:
+            R.p(f'  MeanFit max:      {mr["mean"]:.6f} (gen {mr["gen"]})')
         R.p(f'  MeanFit medio:    {avg_mean:.6f}')
         R.p(f'  MeanFit P50:      {pctl([r["mean"] for r in rows], 50):.6f}')
         R.p(f'  %MeanFit < 0:     {sdiv(neg*100,n):.1f}%')
-        R.p(f'  TiempoMedio:      {avg_time:.2f}s')
+        R.p(f'  {"Tiempo terminal" if freerun else "TiempoMedio"}:      {avg_time:.2f}s')
     else:
         R.p('  Generaciones:     0 (summary vacio)')
         R.p('  Best/MeanFit:     n/a (se usa bloque Debug para comparacion rapida)')
@@ -1268,9 +1319,19 @@ def report_quicksummary(R, rows, dbg):
         derived = [binary_metrics_from_row(r) for r in kpi_rows]
         avg_success = sdiv(sum(m['success_rate'] for m in derived), nk)
         avg_fail = sdiv(sum(m['fail_rate'] for m in derived), nk)
+        total_success = sum(r.get('success_count', 0) for r in kpi_rows)
+        total_fail = sum(r.get('fail_count', 0) for r in kpi_rows)
+        total_censored = sum(int(num(r.get('censored_count', 0), 0.0)) for r in kpi_rows)
+        total_eval = sum(m['n'] for m in derived)
         wl_rows = [m['wilson_lo'] for m in derived if m['n'] > 0]
         score_wilson = sdiv(sum(wl_rows), len(wl_rows)) if wl_rows else 0.0
-        R.p(f'  Aciertos (%):     {avg_success:.2f}%')
+        if total_censored > 0:
+            success_upper = sdiv((total_success + total_censored) * 100.0, total_eval)
+            observed_rate = sdiv(total_success * 100.0, total_success + total_fail)
+            R.p(f'  Aciertos (%):     {avg_success:.2f}-{success_upper:.2f}% (cens {total_censored})')
+            R.p(f'  Aciertos obs.:    {observed_rate:.2f}% terminal')
+        else:
+            R.p(f'  Aciertos (%):     {avg_success:.2f}%')
         R.p(f'  Errores (%):      {avg_fail:.2f}%')
         R.p(f'  Score (WilsonLB): {score_wilson:.2f}')
         R.p(f'  Aciertos P50:     {pctl([m["success_rate"] for m in derived], 50):.2f}%')
@@ -1300,6 +1361,22 @@ def report_input_quality(R, summary_meta, debug_meta):
             R.p(f'  Reconstruido:    SI, desde {meta.get("synthetic_source", "Fitness_Debug.csv")}')
             R.p(f'  Filas reconstr.: {meta.get("synthetic_rows", meta.get("loaded_rows", 0))}')
             R.p(f'  Debug usado rec.: {meta.get("synthetic_debug_rows", 0)} registros')
+            censoring = meta.get('freerun_censoring', {})
+            if censoring.get('enabled'):
+                R.p(
+                    f'  FreeRun cens.:   {censoring.get("censored_alive_count", 0)} vivos estimados; '
+                    f'intentos~{censoring.get("total_attempts_with_censored", 0)}'
+                )
+                R.p(
+                    f'  Edad vivos est.: P50={censoring.get("censored_age_p50_s", 0.0):.2f}s, '
+                    f'P90={censoring.get("censored_age_p90_s", 0.0):.2f}s, '
+                    f'max={censoring.get("censored_age_max_s", 0.0):.2f}s'
+                )
+                R.p(f'  Sesion FreeRun est.: {censoring.get("session_elapsed_estimate_s", 0.0):.2f}s')
+                R.p(
+                    f'  Fuente censura:  {censoring.get("source", "-")} '
+                    f'(confianza {censoring.get("confidence", "-")})'
+                )
         if 'selected_rows' in meta:
             R.p(f'  Filas seleccionadas (modo): {meta.get("selected_rows", 0)}')
         R.p(f'  Filas descart.:  {meta.get("discarded_rows", 0)}')
@@ -1520,6 +1597,7 @@ def report_debug_scope(R, info):
 
 def analyze_data_coherence(mode, summary_rows, debug_rows, debug_scope=None):
     debug_scope = debug_scope or {}
+    freerun = (debug_scope.get('freerun_censoring') or {}).get('enabled')
 
     def to_int(v, default=0):
         try:
@@ -1603,6 +1681,7 @@ def analyze_data_coherence(mode, summary_rows, debug_rows, debug_scope=None):
     return {
         'mode': mode,
         'status': status,
+        'freerun_analysis': bool(freerun),
         'summary_rows': len(summary_rows),
         'summary_gens': len(summary_gens),
         'summary_gen_min': summary_gens[0] if summary_gens else 0,
@@ -1627,16 +1706,21 @@ def report_data_coherence(R, info):
 
     R.p(f'\n-- Coherencia Summary vs Debug --')
     R.p(f'  Estado:                  {info.get("status", "ok").upper()}')
-    R.p(
-        f'  Summary filas/gens:      {info.get("summary_rows", 0)} / {info.get("summary_gens", 0)} '
-        f'({info.get("summary_gen_min", 0)}..{info.get("summary_gen_max", 0)})'
-    )
-    R.p(
-        f'  Debug filas/gens:        {info.get("debug_rows", 0)} / {info.get("debug_gens", 0)} '
-        f'({info.get("debug_gen_min", 0)}..{info.get("debug_gen_max", 0)})'
-    )
-    R.p(f'  Solape de generaciones:  {info.get("overlap_gens", 0)}')
-    R.p(f'  Cobertura gens Debug:    {info.get("debug_gen_coverage_pct", 0.0):.1f}%')
+    if info.get('freerun_analysis'):
+        R.p(f'  Eje generacional:        n/a en FreeRun (gen 0/1 constante)')
+        R.p(f'  Summary reconstruido:    {info.get("summary_rows", 0)} snapshot agregado')
+        R.p(f'  Debug terminales:        {info.get("debug_rows", 0)} eventos exportados')
+    else:
+        R.p(
+            f'  Summary filas/gens:      {info.get("summary_rows", 0)} / {info.get("summary_gens", 0)} '
+            f'({info.get("summary_gen_min", 0)}..{info.get("summary_gen_max", 0)})'
+        )
+        R.p(
+            f'  Debug filas/gens:        {info.get("debug_rows", 0)} / {info.get("debug_gens", 0)} '
+            f'({info.get("debug_gen_min", 0)}..{info.get("debug_gen_max", 0)})'
+        )
+        R.p(f'  Solape de generaciones:  {info.get("overlap_gens", 0)}')
+        R.p(f'  Cobertura gens Debug:    {info.get("debug_gen_coverage_pct", 0.0):.1f}%')
     R.p(
         f'  Cobertura filas Debug:   {info.get("debug_row_coverage_pct", 0.0):.1f}% '
         f'(esperado~{info.get("expected_debug_rows", 0)} via {info.get("expected_debug_source", "-")}, '
@@ -1650,7 +1734,7 @@ def report_data_coherence(R, info):
     else:
         R.p('  Sin alertas fuertes de desalineacion entre Summary y Debug.')
 
-def report_yield_stuck_detection(R, info):
+def report_yield_stuck_detection(R, info, freerun=False):
     if not info:
         return
 
@@ -1699,15 +1783,17 @@ def report_yield_stuck_detection(R, info):
     candidates = info.get('candidates', [])
     if candidates:
         R.p(f'  Top candidatos (score compuesto):')
+        first_col = 'Evento' if freerun else 'Gen'
         hdr = (
-            f'  {"Gen":>5s} | {"Car":>16s} | {"Spawn":>15s} | {"Fit":>10s} | {"t":>6s} | '
+            f'  {first_col:>6s} | {"Car":>16s} | {"Spawn":>15s} | {"Fit":>10s} | {"t":>6s} | '
             f'{"Fit/s":>9s} | {"StopCtx%":>9s} | {"YShare%":>8s} | {"SShare%":>8s} | {"TShare%":>8s} | {"StopTk":>7s} | {"YVal":>6s} | {"SVal":>6s} | {"GBr":>6s} | {"Score":>6s} | {"Sev":>5s}'
         )
         R.p(hdr)
         R.p(f'  {"-"*(len(hdr)-2)}')
-        for c in candidates[:TOP_ROWS]:
+        for idx, c in enumerate(candidates[:TOP_ROWS], start=1):
+            first_value = idx if freerun else c.get("gen", 0)
             R.p(
-                f'  {c.get("gen", 0):>5d} | {c.get("car", "")[:16]:>16s} | {c.get("spawn", "").replace("TargetPoint", "TP"):>15s} | '
+                f'  {first_value:>6d} | {c.get("car", "")[:16]:>16s} | {c.get("spawn", "").replace("TargetPoint", "TP"):>15s} | '
                 f'{c.get("fit", 0.0):>10.2f} | {c.get("time", 0.0):>5.1f}s | {c.get("fit_per_sec", 0.0):>9.3f} | '
                 f'{c.get("stop_ctx_pct", 0.0):>8.2f}% | {c.get("stop_ctx_yield_share", 0.0)*100.0:>7.2f}% | {c.get("stop_ctx_stop_share", 0.0)*100.0:>7.2f}% | {c.get("stop_ctx_tl_share", 0.0)*100.0:>7.2f}% | {c.get("stop_ctx_ticks", 0.0):>7.1f} | '
                 f'{c.get("yield_val_t", 0.0):>6.1f} | {c.get("stop_val_t", 0.0):>6.1f} | {c.get("brake_grace", 0.0):>6.2f} | '
@@ -1727,7 +1813,7 @@ def report_yield_stuck_detection(R, info):
                 f'{s.get("time_p50", 0.0):>6.1f}s | {s.get("score_med", 0.0):>9.2f}'
             )
 
-    gens = info.get('gens', [])
+    gens = [] if freerun else info.get('gens', [])
     if gens:
         R.p(f'\n  Generaciones con mas sospecha de atasco en ceda:')
         hdr_g = f'  {"Gen":>5s} | {"TF":>5s} | {"Cand":>5s} | {"Watch":>6s} | {"Cand/TF%":>8s} | {"ScoreP50":>9s}'
@@ -1738,8 +1824,10 @@ def report_yield_stuck_detection(R, info):
                 f'  {g.get("gen", 0):>5d} | {g.get("tf_n", 0):>5d} | {g.get("n", 0):>5d} | {g.get("watch_n", 0):>6d} | '
                 f'{g.get("cand_pct_tf", 0.0):>7.1f}% | {g.get("score_med", 0.0):>9.2f}'
             )
+    elif freerun and info.get('gens', []):
+        R.p('  Eje generacional omitido: en FreeRun gen 0/1 no representa evolucion.')
 
-def report_stop_stuck_detection(R, info):
+def report_stop_stuck_detection(R, info, freerun=False):
     if not info:
         return
 
@@ -1806,16 +1894,18 @@ def report_stop_stuck_detection(R, info):
     candidates = info.get('candidates', [])
     if candidates:
         R.p(f'  Top candidatos (score compuesto):')
+        first_col = 'Evento' if freerun else 'Gen'
         hdr = (
-            f'  {"Gen":>5s} | {"Car":>16s} | {"Spawn":>15s} | {"Fit":>10s} | {"t":>6s} | '
+            f'  {first_col:>6s} | {"Car":>16s} | {"Spawn":>15s} | {"Fit":>10s} | {"t":>6s} | '
             f'{"Fit/s":>9s} | {"StopCtx%":>9s} | {"SShare%":>8s} | {"YShare%":>8s} | {"TShare%":>8s} | '
             f'{"StopTk":>7s} | {"Out%":>6s} | {"CmdOut%":>7s} | {"SVal":>6s} | {"Score":>6s} | {"Cause":>9s} | {"Sev":>5s}'
         )
         R.p(hdr)
         R.p(f'  {"-"*(len(hdr)-2)}')
-        for c in candidates[:TOP_ROWS]:
+        for idx, c in enumerate(candidates[:TOP_ROWS], start=1):
+            first_value = idx if freerun else c.get("gen", 0)
             R.p(
-                f'  {c.get("gen", 0):>5d} | {c.get("car", "")[:16]:>16s} | {c.get("spawn", "").replace("TargetPoint", "TP"):>15s} | '
+                f'  {first_value:>6d} | {c.get("car", "")[:16]:>16s} | {c.get("spawn", "").replace("TargetPoint", "TP"):>15s} | '
                 f'{c.get("fit", 0.0):>10.2f} | {c.get("time", 0.0):>5.1f}s | {c.get("fit_per_sec", 0.0):>9.3f} | '
                 f'{c.get("stop_ctx_pct", 0.0):>8.2f}% | {c.get("stop_ctx_stop_share", 0.0)*100.0:>7.2f}% | {c.get("stop_ctx_yield_share", 0.0)*100.0:>7.2f}% | '
                 f'{c.get("stop_ctx_tl_share", 0.0)*100.0:>7.2f}% | {c.get("stop_ctx_stop_ticks", 0.0):>7.1f} | '
@@ -1836,7 +1926,7 @@ def report_stop_stuck_detection(R, info):
                 f'{s.get("time_p50", 0.0):>6.1f}s | {s.get("score_med", 0.0):>9.2f}'
             )
 
-    gens = info.get('gens', [])
+    gens = [] if freerun else info.get('gens', [])
     if gens:
         R.p(f'\n  Generaciones con mas sospecha de atasco en stop:')
         hdr_g = f'  {"Gen":>5s} | {"TF":>5s} | {"Cand":>5s} | {"Watch":>6s} | {"Cand/TF%":>8s} | {"ScoreP50":>9s}'
@@ -1847,9 +1937,15 @@ def report_stop_stuck_detection(R, info):
                 f'  {g.get("gen", 0):>5d} | {g.get("tf_n", 0):>5d} | {g.get("n", 0):>5d} | {g.get("watch_n", 0):>6d} | '
                 f'{g.get("cand_pct_tf", 0.0):>7.1f}% | {g.get("score_med", 0.0):>9.2f}'
             )
+    elif freerun and info.get('gens', []):
+        R.p('  Eje generacional omitido: en FreeRun gen 0/1 no representa evolucion.')
 
 def report_summary_deep(R, rows):
     if not rows:
+        return
+    if is_freerun_analysis(summary_rows=rows):
+        R.p(f'\n-- Summary Profundo --')
+        R.p('  Omitido en FreeRun: el Summary reconstruido es un snapshot, no una serie generacional.')
         return
 
     gens = [r['gen'] for r in rows]
@@ -1950,6 +2046,7 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
         return
 
     nd = len(dbg)
+    freerun = is_freerun_analysis(debug_rows=dbg)
     by_spawn = defaultdict(list)
     by_gen = defaultdict(list)
     by_death = defaultdict(list)
@@ -1989,8 +2086,8 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
 
     yield_stuck = yield_stuck_info or detect_yield_stuck_candidates(dbg)
     stop_stuck = stop_stuck_info or detect_stop_stuck_candidates(dbg)
-    report_yield_stuck_detection(R, yield_stuck)
-    report_stop_stuck_detection(R, stop_stuck)
+    report_yield_stuck_detection(R, yield_stuck, freerun=freerun)
+    report_stop_stuck_detection(R, stop_stuck, freerun=freerun)
 
     # Analisis LAZY
     lazy_rows = [r for r in dbg if is_lazy_reason(r.get('death', ''))]
@@ -2043,11 +2140,12 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
                 f'{sdiv(stop_hi_n*100.0, len(lazy_sp)):>8.1f}% | {pctl(fits_lazy, 50):>11.2f} | {pctl(time_lazy, 50):>7.2f}s'
             )
 
-        lazy_by_gen = Counter(r['gen'] for r in lazy_rows)
-        R.p(f'\n  Gens con mas LAZY:')
-        for g, cnt in lazy_by_gen.most_common(min(TOP_ROWS, len(lazy_by_gen))):
-            gn = len(by_gen[g])
-            R.p(f'    Gen {g:>5d}: {cnt:>3d}/{gn} ({sdiv(cnt*100, gn):.1f}%)')
+        if not freerun:
+            lazy_by_gen = Counter(r['gen'] for r in lazy_rows)
+            R.p(f'\n  Gens con mas LAZY:')
+            for g, cnt in lazy_by_gen.most_common(min(TOP_ROWS, len(lazy_by_gen))):
+                gn = len(by_gen[g])
+                R.p(f'    Gen {g:>5d}: {cnt:>3d}/{gn} ({sdiv(cnt*100, gn):.1f}%)')
 
         if non_lazy:
             R.p(f'\n  Comparativa LAZY vs no-LAZY:')
@@ -2163,10 +2261,11 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
 
         if crossing_rows:
             blocked_by_gen = []
-            for g, rows_gen in by_gen.items():
-                total_gen = sum(r.get('crossing_blocked_t', 0.0) for r in rows_gen)
-                if total_gen > 0.0:
-                    blocked_by_gen.append((total_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
+            if not freerun:
+                for g, rows_gen in by_gen.items():
+                    total_gen = sum(r.get('crossing_blocked_t', 0.0) for r in rows_gen)
+                    if total_gen > 0.0:
+                        blocked_by_gen.append((total_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
             if blocked_by_gen:
                 R.p('  Top generaciones por bloqueo de cruce:')
                 for total_gen, g, ngen, fit_med in sorted(blocked_by_gen, reverse=True)[:min(TOP_ROWS, 10)]:
@@ -2227,12 +2326,13 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
             R.p(f'  Overlaps/coche afectado:   {sdiv(overlap_total, len(overlap_rows)):.4f}')
             R.p(f'  Overlaps/s medio afectado: {mean([r.get("car_overlap_per_sec", 0.0) for r in overlap_rows]):.4f}')
             overlap_by_gen = []
-            for g, rows_gen in by_gen.items():
-                total_gen = sum(r.get('car_overlaps', 0.0) for r in rows_gen)
-                if total_gen <= 0.0:
-                    continue
-                affected_gen = sum(1 for r in rows_gen if r.get('car_overlaps', 0.0) > 0.0)
-                overlap_by_gen.append((total_gen, affected_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
+            if not freerun:
+                for g, rows_gen in by_gen.items():
+                    total_gen = sum(r.get('car_overlaps', 0.0) for r in rows_gen)
+                    if total_gen <= 0.0:
+                        continue
+                    affected_gen = sum(1 for r in rows_gen if r.get('car_overlaps', 0.0) > 0.0)
+                    overlap_by_gen.append((total_gen, affected_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
             if overlap_by_gen:
                 R.p('  Top generaciones por solapes:')
                 for total_gen, affected_gen, g, ngen, fit_med in sorted(overlap_by_gen, reverse=True)[:min(TOP_ROWS, 10)]:
@@ -2296,11 +2396,12 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
             R.p(f'  Bonus/coche expuesto:     {sdiv(queue_total, len(queue_rows)):.4f}')
             R.p(f'  Bonus/s expuesto:         {mean(metric_values(dbg, "queue_wait_bonus_per_life_sec")):.4f}')
             queue_by_gen = []
-            for g, rows_gen in by_gen.items():
-                total_gen = sum(r.get('queue_wait_bonus', 0.0) for r in rows_gen)
-                if total_gen > 0.0:
-                    affected_gen = sum(1 for r in rows_gen if r.get('queue_wait_bonus', 0.0) > 0.0)
-                    queue_by_gen.append((total_gen, affected_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
+            if not freerun:
+                for g, rows_gen in by_gen.items():
+                    total_gen = sum(r.get('queue_wait_bonus', 0.0) for r in rows_gen)
+                    if total_gen > 0.0:
+                        affected_gen = sum(1 for r in rows_gen if r.get('queue_wait_bonus', 0.0) > 0.0)
+                        queue_by_gen.append((total_gen, affected_gen, g, len(rows_gen), mean([r.get('fit', 0.0) for r in rows_gen])))
             if queue_by_gen:
                 R.p('  Top generaciones por QueueWaitBonus:')
                 for total_gen, affected_gen, g, ngen, fit_med in sorted(queue_by_gen, reverse=True)[:min(TOP_ROWS, 10)]:
@@ -2715,16 +2816,18 @@ def report_debug_deep(R, dbg, yield_stuck_info=None, stop_stuck_info=None):
     # Peores/mejores muestras individuales
     top_n = min(TOP_ROWS, nd)
     R.p(f'\n-- Peores {top_n} Coches (raw fitness) --')
-    for r in sorted(dbg, key=lambda x: x['fit'])[:top_n]:
+    for i, r in enumerate(sorted(dbg, key=lambda x: x['fit'])[:top_n], 1):
+        prefix = f'  Terminal {i:>3d}' if freerun else f'  Gen {r["gen"]:>5d}'
         R.p(
-            f'  Gen {r["gen"]:>5d} | {r["spawn"].replace("TargetPoint","TP"):>15s} | '
+            f'{prefix} | {r["spawn"].replace("TargetPoint","TP"):>15s} | '
             f'fit={r["fit"]:>10.2f} | t={r["time"]:>5.1f}s | death={r["death"]}'
         )
 
     R.p(f'\n-- Mejores {top_n} Coches (raw fitness) --')
-    for r in sorted(dbg, key=lambda x: -x['fit'])[:top_n]:
+    for i, r in enumerate(sorted(dbg, key=lambda x: -x['fit'])[:top_n], 1):
+        prefix = f'  Terminal {i:>3d}' if freerun else f'  Gen {r["gen"]:>5d}'
         R.p(
-            f'  Gen {r["gen"]:>5d} | {r["spawn"].replace("TargetPoint","TP"):>15s} | '
+            f'{prefix} | {r["spawn"].replace("TargetPoint","TP"):>15s} | '
             f'fit={r["fit"]:>10.2f} | t={r["time"]:>5.1f}s | death={r["death"]}'
         )
 
@@ -2889,6 +2992,27 @@ def save_json_snapshot(
     collision_stats = summarize_collision_deaths(dbg_rows)
     debug_schema = dbg_rows[0].get('_schema', '') if dbg_rows else ''
     debug_schema_0107 = debug_schema == '2026-07-01-overlap-penalty-queue-wait'
+    freerun_censored_rows = [r for r in summary_rows if int(num(r.get('censored_count', 0), 0.0)) > 0]
+    freerun_censoring = {
+        'enabled': bool(freerun_censored_rows),
+        'censored_alive_count': sum(int(num(r.get('censored_count', 0), 0.0)) for r in freerun_censored_rows),
+        'observed_terminal_rows': sum(int(num(r.get('observed_terminal_count', 0), 0.0)) for r in freerun_censored_rows),
+        'total_attempts_with_censored': sum(int(num(r.get('eval_n', 0), 0.0)) for r in freerun_censored_rows),
+        'success_rate_lower': sdiv(
+            sum(r.get('success_count', 0) for r in freerun_censored_rows) * 100.0,
+            sum(int(num(r.get('eval_n', 0), 0.0)) for r in freerun_censored_rows),
+        ),
+        'success_rate_upper_if_censored_alive_success': sdiv(
+            sum((r.get('success_count', 0) + int(num(r.get('censored_count', 0), 0.0))) for r in freerun_censored_rows) * 100.0,
+            sum(int(num(r.get('eval_n', 0), 0.0)) for r in freerun_censored_rows),
+        ),
+        'session_elapsed_estimate_s': max([r.get('session_elapsed_estimate_s', 0.0) for r in freerun_censored_rows] or [0.0]),
+        'censored_age_mean_s': pctl([r.get('censored_age_mean_s', 0.0) for r in freerun_censored_rows], 50),
+        'censored_age_p50_s': pctl([r.get('censored_age_p50_s', 0.0) for r in freerun_censored_rows], 50),
+        'censored_age_p90_s': pctl([r.get('censored_age_p90_s', 0.0) for r in freerun_censored_rows], 50),
+        'censored_age_max_s': max([r.get('censored_age_max_s', 0.0) for r in freerun_censored_rows] or [0.0]),
+        'note': 'FreeRun Debug is terminal-row only; alive cars are censored and have no exact final lifetime.',
+    }
 
     by_spawn = defaultdict(list)
     for r in dbg_rows:
@@ -2939,6 +3063,7 @@ def save_json_snapshot(
         'generation_normalization': generation_normalization or {},
         'car_index_bounds': car_bounds,
         'data_coherence': data_coherence or {},
+        'freerun_censoring': freerun_censoring,
         'yield_stuck_detection': yield_stuck or {},
         'stop_stuck_detection': stop_stuck or {},
         'auto_insights': auto_insights or [],

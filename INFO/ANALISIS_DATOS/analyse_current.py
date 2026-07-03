@@ -501,7 +501,11 @@ def main():
         logging.info('Ejecucion combinada: se generaran TRAIN, TEST y TRAINTEST.')
 
     results = []
+    explicit_out_dir = args.out_dir
     for item in analyses:
+        variant_out_dir = None
+        if explicit_out_dir:
+            variant_out_dir = explicit_out_dir if len(analyses) == 1 else os.path.join(explicit_out_dir, item['mode'])
         logging.info('\n[%s] Lanzando analisis separado...', item['mode'].upper())
         result = run_analysis_variant(
             mode=item['mode'],
@@ -514,6 +518,7 @@ def main():
             train_summary_rows=len(train_summary),
             test_summary_rows=len(test_summary),
             csvs=csvs,
+            out_dir_override=variant_out_dir,
         )
         results.append(result)
 

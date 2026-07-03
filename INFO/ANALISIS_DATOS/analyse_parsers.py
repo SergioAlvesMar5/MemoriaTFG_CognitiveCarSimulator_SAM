@@ -332,7 +332,9 @@ def parse_debug(path):
                             if gen_suffix and len(tail) >= 6:
                                 merged_first_row = [gen_suffix] + tail
                                 try:
-                                    rows.append(build_row(merged_first_row))
+                                    rec = build_row(merged_first_row)
+                                    rec['_row_index'] = len(rows)
+                                    rows.append(rec)
                                 except (TypeError, ValueError, IndexError):
                                     pass
                 continue
@@ -342,7 +344,9 @@ def parse_debug(path):
             if len(p) < 6:
                 continue
             try:
-                rows.append(build_row(p))
+                rec = build_row(p)
+                rec['_row_index'] = len(rows)
+                rows.append(rec)
             except (TypeError, ValueError, IndexError) as e:
                 logging.warning(f'[parse_debug] Row {i} skipped: {type(e).__name__}: {e}')
     logging.info(f'[parse_debug] Loaded {len(rows)} rows from {os.path.basename(path)}')

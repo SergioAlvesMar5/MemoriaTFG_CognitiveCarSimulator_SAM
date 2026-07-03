@@ -142,7 +142,7 @@ def test_build_synthetic_summary_from_debug_reconstructs_test_kpis():
         {'gen': 0, 'car': 'C', 'fit': -10.0, 'time': 50.0, 'death': 'COLLISION_WITH_WALL'},
     ]
 
-    summary, debug, info = ac.build_synthetic_summary_from_debug(rows, 'test')
+    summary, debug, info = ac.build_synthetic_summary_from_debug(rows, 'test', summary_meta={'data_rows': 1})
 
     assert info['enabled'] is True
     assert info['rows'] == 1
@@ -158,6 +158,41 @@ def test_build_synthetic_summary_from_debug_reconstructs_test_kpis():
     assert row['fail_collision_count'] == 1
     assert abs(row['success_rate'] - (100.0 / 3.0)) < 1e-9
     assert row['synthetic_from_debug'] is True
+
+
+def test_build_synthetic_summary_freerun_adds_censored_bounds():
+    old_env = os.environ.get('ANALYSE_FREERUN_EXPECTED_LIVE_CARS')
+    os.environ['ANALYSE_FREERUN_EXPECTED_LIVE_CARS'] = '2'
+    try:
+        rows = [
+            {'gen': 0, 'car': 'A', 'spawn': 'BP_SpawnPoint1', 'fit': 10.0, 'time': 10.0, 'death': 'LAZY'},
+            {'gen': 0, 'car': 'B', 'spawn': 'BP_SpawnPoint1', 'fit': 1000.0, 'time': 1000.0, 'death': 'TIMEFINISHED'},
+        ]
+        summary, debug, info = ac.build_synthetic_summary_from_debug(rows, 'test', summary_meta={'data_rows': 0})
+    finally:
+        if old_env is None:
+            os.environ.pop('ANALYSE_FREERUN_EXPECTED_LIVE_CARS', None)
+        else:
+            os.environ['ANALYSE_FREERUN_EXPECTED_LIVE_CARS'] = old_env
+
+    censoring = info['freerun_censoring']
+    assert censoring['enabled'] is True
+    assert censoring['censored_alive_count'] == 2
+    assert len(summary) == 1
+    row = summary[0]
+    assert row['observed_terminal_count'] == 2
+    assert row['censored_count'] == 2
+    assert row['eval_n'] == 4
+    assert row['success_count'] == 1
+    assert row['fail_count'] == 1
+    assert row['success_rate'] == 25.0
+    assert row['success_rate_upper'] == 75.0
+    assert debug[0]['free_run_censored_alive_count'] == 2
+    assert censoring['session_elapsed_estimate_s'] == 1010.0
+    assert censoring['censored_age_estimates_s'][0] == 0.0
+    assert censoring['censored_age_estimates_s'][1] == 1010.0
+    assert row['session_elapsed_estimate_s'] == 1010.0
+    assert debug[0]['free_run_censored_age_estimates'] == [0.0, 1010.0]
 
 
 def test_pctl_basic():
@@ -240,6 +275,28 @@ def test_lifetime_distribution_bins_are_relative_to_max_time():
     assert info['bins'][5]['count'] == 1
     assert info['bins'][-1]['count'] == 1
     assert info['max_row']['car'] == 'C100'
+
+
+def test_lifetime_distribution_bins_places_censored_age_estimates():
+    rows = [
+        {
+            'time': 20.0,
+            'car': 'C20',
+            'free_run_censored_alive_count': 2,
+            'free_run_censored_age_estimates': [5.0, 120.0],
+        },
+        {'time': 100.0, 'car': 'C100'},
+    ]
+    info = lifetime_distribution_bins(rows, step_pct=10)
+    assert info['max_time'] == 120.0
+    assert info['max_source'] == 'censored_estimated'
+    assert info['total'] == 4
+    assert info['censored_age_estimate_count'] == 2
+    assert info['censored_unbinned_count'] == 0
+    assert sum(b['count'] for b in info['bins']) == 2
+    assert sum(b['censored_count'] for b in info['bins']) == 2
+    assert info['bins'][0]['censored_count'] == 1
+    assert info['bins'][-1]['censored_count'] == 1
 
 
 def test_infer_label_from_debug_rows_prefers_phase_flags():

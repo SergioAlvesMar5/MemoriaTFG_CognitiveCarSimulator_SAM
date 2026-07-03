@@ -21,7 +21,324 @@ def build_combined_summary(train_summary, test_summary):
         r['gen'] = i
     return rows
 
-def build_synthetic_summary_from_debug(debug_rows, mode):
+def _spawn_sort_key(name):
+    text = str(name or '')
+    match = re.search(r'(\d+)$', text)
+    if match:
+        return (text[:match.start()], int(match.group(1)))
+    return (text, -1)
+
+def quick_summary_eval_ns(path):
+    values = []
+    if not path or not os.path.exists(path):
+        return values
+
+    header_map = {}
+    with open(path, encoding='utf-8-sig', newline='') as f:
+        reader = csv.reader(f)
+        for i, row in enumerate(reader):
+            p = [clean(x) for x in row]
+            if i == 0:
+                for idx, h in enumerate(normalize_header_token(x) for x in p):
+                    key = alias_lookup(h, SUMMARY_ALIASES)
+                    if key and key not in header_map:
+                        header_map[key] = idx
+                continue
+            if not p or not any(p):
+                continue
+            idx = header_map.get('eval_n')
+            if idx is not None and idx < len(p):
+                try:
+                    n = int(float(p[idx]))
+                except (TypeError, ValueError):
+                    n = 0
+                if n > 0:
+                    values.append(n)
+    return values
+
+def quick_debug_spawn_names(path, target_training=None):
+    spawns = set()
+    if not path or not os.path.exists(path):
+        return spawns
+
+    spawn_idx = None
+    training_idx = None
+    with open(path, encoding='utf-8-sig', newline='') as f:
+        reader = csv.reader(f)
+        for i, row in enumerate(reader):
+            p = [clean(x) for x in row]
+            if i == 0:
+                for idx, h in enumerate(normalize_header_token(x) for x in p):
+                    key = alias_lookup(h, DEBUG_ALIASES)
+                    if key == 'spawn':
+                        spawn_idx = idx
+                    elif key == 'training':
+                        training_idx = idx
+                continue
+            if not p or not any(p):
+                continue
+            if target_training is not None and training_idx is not None and training_idx < len(p):
+                row_training = parse_bool_token(p[training_idx])
+                if row_training is not None and row_training != target_training:
+                    continue
+            if spawn_idx is not None and spawn_idx < len(p):
+                spawn = p[spawn_idx].strip()
+                if spawn:
+                    spawns.add(spawn)
+    return spawns
+
+def historical_freerun_population_hint(mode, current_debug_rows, current_out_dir=''):
+    root = os.path.join(BASE_DIR, 'Analisis')
+    current_spawns = {r.get('spawn', '') for r in current_debug_rows or [] if r.get('spawn', '')}
+    info = {
+        'eval_ns': [],
+        'known_spawns': set(current_spawns),
+        'sessions_scanned': 0,
+    }
+    if not os.path.isdir(root):
+        return info
+
+    try:
+        scan_limit = int(os.environ.get('ANALYSE_FREERUN_HISTORY_SCAN_LIMIT', '180'))
+    except ValueError:
+        scan_limit = 180
+    scan_limit = max(10, min(1000, scan_limit))
+
+    prefixes = ['test_'] if mode == 'test' else ['train_', 'test_', 'traintest_']
+    names = []
+    for name in os.listdir(root):
+        full = os.path.join(root, name)
+        if os.path.isdir(full) and any(name.startswith(pref) for pref in prefixes):
+            if current_out_dir and os.path.abspath(full) == os.path.abspath(current_out_dir):
+                continue
+            names.append(name)
+    names.sort()
+    names = names[-scan_limit:]
+
+    summary_names = []
+    if mode == 'train':
+        summary_names = ['Training_Summary.csv']
+    elif mode == 'test':
+        summary_names = ['Test_Summary.csv']
+    else:
+        summary_names = ['Training_Summary.csv', 'Test_Summary.csv']
+
+    target_training = target_training_for_mode(mode)
+    for name in names:
+        full = os.path.join(root, name)
+        info['sessions_scanned'] += 1
+        for summary_name in summary_names:
+            info['eval_ns'].extend(quick_summary_eval_ns(os.path.join(full, summary_name)))
+        info['known_spawns'].update(quick_debug_spawn_names(os.path.join(full, 'Fitness_Debug.csv'), target_training))
+
+    return info
+
+def _debug_lifetime_seconds(row):
+    value = num(row.get('time', 0.0), 0.0)
+    if not math.isfinite(value):
+        return 0.0
+    return max(0.0, value)
+
+def build_freerun_spawn_cycle_estimates(debug_rows, expected_live_cars, known_spawns=None):
+    """Estimate FreeRun live-at-close ages from terminal rows grouped by spawn.
+
+    Fitness_Debug only contains terminal events. In FreeRun each spawn acts like a
+    personal lane with one active car, so cumulative terminal lifetimes per spawn
+    are a useful lower-bound timeline. Respawn delays and occupied spawnpoints are
+    not exported, so all ages here are estimates, not exact final lifetimes.
+    """
+    known_spawns = set(known_spawns or [])
+    expected_live_cars = max(0, int(expected_live_cars or 0))
+
+    by_spawn = defaultdict(list)
+    for idx, row in enumerate(debug_rows or []):
+        spawn = str(row.get('spawn', '') or '').strip()
+        if not spawn:
+            continue
+        by_spawn[spawn].append(row)
+
+    observed_spawns = sorted(by_spawn.keys(), key=_spawn_sort_key)
+    expected_live_cars = max(expected_live_cars, len(observed_spawns))
+
+    missing_candidates = sorted((known_spawns - set(observed_spawns)), key=_spawn_sort_key)
+    missing_needed = max(0, expected_live_cars - len(observed_spawns))
+    selected_missing = missing_candidates[:missing_needed]
+    anonymous_needed = max(0, expected_live_cars - len(observed_spawns) - len(selected_missing))
+    anonymous_spawns = [f'UNKNOWN_FREERUN_SLOT_{i + 1}' for i in range(anonymous_needed)]
+    spawn_universe = observed_spawns + selected_missing + anonymous_spawns
+
+    observed_elapsed_by_spawn = {}
+    observed_lifetimes_all = []
+    for spawn in observed_spawns:
+        rows_sp = sorted(
+            by_spawn[spawn],
+            key=lambda r: (
+                int(num(r.get('_row_index', 0), 0.0)),
+                str(r.get('car', '')),
+            ),
+        )
+        lifetimes = [_debug_lifetime_seconds(r) for r in rows_sp]
+        observed_elapsed_by_spawn[spawn] = sum(lifetimes)
+        observed_lifetimes_all.extend(lifetimes)
+
+    session_elapsed_est = max(observed_elapsed_by_spawn.values() or [0.0])
+    if session_elapsed_est <= 0.0:
+        session_elapsed_est = max(observed_lifetimes_all or [0.0])
+
+    spawn_stats = []
+    censored_age_estimates = []
+    for spawn in spawn_universe:
+        rows_sp = sorted(
+            by_spawn.get(spawn, []),
+            key=lambda r: (
+                int(num(r.get('_row_index', 0), 0.0)),
+                str(r.get('car', '')),
+            ),
+        )
+        lifetimes = [_debug_lifetime_seconds(r) for r in rows_sp]
+        terminal_count = len(lifetimes)
+        terminal_sum = sum(lifetimes)
+        last_elapsed = terminal_sum if terminal_count else 0.0
+
+        if terminal_count:
+            censored_age = max(0.0, session_elapsed_est - last_elapsed)
+            confidence = 'media'
+            status = 'observado_con_vivo_censurado'
+        elif spawn.startswith('UNKNOWN_FREERUN_SLOT_'):
+            censored_age = session_elapsed_est
+            confidence = 'baja'
+            status = 'slot_anonimo_sin_terminales'
+        else:
+            censored_age = session_elapsed_est
+            confidence = 'media-baja'
+            status = 'spawn_conocido_sin_terminales'
+
+        censored_age_estimates.append(censored_age)
+        spawn_stats.append({
+            'spawn': spawn,
+            'terminal_count': terminal_count,
+            'terminal_lifetime_sum_s': terminal_sum,
+            'terminal_lifetime_mean_s': mean(lifetimes),
+            'terminal_lifetime_p50_s': pctl(lifetimes, 50),
+            'terminal_lifetime_p90_s': pctl(lifetimes, 90),
+            'last_terminal_elapsed_est_s': last_elapsed,
+            'censored_age_est_s': censored_age,
+            'death_period_est_mean_s': mean(lifetimes),
+            'death_period_est_p50_s': pctl(lifetimes, 50),
+            'death_rate_per_hour_est': sdiv(terminal_count * 3600.0, session_elapsed_est),
+            'first_terminal_lifetime_s': lifetimes[0] if lifetimes else 0.0,
+            'last_terminal_lifetime_s': lifetimes[-1] if lifetimes else 0.0,
+            'status': status,
+            'confidence': confidence,
+        })
+
+    spawn_stats.sort(key=lambda x: (x.get('terminal_count', 0), x.get('death_rate_per_hour_est', 0.0)), reverse=True)
+    return {
+        'session_elapsed_estimate_s': session_elapsed_est,
+        'spawn_cycle_stats': spawn_stats,
+        'censored_age_estimates_s': censored_age_estimates,
+        'censored_age_mean_s': mean(censored_age_estimates),
+        'censored_age_p50_s': pctl(censored_age_estimates, 50),
+        'censored_age_p90_s': pctl(censored_age_estimates, 90),
+        'censored_age_min_s': min(censored_age_estimates) if censored_age_estimates else 0.0,
+        'censored_age_max_s': max(censored_age_estimates) if censored_age_estimates else 0.0,
+        'terminal_lifetime_mean_s': mean(observed_lifetimes_all),
+        'terminal_lifetime_p50_s': pctl(observed_lifetimes_all, 50),
+        'terminal_lifetime_p90_s': pctl(observed_lifetimes_all, 90),
+        'observed_spawn_count': len(observed_spawns),
+        'estimated_spawn_slots': len(spawn_universe),
+        'missing_spawn_names_used': selected_missing,
+        'anonymous_spawn_slots': anonymous_spawns,
+        'estimation_note': (
+            'Estimacion por spawn: suma lifetimes terminales por spawn y usa el mayor acumulado '
+            'como tiempo transcurrido minimo de sesion. No incluye esperas de respawn ni bloqueos de spawn no exportados.'
+        ),
+    }
+
+def infer_freerun_censoring(debug_rows, mode, summary_meta=None):
+    """Infer alive-but-not-exported FreeRun cars when only terminal Debug rows exist."""
+    summary_meta = summary_meta or {}
+    if not debug_rows or mode not in ('test', 'traintest'):
+        return {'enabled': False}
+
+    observed_spawns = {r.get('spawn', '') for r in debug_rows if r.get('spawn', '')}
+    raw_gens = sorted(set(int(num(r.get('gen_debug_raw', r.get('gen', 0)), 0.0)) for r in debug_rows))
+    repeated_attempts = len(debug_rows) > max(1, len(observed_spawns)) * 1.15
+    summary_empty = summary_meta.get('data_rows', 0) == 0
+    likely_freerun = bool(summary_empty and (repeated_attempts or raw_gens == [0]))
+    if not likely_freerun:
+        return {
+            'enabled': False,
+            'likely_freerun': False,
+            'observed_terminal_rows': len(debug_rows),
+            'observed_unique_spawns': len(observed_spawns),
+        }
+
+    env_expected = os.environ.get('ANALYSE_FREERUN_EXPECTED_LIVE_CARS', '').strip()
+    expected = 0
+    source = ''
+    confidence = 'baja'
+    if env_expected:
+        try:
+            expected = int(float(env_expected))
+        except (TypeError, ValueError):
+            expected = 0
+        if expected > 0:
+            source = 'env ANALYSE_FREERUN_EXPECTED_LIVE_CARS'
+            confidence = 'alta'
+
+    history = historical_freerun_population_hint(mode, debug_rows)
+    eval_ns = [n for n in history.get('eval_ns', []) if n > 0]
+    known_spawns = history.get('known_spawns', set()) or set()
+    if expected <= 0 and eval_ns:
+        expected = int(round(pctl(eval_ns, 50)))
+        source = 'mediana N de Summary historico'
+        confidence = 'media'
+    if expected <= 0 and known_spawns:
+        expected = len(known_spawns)
+        source = 'spawnpoints historicos conocidos'
+        confidence = 'media-baja'
+    if expected <= 0:
+        expected = len(observed_spawns)
+        source = 'spawnpoints observados en este Debug'
+        confidence = 'baja'
+
+    expected = max(expected, len(observed_spawns), 1)
+    cycle_info = build_freerun_spawn_cycle_estimates(debug_rows, expected, known_spawns=known_spawns)
+    missing_spawn_names = sorted((known_spawns - observed_spawns), key=_spawn_sort_key)
+    censored_alive = expected
+    total_attempts = len(debug_rows) + censored_alive
+    observed_success = sum(1 for r in debug_rows if classify_test_outcome(r) == 'success')
+    observed_fail = len(debug_rows) - observed_success
+    out = {
+        'enabled': True,
+        'likely_freerun': True,
+        'source': source,
+        'confidence': confidence,
+        'expected_live_cars': expected,
+        'censored_alive_count': censored_alive,
+        'observed_terminal_rows': len(debug_rows),
+        'observed_unique_spawns': len(observed_spawns),
+        'known_spawn_count': len(known_spawns),
+        'historical_eval_n_median': int(round(pctl(eval_ns, 50))) if eval_ns else 0,
+        'historical_eval_n_max': max(eval_ns) if eval_ns else 0,
+        'history_sessions_scanned': history.get('sessions_scanned', 0),
+        'raw_generations': raw_gens,
+        'missing_spawn_names': missing_spawn_names,
+        'missing_spawn_count': max(0, expected - len(observed_spawns)),
+        'total_attempts_with_censored': total_attempts,
+        'observed_success_count': observed_success,
+        'observed_fail_count': observed_fail,
+        'success_rate_lower': sdiv(observed_success * 100.0, total_attempts),
+        'success_rate_observed_terminal': sdiv(observed_success * 100.0, len(debug_rows)),
+        'success_rate_upper_if_censored_alive_success': sdiv((observed_success + censored_alive) * 100.0, total_attempts),
+        'terminal_row_rate': sdiv(len(debug_rows) * 100.0, total_attempts),
+        'censored_rate': sdiv(censored_alive * 100.0, total_attempts),
+    }
+    out.update(cycle_info)
+    return out
+
+def build_synthetic_summary_from_debug(debug_rows, mode, summary_meta=None):
     """Build Summary-like rows from Fitness_Debug when Summary CSV is missing/empty."""
     if not debug_rows:
         return [], [], {}
@@ -45,11 +362,39 @@ def build_synthetic_summary_from_debug(debug_rows, mode):
         debug_copy.append(rr)
         by_gen[analysis_gen].append(rr)
 
+    censoring = infer_freerun_censoring(debug_copy, mode, summary_meta=summary_meta)
+    if censoring.get('enabled'):
+        spawn_cycle_by_name = {
+            item.get('spawn'): item
+            for item in censoring.get('spawn_cycle_stats', [])
+            if item.get('spawn')
+        }
+        censored_age_estimates = list(censoring.get('censored_age_estimates_s', []) or [])
+        for idx, rr in enumerate(debug_copy):
+            rr['free_run_censored_alive_count'] = censoring.get('censored_alive_count', 0)
+            rr['free_run_expected_live_cars'] = censoring.get('expected_live_cars', 0)
+            rr['free_run_total_attempts_with_censored'] = censoring.get('total_attempts_with_censored', len(debug_copy))
+            rr['free_run_session_elapsed_estimate_s'] = censoring.get('session_elapsed_estimate_s', 0.0)
+            rr['free_run_censored_age_mean_s'] = censoring.get('censored_age_mean_s', 0.0)
+            rr['free_run_censored_age_p50_s'] = censoring.get('censored_age_p50_s', 0.0)
+            rr['free_run_censored_age_p90_s'] = censoring.get('censored_age_p90_s', 0.0)
+            spawn_cycle = spawn_cycle_by_name.get(rr.get('spawn', ''), {})
+            if spawn_cycle:
+                rr['free_run_spawn_terminal_count'] = spawn_cycle.get('terminal_count', 0)
+                rr['free_run_spawn_last_terminal_elapsed_est_s'] = spawn_cycle.get('last_terminal_elapsed_est_s', 0.0)
+                rr['free_run_spawn_censored_age_est_s'] = spawn_cycle.get('censored_age_est_s', 0.0)
+                rr['free_run_spawn_death_period_p50_s'] = spawn_cycle.get('death_period_est_p50_s', 0.0)
+            if idx == 0:
+                rr['free_run_censored_age_estimates'] = censored_age_estimates
+
     include_test_kpis = mode in ('test', 'traintest')
     summary_rows = []
+    last_gen = max(by_gen.keys()) if by_gen else 0
     for gen in sorted(by_gen):
         rows = by_gen[gen]
         n = len(rows)
+        censored_count = censoring.get('censored_alive_count', 0) if gen == last_gen else 0
+        total_n = n + censored_count
         best_row = max(rows, key=lambda r: r.get('fit', 0.0))
         deaths = Counter(r.get('death', '') or 'UNKNOWN' for r in rows)
         pop_death, pop_count = deaths.most_common(1)[0] if deaths else ('UNKNOWN', 0)
@@ -61,7 +406,14 @@ def build_synthetic_summary_from_debug(debug_rows, mode):
             'best_death': best_row.get('death', ''),
             'pop_death': pop_death,
             'pop_count': pop_count,
-            'eval_n': n,
+            'eval_n': total_n,
+            'observed_terminal_count': n,
+            'censored_count': censored_count,
+            'censored_age_mean_s': censoring.get('censored_age_mean_s', 0.0) if censored_count else 0.0,
+            'censored_age_p50_s': censoring.get('censored_age_p50_s', 0.0) if censored_count else 0.0,
+            'censored_age_p90_s': censoring.get('censored_age_p90_s', 0.0) if censored_count else 0.0,
+            'censored_age_max_s': censoring.get('censored_age_max_s', 0.0) if censored_count else 0.0,
+            'session_elapsed_estimate_s': censoring.get('session_elapsed_estimate_s', 0.0) if censored_count else 0.0,
             'source_phase': mode,
             'synthetic_from_debug': True,
             'synthetic_source': 'Fitness_Debug.csv',
@@ -77,16 +429,19 @@ def build_synthetic_summary_from_debug(debug_rows, mode):
             )
             fail_early_count = outcomes.get('fail_time', 0)
             fail_hard_count = max(0, fail_count - fail_collision_count - fail_early_count)
-            wilson_lo, _ = wilson_ci(success_count, n)
+            wilson_lo, _ = wilson_ci(success_count, total_n)
             rec.update({
                 'success_count': success_count,
                 'fail_count': fail_count,
                 'fail_hard_count': fail_hard_count,
                 'fail_early_count': fail_early_count,
                 'fail_collision_count': fail_collision_count,
-                'success_rate': sdiv(success_count * 100.0, n),
-                'fail_rate': sdiv(fail_count * 100.0, n),
-                'hard_fail_rate': sdiv(fail_hard_count * 100.0, n),
+                'success_rate': sdiv(success_count * 100.0, total_n),
+                'success_rate_observed': sdiv(success_count * 100.0, n),
+                'success_rate_upper': sdiv((success_count + censored_count) * 100.0, total_n),
+                'fail_rate': sdiv(fail_count * 100.0, total_n),
+                'fail_rate_observed': sdiv(fail_count * 100.0, n),
+                'hard_fail_rate': sdiv(fail_hard_count * 100.0, total_n),
                 'score': wilson_lo * 100.0,
                 'outcome_success': outcomes.get('success', 0),
                 'outcome_fail_death': outcomes.get('fail_death', 0),
@@ -104,6 +459,7 @@ def build_synthetic_summary_from_debug(debug_rows, mode):
         'raw_generations': unique_raw,
         'gen_map': [{'raw': raw, 'synthetic': raw_to_gen[raw]} for raw in unique_raw],
         'includes_test_kpis': include_test_kpis,
+        'freerun_censoring': censoring,
     }
     return summary_rows, debug_copy, info
 
@@ -125,8 +481,17 @@ def save_reconstructed_summary_csv(path, rows):
             'Exito',
             'Fracaso',
             'SuccessRate',
+            'SuccessRateObservado',
+            'SuccessRateMaxCensurados',
             'FailRate',
             'N',
+            'TerminadosObservados',
+            'CensuradosVivos',
+            'EdadCensuradaMediaEst_s',
+            'EdadCensuradaP50Est_s',
+            'EdadCensuradaP90Est_s',
+            'EdadCensuradaMaxEst_s',
+            'TiempoSesionEst_s',
             'FracasoDuro',
             'FracasoTemprano',
             'FracasoColision',
@@ -155,8 +520,17 @@ def save_reconstructed_summary_csv(path, rows):
                     int(r.get('success_count', 0)),
                     int(r.get('fail_count', 0)),
                     f'{r.get("success_rate", 0.0):.6f}',
+                    f'{r.get("success_rate_observed", r.get("success_rate", 0.0)):.6f}',
+                    f'{r.get("success_rate_upper", r.get("success_rate", 0.0)):.6f}',
                     f'{r.get("fail_rate", 0.0):.6f}',
                     int(r.get('eval_n', 0)),
+                    int(r.get('observed_terminal_count', r.get('success_count', 0) + r.get('fail_count', 0))),
+                    int(r.get('censored_count', 0)),
+                    f'{r.get("censored_age_mean_s", 0.0):.6f}',
+                    f'{r.get("censored_age_p50_s", 0.0):.6f}',
+                    f'{r.get("censored_age_p90_s", 0.0):.6f}',
+                    f'{r.get("censored_age_max_s", 0.0):.6f}',
+                    f'{r.get("session_elapsed_estimate_s", 0.0):.6f}',
                     int(r.get('fail_hard_count', 0)),
                     int(r.get('fail_early_count', 0)),
                     int(r.get('fail_collision_count', 0)),
@@ -170,6 +544,44 @@ def save_reconstructed_summary_csv(path, rows):
                 '|'.join(str(x) for x in r.get('debug_raw_generations', [])),
             ]
             writer.writerow(row)
+    return path
+
+def save_freerun_spawn_cycles_csv(path, censoring):
+    rows = list((censoring or {}).get('spawn_cycle_stats', []) or [])
+    if not rows:
+        return ''
+    headers = [
+        'Spawn',
+        'TerminalesObservados',
+        'VidaTerminalSumaEst_s',
+        'VidaTerminalMedia_s',
+        'VidaTerminalP50_s',
+        'VidaTerminalP90_s',
+        'UltimaMuerteElapsedEst_s',
+        'EdadVivoCensuradoEst_s',
+        'PeriodoMuerteP50Est_s',
+        'MuertesPorHoraEst',
+        'Estado',
+        'Confianza',
+    ]
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        for r in rows:
+            writer.writerow([
+                r.get('spawn', ''),
+                int(r.get('terminal_count', 0)),
+                f'{r.get("terminal_lifetime_sum_s", 0.0):.6f}',
+                f'{r.get("terminal_lifetime_mean_s", 0.0):.6f}',
+                f'{r.get("terminal_lifetime_p50_s", 0.0):.6f}',
+                f'{r.get("terminal_lifetime_p90_s", 0.0):.6f}',
+                f'{r.get("last_terminal_elapsed_est_s", 0.0):.6f}',
+                f'{r.get("censored_age_est_s", 0.0):.6f}',
+                f'{r.get("death_period_est_p50_s", 0.0):.6f}',
+                f'{r.get("death_rate_per_hour_est", 0.0):.6f}',
+                r.get('status', ''),
+                r.get('confidence', ''),
+            ])
     return path
 
 def reindex_generations_for_analysis(summary_rows, debug_rows):
@@ -237,10 +649,62 @@ def report_generation_normalization(R, info):
     else:
         R.p('  Debug original:   sin datos')
 
+def report_freerun_axis(R, censoring):
+    if not (censoring or {}).get('enabled'):
+        return
+    R.p(f'\n-- Eje de Analisis FreeRun --')
+    R.p('  Generaciones:     no aplicable; Fitness_Debug mantiene gen 0/1 constante en FreeRun.')
+    R.p('  Eje usado:        sesion completa, eventos terminales, spawnpoints y vivos censurados.')
+    R.p(
+        f'  Sesion est.:      {censoring.get("session_elapsed_estimate_s", 0.0):.2f}s '
+        f'(aprox. por acumulado maximo de lifetimes terminales por spawn)'
+    )
+    R.p(
+        f'  Terminales/vivos: {censoring.get("observed_terminal_rows", 0)} / '
+        f'{censoring.get("censored_alive_count", 0)} censurados '
+        f'(intentos~{censoring.get("total_attempts_with_censored", 0)})'
+    )
+    R.p(
+        f'  Edad vivos est.:  media={censoring.get("censored_age_mean_s", 0.0):.2f}s, '
+        f'P50={censoring.get("censored_age_p50_s", 0.0):.2f}s, '
+        f'P90={censoring.get("censored_age_p90_s", 0.0):.2f}s, '
+        f'max={censoring.get("censored_age_max_s", 0.0):.2f}s'
+    )
+    R.p(
+        '  Limitacion:       no se exporta espera de respawn ni bloqueo de spawn; '
+        'las edades vivas son estimaciones, no lifetimes cerrados.'
+    )
+    top_cycles = [
+        x for x in censoring.get('spawn_cycle_stats', [])
+        if x.get('terminal_count', 0) > 0
+    ][:10]
+    if top_cycles:
+        R.p('  Top spawns por ciclos terminales:')
+        for item in top_cycles:
+            R.p(
+                f'    {str(item.get("spawn", "-")).replace("TargetPoint", "TP")}: '
+                f'term={item.get("terminal_count", 0)}, '
+                f'periodoP50~{item.get("death_period_est_p50_s", 0.0):.1f}s, '
+                f'vivoEst~{item.get("censored_age_est_s", 0.0):.1f}s, '
+                f'muertes/h~{item.get("death_rate_per_hour_est", 0.0):.1f}'
+            )
+
 def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stuck_info=None, stop_stuck_info=None):
     insights = []
+    freerun = is_freerun_analysis(summary_rows=summary_rows, debug_rows=dbg_rows)
 
-    if summary_rows:
+    if freerun:
+        censored = max(
+            [int(num(r.get('free_run_censored_alive_count', 0), 0.0)) for r in (dbg_rows or [])] or
+            [int(num(r.get('censored_count', 0), 0.0)) for r in (summary_rows or [])] or
+            [0]
+        )
+        insights.append(
+            'FreeRun detectado: no interpretar la generacion 0/1 como evolucion; '
+            f'el eje valido es sesion, eventos terminales y spawnpoints (vivos censurados={censored}).'
+        )
+
+    if summary_rows and not freerun:
         gens = [r.get('gen', 0) for r in summary_rows]
         means = [r.get('mean', 0.0) for r in summary_rows]
         times = [r.get('time', 0.0) for r in summary_rows]
@@ -771,7 +1235,7 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
                         f'StopCtxP50={top_spawn.get("stop_ctx_p50", 0.0):.1f}%, FitMed={top_spawn.get("fit_med", 0.0):.1f}).'
                     )
                 top_gen = (yield_stuck_info.get('gens') or [{}])[0]
-                if top_gen.get('gen', 0) > 0:
+                if not freerun and top_gen.get('gen', 0) > 0:
                     insights.append(
                         f'Generacion mas afectada por atasco-ceda: G{top_gen.get("gen", 0)} '
                         f'(Cand={top_gen.get("n", 0)}, TF={top_gen.get("tf_n", 0)}, '
@@ -811,7 +1275,7 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
                         f'StopCtxP50={top_spawn.get("stop_ctx_p50", 0.0):.1f}%, FitMed={top_spawn.get("fit_med", 0.0):.1f}).'
                     )
                 top_gen = (stop_stuck_info.get('gens') or [{}])[0]
-                if top_gen.get('gen', 0) > 0:
+                if not freerun and top_gen.get('gen', 0) > 0:
                     insights.append(
                         f'Generacion mas afectada por atasco-stop: G{top_gen.get("gen", 0)} '
                         f'(Cand={top_gen.get("n", 0)}, TF={top_gen.get("tf_n", 0)}, '
@@ -883,6 +1347,12 @@ def report_external_ai_brief(
     test_summary_rows=0,
 ):
     """Top-level report brief for readers that do not inspect the CSV files."""
+    freerun = is_freerun_analysis(
+        summary_rows=summary_rows,
+        debug_rows=debug_rows,
+        summary_meta=summary_meta,
+        debug_scope=debug_scope,
+    )
     R.p(f'{"="*76}')
     R.p('  RESUMEN EJECUTIVO PARA IA EXTERNA')
     R.p(f'{"="*76}')
@@ -893,6 +1363,8 @@ def report_external_ai_brief(
     add_kv(R, 'Fecha de analisis', datetime.now().strftime('%d/%m/%Y %H:%M'))
     add_kv(R, 'Modo global detectado', detected_info.get('mode', '-'))
     add_kv(R, 'Motivo de deteccion', detected_info.get('reason', '-'))
+    if freerun:
+        add_kv(R, 'Eje analitico', 'FreeRun: sesion, eventos terminales, spawnpoints y censura viva')
     add_kv(R, 'Summary usado', os.path.basename(SUMMARY_FILE) if SUMMARY_FILE else '-')
     add_kv(R, 'Debug usado', os.path.basename(DEBUG_FILE))
     add_kv(R, 'Training/Test Summary filas', f'{train_summary_rows}/{test_summary_rows}')
@@ -902,6 +1374,21 @@ def report_external_ai_brief(
             'Summary reconstruido',
             f'{summary_meta.get("synthetic_rows", len(summary_rows))} fila(s) desde Fitness_Debug.csv',
         )
+        censoring = summary_meta.get('freerun_censoring', {})
+        if censoring.get('enabled'):
+            add_kv(
+                R,
+                'FreeRun censurado',
+                f'{fmt_int(censoring.get("censored_alive_count", 0))} vivos estimados; '
+                f'total intentos~{fmt_int(censoring.get("total_attempts_with_censored", 0))}',
+            )
+            add_kv(
+                R,
+                'FreeRun edades vivas est.',
+                f'P50={censoring.get("censored_age_p50_s", 0.0):.1f}s; '
+                f'P90={censoring.get("censored_age_p90_s", 0.0):.1f}s; '
+                f'max={censoring.get("censored_age_max_s", 0.0):.1f}s',
+            )
 
     schema = debug_rows[0].get('_schema', 'unknown') if debug_rows else detect_debug_schema(debug_meta.get('mapped_keys', []))
     mapped_summary = len(summary_meta.get('mapped_keys', []))
@@ -918,22 +1405,28 @@ def report_external_ai_brief(
     R.p(f'\n-- Cobertura y Validez de Datos --')
     status = data_coherence.get('status', 'ok').upper() if data_coherence else 'UNKNOWN'
     add_kv(R, 'Estado coherencia', status)
-    add_kv(
-        R,
-        'Summary filas/gens',
-        f'{data_coherence.get("summary_rows", 0)}/{data_coherence.get("summary_gens", 0)} '
-        f'({data_coherence.get("summary_gen_min", 0)}..{data_coherence.get("summary_gen_max", 0)})'
-        if data_coherence else '-',
-    )
-    add_kv(
-        R,
-        'Debug filas/gens',
-        f'{data_coherence.get("debug_rows", 0)}/{data_coherence.get("debug_gens", 0)} '
-        f'({data_coherence.get("debug_gen_min", 0)}..{data_coherence.get("debug_gen_max", 0)})'
-        if data_coherence else '-',
-    )
+    if freerun:
+        add_kv(R, 'Summary snapshot', f'{data_coherence.get("summary_rows", 0) if data_coherence else 0} fila agregada FreeRun')
+        add_kv(R, 'Debug terminales', fmt_int(data_coherence.get('debug_rows', 0) if data_coherence else 0))
+    else:
+        add_kv(
+            R,
+            'Summary filas/gens',
+            f'{data_coherence.get("summary_rows", 0)}/{data_coherence.get("summary_gens", 0)} '
+            f'({data_coherence.get("summary_gen_min", 0)}..{data_coherence.get("summary_gen_max", 0)})'
+            if data_coherence else '-',
+        )
+        add_kv(
+            R,
+            'Debug filas/gens',
+            f'{data_coherence.get("debug_rows", 0)}/{data_coherence.get("debug_gens", 0)} '
+            f'({data_coherence.get("debug_gen_min", 0)}..{data_coherence.get("debug_gen_max", 0)})'
+            if data_coherence else '-',
+        )
     if data_coherence:
-        if data_coherence.get('summary_gens', 0) > 0:
+        if freerun:
+            add_kv(R, 'Cobertura gens Debug', 'n/a en FreeRun')
+        elif data_coherence.get('summary_gens', 0) > 0:
             add_kv(R, 'Cobertura gens Debug', fmt_pct_value(data_coherence.get('debug_gen_coverage_pct', 0.0), 1))
         else:
             add_kv(R, 'Cobertura gens Debug', 'n/a (Summary sin generaciones)')
@@ -965,7 +1458,9 @@ def report_external_ai_brief(
             f'gens {short_list(debug_scope.get("excluded_incomplete_generations", []), 12)}',
     )
     if gen_norm_info:
-        if gen_norm_info.get('summary_count', 0) > 0:
+        if freerun:
+            add_kv(R, 'Generaciones Summary', 'n/a en FreeRun (snapshot reconstruido)')
+        elif gen_norm_info.get('summary_count', 0) > 0:
             add_kv(
                 R,
                 'Generaciones Summary',
@@ -974,7 +1469,9 @@ def report_external_ai_brief(
             )
         else:
             add_kv(R, 'Generaciones Summary', 'sin datos')
-        if gen_norm_info.get('debug_count', 0) > 0:
+        if freerun:
+            add_kv(R, 'Generaciones Debug', 'n/a en FreeRun (Fitness_Debug usa gen 0/1 constante)')
+        elif gen_norm_info.get('debug_count', 0) > 0:
             add_kv(
                 R,
                 'Generaciones Debug',
@@ -996,6 +1493,38 @@ def report_external_ai_brief(
     if summary_meta.get('synthetic_from_debug'):
         R.p('  - El Summary CSV no tenia filas utiles; se ha reconstruido un Summary equivalente desde Fitness_Debug.')
         R.p('  - Las metricas de acierto/fallo reconstruidas usan las reglas locales de classify_test_outcome.')
+        censoring = summary_meta.get('freerun_censoring', {})
+        if censoring.get('enabled'):
+            R.p(
+                '  - FreeRun exporta solo coches terminados/muertos; se anaden vivos censurados '
+                f'estimados ({censoring.get("censored_alive_count", 0)}) para tiempo/aciertos.'
+            )
+            R.p(
+                f'  - Tiempo transcurrido FreeRun estimado por ciclos de spawn: '
+                f'{censoring.get("session_elapsed_estimate_s", 0.0):.2f}s; '
+                f'edad vivos censurados P50/P90/max: '
+                f'{censoring.get("censored_age_p50_s", 0.0):.2f}/'
+                f'{censoring.get("censored_age_p90_s", 0.0):.2f}/'
+                f'{censoring.get("censored_age_max_s", 0.0):.2f}s.'
+            )
+            R.p(
+                f'  - Acierto FreeRun como rango: {censoring.get("success_rate_lower", 0.0):.2f}% '
+                f'a {censoring.get("success_rate_upper_if_censored_alive_success", 0.0):.2f}% '
+                f'(confianza {censoring.get("confidence", "-")}, fuente: {censoring.get("source", "-")}).'
+            )
+            top_cycles = [
+                x for x in censoring.get('spawn_cycle_stats', [])
+                if x.get('terminal_count', 0) > 0
+            ][:5]
+            if top_cycles:
+                R.p('  - Spawns con mas ciclos terminales observados:')
+                for item in top_cycles:
+                    R.p(
+                        f'    {str(item.get("spawn", "-")).replace("TargetPoint", "TP")}: '
+                        f'{item.get("terminal_count", 0)} terminales, '
+                        f'periodo P50~{item.get("death_period_est_p50_s", 0.0):.1f}s, '
+                        f'vivo cens.~{item.get("censored_age_est_s", 0.0):.1f}s.'
+                    )
     elif not summary_rows:
         R.p('  - No hay Summary seleccionado; la lectura de generacion/convergencia queda limitada.')
         if MODE == 'test':
@@ -1015,23 +1544,38 @@ def report_external_ai_brief(
         slope_mean = trend_slope([r.get('gen', i + 1) for i, r in enumerate(summary_rows)], means)
         tail_n = min(50, max(1, n // 3)) if n >= 3 else n
         tail = summary_rows[-tail_n:] if tail_n else []
-        add_kv(R, 'Generaciones analizadas', fmt_int(n))
-        add_kv(R, 'BestFit max', f'{br.get("best", 0.0):.2f} (gen {br.get("gen", 0)})')
-        add_kv(R, 'MeanFit max/min', f'{mr.get("mean", 0.0):.2f} / {wr.get("mean", 0.0):.2f}')
-        add_kv(R, 'MeanFit medio/P50', f'{mean(means):.2f} / {pctl(means, 50):.2f}')
-        add_kv(R, 'MeanFit tendencia', f'{slope_mean:+.4f} por gen normalizada')
-        add_kv(R, 'Tiempo medio/P50', f'{mean(times):.2f}s / {pctl(times, 50):.2f}s')
-        if tail:
-            add_kv(R, f'Ultimas {tail_n} gens', f'MeanFit {mean([r.get("mean", 0.0) for r in tail]):.2f}; Tiempo {mean([r.get("time", 0.0) for r in tail]):.2f}s')
+        if freerun:
+            add_kv(R, 'Snapshot reconstruido', f'{fmt_int(n)} fila agregada desde eventos terminales')
+            add_kv(R, 'BestFit terminal observado', f'{br.get("best", 0.0):.2f}')
+            add_kv(R, 'MeanFit terminal/P50', f'{mean(means):.2f} / {pctl(means, 50):.2f}')
+            add_kv(R, 'Tiempo terminal medio/P50', f'{mean(times):.2f}s / {pctl(times, 50):.2f}s')
+        else:
+            add_kv(R, 'Generaciones analizadas', fmt_int(n))
+            add_kv(R, 'BestFit max', f'{br.get("best", 0.0):.2f} (gen {br.get("gen", 0)})')
+            add_kv(R, 'MeanFit max/min', f'{mr.get("mean", 0.0):.2f} / {wr.get("mean", 0.0):.2f}')
+            add_kv(R, 'MeanFit medio/P50', f'{mean(means):.2f} / {pctl(means, 50):.2f}')
+            add_kv(R, 'MeanFit tendencia', f'{slope_mean:+.4f} por gen normalizada')
+            add_kv(R, 'Tiempo medio/P50', f'{mean(times):.2f}s / {pctl(times, 50):.2f}s')
+            if tail:
+                add_kv(R, f'Ultimas {tail_n} gens', f'MeanFit {mean([r.get("mean", 0.0) for r in tail]):.2f}; Tiempo {mean([r.get("time", 0.0) for r in tail]):.2f}s')
         test_stats = summarize_test_results(summary_rows)
         if test_stats:
-            add_kv(
-                R,
-                'Test acierto global',
-                f'{test_stats["success_rate"]:.2f}% '
-                f'({test_stats["total_success"]}/{test_stats["total_n"]}, '
-                f'IC95 {test_stats["wilson_lo"]:.2f}-{test_stats["wilson_hi"]:.2f}%)',
-            )
+            if test_stats.get('total_censored', 0) > 0:
+                add_kv(
+                    R,
+                    'Test acierto global',
+                    f'{test_stats["success_rate"]:.2f}-{test_stats["success_rate_upper"]:.2f}% '
+                    f'(obs {test_stats["total_success"]}/{test_stats["total_success"] + test_stats["total_fail"]}; '
+                    f'cens {test_stats["total_censored"]}; N~{test_stats["total_n"]})',
+                )
+            else:
+                add_kv(
+                    R,
+                    'Test acierto global',
+                    f'{test_stats["success_rate"]:.2f}% '
+                    f'({test_stats["total_success"]}/{test_stats["total_n"]}, '
+                    f'IC95 {test_stats["wilson_lo"]:.2f}-{test_stats["wilson_hi"]:.2f}%)',
+                )
             add_kv(R, 'Test acierto P50/desv', f'{test_stats["success_median"]:.2f}% / {test_stats["success_std"]:.2f} pp')
     else:
         R.p('  Summary: sin datos.')
@@ -1295,6 +1839,7 @@ def report_external_ai_brief(
     R.p('  - Test single-car 01/07: con MultiTestingMode desactivado puede existir Debug sin Summary multi-coche completo.')
     R.p('  - EndGeneration 01/07 limpia colas pendientes de stop/yield/crossing; no asumir bloqueo heredado entre generaciones.')
     R.p('  - FreeRun 03/07: si se activa IsFreeRunMode, hay coches por spawn con lifetime ilimitado; no leerlo como test estadistico normal sin Summary consistente.')
+    R.p('  - FreeRun censurado: Fitness_Debug solo exporta coches muertos/terminados; los vivos al cierre se estiman aparte y generan rango de acierto, no un exito cerrado.')
     R.p('  - Red 03/07: DistToStopLine se desvanece a 1.0 con ReleaseFadeAlpha tras liberar ForceStop; FirstSteerAfterRelease mide reaccion, no distancia persistente.')
     R.p('  - Stop/Semaforo/Yield 03/07: los umbrales pueden ser aprendidos desde muestras legales; STOP usa ventana dinamica antes de linea y tiempo minimo aprendido.')
     R.p('  - CreepingPenalty 03/07 solo aplica en semaforo/stop antes de linea; no atribuirlo a yield ni a comportamiento despues de cruzar la linea.')
@@ -1428,6 +1973,7 @@ def run_analysis_variant(
     train_summary_rows,
     test_summary_rows,
     csvs,
+    out_dir_override=None,
 ):
     global MODE, LABEL, SUMMARY_FILE, OUT_DIR
     MODE = mode
@@ -1453,8 +1999,13 @@ def run_analysis_variant(
 
     synthetic_summary_info = {}
     if not summary_rows and debug_rows:
-        summary_rows, debug_rows, synthetic_summary_info = build_synthetic_summary_from_debug(debug_rows, mode)
+        summary_rows, debug_rows, synthetic_summary_info = build_synthetic_summary_from_debug(
+            debug_rows,
+            mode,
+            summary_meta=summary_meta_template,
+        )
         if synthetic_summary_info.get('enabled'):
+            freerun_censoring = synthetic_summary_info.get('freerun_censoring', {})
             summary_meta_template = copy.deepcopy(summary_meta_template)
             summary_meta_template['synthetic_from_debug'] = True
             summary_meta_template['synthetic_source'] = synthetic_summary_info.get('source', 'Fitness_Debug.csv')
@@ -1462,15 +2013,25 @@ def run_analysis_variant(
             summary_meta_template['synthetic_debug_rows'] = synthetic_summary_info.get('debug_rows', 0)
             summary_meta_template['synthetic_includes_test_kpis'] = synthetic_summary_info.get('includes_test_kpis', False)
             summary_meta_template['synthetic_generation_map'] = synthetic_summary_info.get('gen_map', [])
+            summary_meta_template['freerun_censoring'] = freerun_censoring
             debug_scope['selected_total'] = len(debug_rows)
             debug_scope['summary_synthetic_from_debug'] = True
             debug_scope['summary_synthetic_rows'] = len(summary_rows)
+            debug_scope['freerun_censoring'] = freerun_censoring
             logging.info(
                 '[%s] Summary reconstruido desde Fitness_Debug: %d fila(s), %d registros Debug.',
                 mode.upper(),
                 len(summary_rows),
                 len(debug_rows),
             )
+            if freerun_censoring.get('enabled'):
+                logging.info(
+                    '[%s] FreeRun censurado: %d vivos estimados al cierre (%s, confianza %s).',
+                    mode.upper(),
+                    freerun_censoring.get('censored_alive_count', 0),
+                    freerun_censoring.get('source', '-'),
+                    freerun_censoring.get('confidence', '-'),
+                )
 
     data_coherence = analyze_data_coherence(mode, summary_rows, debug_rows, debug_scope)
     summary_rows_idx, debug_rows_idx, gen_norm_info = reindex_generations_for_analysis(summary_rows, debug_rows)
@@ -1484,7 +2045,7 @@ def run_analysis_variant(
         stop_stuck_info=stop_stuck_info,
     )
 
-    OUT_DIR = os.path.join(BASE_DIR, 'Analisis', f'{MODE}_{NOW}')
+    OUT_DIR = out_dir_override or os.path.join(BASE_DIR, 'Analisis', f'{MODE}_{NOW}')
     # Crear OUT_DIR solo si hay algo que guardar (evitar carpetas vacías)
     # Decidiremos crearla más abajo solo si existen archivos a copiar, se requieren mapas,
     # se copiarán SaveGames, o se van a generar gráficas.
@@ -1535,6 +2096,12 @@ def run_analysis_variant(
     summary_meta['discarded_rows'] = max(0, summary_meta.get('data_rows', 0) - len(summary_rows_idx))
     debug_meta['selected_rows'] = len(debug_rows_idx)
     debug_meta['discarded_rows'] = max(0, debug_meta.get('data_rows', 0) - debug_meta.get('loaded_rows', 0))
+    freerun_analysis = is_freerun_analysis(
+        summary_rows=summary_rows_idx,
+        debug_rows=debug_rows_idx,
+        summary_meta=summary_meta,
+        debug_scope=debug_scope,
+    )
 
     previous_sessions = collect_previous_sessions(MODE, SUMMARY_FILE, OUT_DIR, COMPARE_LIMIT)
 
@@ -1596,7 +2163,10 @@ def run_analysis_variant(
     R.p(f'  Modo global detectado: {detected_info.get("mode", "")}')
     R.p(f'  Modo de este informe:  {MODE}')
     R.p(f'  Motivo global:         {detected_info.get("reason", "-")}')
-    report_generation_normalization(R, gen_norm_info)
+    if freerun_analysis:
+        report_freerun_axis(R, summary_meta.get('freerun_censoring', {}))
+    else:
+        report_generation_normalization(R, gen_norm_info)
     report_auto_insights(R, auto_insights)
 
     R.p(f'\n-- Resumen de Fases (Summary CSV) --')
@@ -1606,11 +2176,18 @@ def run_analysis_variant(
     report_summary(R, summary_rows_idx)
     
     # NUEVOS ANÁLISIS AVANZADOS
-    if summary_rows_idx:
+    if summary_rows_idx and not freerun_analysis:
         report_convergence_analysis(R, summary_rows_idx)
         report_prediction_analysis(R, summary_rows_idx)
+    elif freerun_analysis:
+        R.p(f'\n-- Convergencia / Prediccion --')
+        R.p('  No aplicable en FreeRun: la generacion se mantiene constante y no representa evolucion temporal.')
     
-    report_summary_deep(R, summary_rows_idx)
+    if not freerun_analysis:
+        report_summary_deep(R, summary_rows_idx)
+    else:
+        R.p(f'\n-- Summary Profundo --')
+        R.p('  Omitido en FreeRun: las tablas por generacion serian artificiales; usar Debug, spawns y ciclos FreeRun.')
     report_debug(R, debug_rows_idx)
     
     # NUEVO: Análisis de Diversidad y Componentes
@@ -1620,11 +2197,21 @@ def run_analysis_variant(
     
     report_debug_deep(R, debug_rows_idx, yield_stuck_info=yield_stuck_info, stop_stuck_info=stop_stuck_info)
     report_quicksummary(R, summary_rows_idx, debug_rows_idx)
-    report_session_comparison(R, summary_rows_idx, debug_rows_idx, previous_sessions)
+    if not freerun_analysis:
+        report_session_comparison(R, summary_rows_idx, debug_rows_idx, previous_sessions)
+    else:
+        R.p(f'\n-- Comparativa entre Sesiones --')
+        R.p('  Omitida como ranking generacional: FreeRun no es comparable directamente con tests por generaciones.')
 
     R.p(f'\n{"="*76}')
     R.p(f'  Analisis completado: {LABEL}')
-    R.p(f'  Summary: {len(summary_rows_idx)} gens | Debug: {len(debug_rows_idx)} registros')
+    if freerun_analysis:
+        R.p(
+            f'  FreeRun: {len(debug_rows_idx)} terminales | '
+            f'{summary_meta.get("freerun_censoring", {}).get("censored_alive_count", 0)} vivos censurados estimados'
+        )
+    else:
+        R.p(f'  Summary: {len(summary_rows_idx)} gens | Debug: {len(debug_rows_idx)} registros')
     if mapping_path:
         R.p(f'  Mapeo generaciones: {mapping_path}')
     else:
@@ -1655,6 +2242,15 @@ def run_analysis_variant(
         R.p(f'  Origen: Fitness_Debug.csv')
         R.p(f'  Archivo: {reconstructed_summary_path}')
         R.p('  Nota: contiene metricas equivalentes al Summary, derivadas de los registros Debug seleccionados.')
+        censoring = summary_meta.get('freerun_censoring', {})
+        if censoring.get('enabled'):
+            cycles_path = save_freerun_spawn_cycles_csv(
+                os.path.join(OUT_DIR, 'Freerun_Ciclos_Spawn.csv'),
+                censoring,
+            )
+            if cycles_path:
+                R.p(f'  Ciclos FreeRun: {cycles_path}')
+                R.p('  Nota: las edades censuradas por spawn son estimaciones; el Debug no exporta el cierre exacto.')
     
     R.p(f'  Carpeta: {os.path.abspath(OUT_DIR)}')
     R.p(f'{"="*76}\n')
@@ -1686,7 +2282,7 @@ def run_analysis_variant(
     figs = []
     if ENABLE_PLOTS:
         logging.info('\n-- Generando graficas (%s) --', MODE)
-        if mode in ('test', 'traintest'):
+        if mode in ('test', 'traintest') and not freerun_analysis:
             figs += plot_test_model_dashboard(
                 summary_rows_idx,
                 previous_sessions=previous_sessions,

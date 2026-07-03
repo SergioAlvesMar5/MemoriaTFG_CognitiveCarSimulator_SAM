@@ -578,6 +578,25 @@ def select_debug_rows_by_mode(rows, mode):
     }
     return selected, info
 
+def is_freerun_analysis(summary_rows=None, debug_rows=None, summary_meta=None, debug_scope=None):
+    """Return True when data comes from FreeRun terminal-only export."""
+    summary_meta = summary_meta or {}
+    debug_scope = debug_scope or {}
+    if (summary_meta.get('freerun_censoring') or {}).get('enabled'):
+        return True
+    if (debug_scope.get('freerun_censoring') or {}).get('enabled'):
+        return True
+    for row in summary_rows or []:
+        if (
+            row.get('synthetic_from_debug')
+            and int(num(row.get('censored_count', 0), 0.0)) > 0
+        ):
+            return True
+    for row in debug_rows or []:
+        if int(num(row.get('free_run_censored_alive_count', 0), 0.0)) > 0:
+            return True
+    return False
+
 def align_debug_to_completed_summary(summary_rows, debug_rows, mode):
     """Exclude debug rows from generations not yet closed in the summary."""
     if mode not in ('train', 'test') or not summary_rows or not debug_rows:
@@ -2135,18 +2154,23 @@ def binary_metrics_from_row(r):
     """Devuelve metricas binarias derivadas por fila de summary."""
     succ = r.get('success_count', 0)
     fail = r.get('fail_count', 0)
+    censored = int(num(r.get('censored_count', 0), 0.0))
     n_counts = succ + fail
     n_row = r.get('eval_n', 0)
-    n = n_counts if n_counts > 0 else n_row
+    n = n_row if censored > 0 and n_row > 0 else (n_counts if n_counts > 0 else n_row)
     if n > 0:
-        success_rate = sdiv(succ * 100.0, n)
-        fail_rate = sdiv(fail * 100.0, n)
+        success_rate = r.get('success_rate', sdiv(succ * 100.0, n))
+        fail_rate = r.get('fail_rate', sdiv(fail * 100.0, n))
         lo, hi = wilson_ci(succ, n)
         return {
             'n': n,
             'n_counts': n_counts,
+            'censored_count': censored,
             'success_rate': success_rate,
+            'success_rate_observed': r.get('success_rate_observed', sdiv(succ * 100.0, n_counts)),
+            'success_rate_upper': r.get('success_rate_upper', sdiv((succ + censored) * 100.0, n)),
             'fail_rate': fail_rate,
+            'fail_rate_observed': r.get('fail_rate_observed', sdiv(fail * 100.0, n_counts)),
             'wilson_lo': lo * 100.0,
             'wilson_hi': hi * 100.0,
         }
@@ -2157,8 +2181,12 @@ def binary_metrics_from_row(r):
     return {
         'n': 0,
         'n_counts': 0,
+        'censored_count': censored,
         'success_rate': success_rate,
+        'success_rate_observed': success_rate,
+        'success_rate_upper': success_rate,
         'fail_rate': fail_rate,
+        'fail_rate_observed': fail_rate,
         'wilson_lo': 0.0,
         'wilson_hi': 0.0,
     }
