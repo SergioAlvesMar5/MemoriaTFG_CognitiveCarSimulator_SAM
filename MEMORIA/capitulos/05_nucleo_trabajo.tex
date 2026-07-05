@@ -70,7 +70,7 @@ La primera versión era deliberadamente simple. En la línea de pruebas inicial 
 
 \begin{table}[H]
 \centering
-\caption{Lectura práctica de los cálculos principales del fitness.}
+\caption{Lectura práctica de los cálculos principales del fitness.}%
 \label{tab:componentes-fitness}
 \begin{tabularx}{0.98\textwidth}{L{2.7cm}L{4.1cm}X}
 \toprule
@@ -91,7 +91,7 @@ El avance útil es el cálculo base. El coche recibe recompensa cuando se mueve 
 
 La prudencia frontal se introdujo porque el avance por sí solo generaba comportamientos agresivos. Si el coche circula demasiado rápido para el espacio que tiene delante, el fitness resta puntuación antes de que se produzca una colisión. Esto cambió la señal de aprendizaje: no se espera a que el fallo sea terminal, sino que se avisa al modelo durante la aproximación. La corrección de junio hizo este término más interpretable al evitar que la distancia frontal quedase sobredimensionada respecto a otros componentes.
 
-El centrado se calcula comparando sensores laterales. Si la diferencia entre ambos lados es grande, el coche probablemente está cerca de un borde o desalineado respecto a la zona válida. Lo importante no es buscar un centro geométrico perfecto, porque en cruces y rotondas la trayectoria puede cambiar, sino comprobar si la dirección elegida ayuda a corregir la desviación. Cuando el volante actúa en sentido contrario al necesario, el sistema penaliza esa corrección errónea y registra el acumulado para poder revisarlo en los CSV.
+El centrado se calcula comparando sensores laterales. Si la diferencia entre ambos lados es grande, el coche probablemente está cerca de un borde o desalineado respecto a la zona válida. Lo importante no es buscar un centro geométrico perfecto, porque en cruces y rotondas la trayectoria puede cambiar, sino comprobar si la dirección elegida ayuda a corregir la desviación. Cuando el volante actúa en sentido contrario al necesario, el sistema penaliza esa corrección errónea y registra el acumulado para poder revisarlo en los CSV\@.
 
 La señalización se añadió después, cuando el vehículo ya era capaz de circular de forma básica. Semáforos, stops y cedas comunican al controlador el tipo de control, la línea de parada y el estado de la zona de cruce. El fitness distingue tres situaciones: aproximarse demasiado rápido a una obligación de parada, esperar correctamente y reanudar la marcha cuando el cruce queda libre. Los bonus por maniobra correcta se exportan por separado para que no oculten una infracción grave. Esta separación fue clave al analizar las regresiones por \texttt{STOP\_VIOLATION}, porque permitió diferenciar cruzar la línea, agotar el tiempo de validación o quedarse bloqueado esperando.
 
