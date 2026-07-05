@@ -195,7 +195,9 @@ def parse_debug(path):
 
     def build_row(parts):
         t_idx = header_map.get('training')
+        trigger_idx = header_map.get('current_trigger')
         death_raw = parts[header_map.get('death', 5)].strip() if len(parts) > header_map.get('death', 5) else ''
+        current_trigger_raw = parts[trigger_idx].strip() if trigger_idx is not None and trigger_idx < len(parts) else ''
         row = {
             '_schema': schema_name,
             '_available_fields': available_fields,
@@ -299,6 +301,9 @@ def parse_debug(path):
             'car_overlap_penalty': to_num(parts, header_map.get('car_overlap_penalty'), float),
             'queue_wait_bonus': to_num(parts, header_map.get('queue_wait_bonus'), float),
             'first_steer_release_ticks': to_num(parts, header_map.get('first_steer_release_ticks'), int),
+            'current_trigger': current_trigger_raw,
+            'current_trigger_short': short_actor_name(current_trigger_raw, empty=''),
+            'current_trigger_kind': trigger_kind(current_trigger_raw),
             'training': parse_bool_token(parts[t_idx]) if t_idx is not None and t_idx < len(parts) else None,
         }
         row['stop_violation_subtype'] = stop_violation_subtype(death_raw)

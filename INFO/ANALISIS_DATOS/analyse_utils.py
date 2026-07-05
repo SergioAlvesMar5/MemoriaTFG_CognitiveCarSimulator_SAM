@@ -41,6 +41,48 @@ def normalize_header_token(s):
     norm = re.sub(r'(?<=[a-z])\d+$', '', norm)
     return norm
 
+def short_actor_name(value, empty='(sin actor)'):
+    """Compacta nombres largos de actores/objetos de Unreal para tablas."""
+    text = clean(str(value or ''))
+    if not text or text.lower() in ('none', 'null', 'nan'):
+        return empty
+    text = text.strip('"\'')
+    for sep in ('\\', '/', ':', '.'):
+        if sep in text:
+            text = text.split(sep)[-1]
+    text = text.strip('"\'')
+    replacements = (
+        ('BP_IntersectionTrigger', 'IT'),
+        ('BP_IntersectionBorder', 'Border'),
+        ('BP_Roundabout', 'Rnd'),
+        ('BP_Sign_Stop', 'Stop'),
+        ('BP_Sign_Yield', 'Yield'),
+        ('BP_TrafficLight', 'TL'),
+        ('BP_SpawnPoint', 'SP'),
+        ('TargetPoint', 'TP'),
+    )
+    for old, new in replacements:
+        text = text.replace(old, new)
+    text = re.sub(r'_C(_\d+)?$', r'\1', text)
+    text = re.sub(r'__+', '_', text).strip('_')
+    return text or empty
+
+def trigger_kind(value):
+    text = clean(str(value or '')).lower()
+    if not text or text in ('none', 'null', 'nan'):
+        return 'NONE'
+    if 'round' in text or 'rotond' in text:
+        return 'ROUNDABOUT'
+    if 'yield' in text or 'ceda' in text:
+        return 'YIELD'
+    if 'stop' in text:
+        return 'STOP'
+    if 'traffic' in text or 'semaforo' in text or 'light' in text:
+        return 'TRAFFIC_LIGHT'
+    if 'intersection' in text or 'trigger' in text:
+        return 'INTERSECTION'
+    return 'OTHER'
+
 def alias_lookup(norm_token, aliases):
     key = aliases.get(norm_token)
     if key:
@@ -93,6 +135,10 @@ def debug_field_available(rows, key):
 
 def detect_debug_schema(mapped_keys):
     keys = set(mapped_keys or [])
+    if 'current_trigger' in keys:
+        if {'car_overlap_penalty', 'queue_wait_bonus'} & keys:
+            return '2026-07-03-current-trigger-free-run'
+        return '2026-07-03-current-trigger'
     if {'b', 'c', 'd', 'e'} & keys:
         return 'legacy-components'
     diagnostics_0107 = {

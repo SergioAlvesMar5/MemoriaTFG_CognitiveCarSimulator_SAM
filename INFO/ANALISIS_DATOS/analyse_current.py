@@ -204,6 +204,11 @@ DEBUG_ALIASES = {
     'acumqueuewaitbonus': 'queue_wait_bonus',
     'debugacumqueuewaitbonus': 'queue_wait_bonus',
     'queuewaitbonus': 'queue_wait_bonus',
+    # contexto de interseccion/trigger al morir (03-07-2026+)
+    'currenttrigger': 'current_trigger',
+    'debugcurrenttrigger': 'current_trigger',
+    'triggeractual': 'current_trigger',
+    'currentintersectiontrigger': 'current_trigger',
     'ticksnormal': 't_norm',
     'tickstotal': 't_tot',
     # nuevas metricas de control (07-04-2026+)

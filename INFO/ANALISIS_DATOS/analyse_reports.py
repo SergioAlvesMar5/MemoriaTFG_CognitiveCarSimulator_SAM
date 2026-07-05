@@ -535,6 +535,7 @@ def report_debug(R, dbg):
     # Pre-agrupar para evitar escaneos repetidos O(n*G)
     by_gen = defaultdict(list)
     by_death = defaultdict(list)
+    by_trigger = defaultdict(list)
 
     # Por Spawn
     spawns = defaultdict(list)
@@ -542,6 +543,9 @@ def report_debug(R, dbg):
         by_gen[r['gen']].append(r)
         by_death[r['death']].append(r)
         spawns[r['spawn']].append(r)
+        trigger = r.get('current_trigger_short') or short_actor_name(r.get('current_trigger', ''), empty='')
+        if trigger:
+            by_trigger[trigger].append(r)
 
     R.p(f'\n-- Fitness por Spawn ({len(spawns)} spawns) --')
     hdr = f'  {"Spawn":>15s} | {"N":>5s} | {"Media":>10s} | {"Mediana":>10s} | {"Max":>10s} | {"P75":>10s} | {"%Neg":>5s} | {"tMed":>5s}'
@@ -639,6 +643,50 @@ def report_debug(R, dbg):
             'ANALYSE_TEST_MIN_TIME/ANALYSE_TEST_MIN_FITNESS/ANALYSE_TEST_USE_FITNESS '
             'si los valores editables de Unreal cambian.'
         )
+
+    if debug_field_available(dbg, 'current_trigger'):
+        if by_trigger:
+            R.p(f'\n-- CurrentTrigger / Intersecciones al Morir ({len(by_trigger)} triggers) --')
+            hdr = (
+                f'  {"Trigger":>18s} | {"N":>5s} | {"LAZY":>6s} | {"Legal":>6s} | '
+                f'{"Col":>6s} | {"RotCol":>6s} | {"FitMed":>10s} | {"tMed":>7s} | Muerte dominante'
+            )
+            R.p(hdr)
+            R.p(f'  {"-"*(len(hdr)-2)}')
+            trigger_rows = []
+            for trigger, rows_t in by_trigger.items():
+                n_t = len(rows_t)
+                legal_n = sum(1 for r in rows_t if death_family(r.get('death', '')) == 'VIOLATION')
+                collision_n = sum(1 for r in rows_t if is_collision_reason(r.get('death', '')))
+                round_collision_n = sum(1 for r in rows_t if collision_death_context(r) == 'COLLISION_ROUNDABOUT')
+                lazy_n = sum(1 for r in rows_t if is_lazy_reason(r.get('death', '')))
+                top_death, top_death_n = Counter(r.get('death', '') for r in rows_t).most_common(1)[0]
+                risk_score = legal_n + collision_n + lazy_n
+                trigger_rows.append((
+                    risk_score,
+                    n_t,
+                    trigger,
+                    lazy_n,
+                    legal_n,
+                    collision_n,
+                    round_collision_n,
+                    mean([r.get('fit', 0.0) for r in rows_t]),
+                    mean([r.get('time', 0.0) for r in rows_t]),
+                    top_death,
+                    top_death_n,
+                ))
+            for _, n_t, trigger, lazy_n, legal_n, collision_n, round_collision_n, fit_med, time_med, top_death, top_death_n in sorted(trigger_rows, reverse=True)[:min(TOP_ROWS, 15)]:
+                R.p(
+                    f'  {trigger:>18s} | {n_t:5d} | {sdiv(lazy_n*100.0, n_t):5.1f}% | '
+                    f'{sdiv(legal_n*100.0, n_t):5.1f}% | {sdiv(collision_n*100.0, n_t):5.1f}% | '
+                    f'{sdiv(round_collision_n*100.0, max(collision_n, 1)):5.1f}% | '
+                    f'{fit_med:10.1f} | {time_med:6.1f}s | '
+                    f'{short_death_reason(top_death)} ({top_death_n})'
+                )
+            R.p('  Nota: CurrentTrigger identifica el trigger/interseccion activo al morir; si falta, el coche no tenia trigger valido exportado.')
+        else:
+            R.p('\n-- CurrentTrigger / Intersecciones al Morir --')
+            R.p('  Columna detectada, pero sin valores validos en este lote.')
 
     # Componentes globales - usar agregados precomputados (mejora de performance)
     nd = len(dbg)
@@ -1404,6 +1452,7 @@ def report_program_updates_0107(R, dbg):
         has_overlap_penalty
         or has_queue_wait
         or (dbg[0].get('_schema') == '2026-07-01-overlap-penalty-queue-wait')
+        or str(dbg[0].get('_schema', '')).startswith('2026-07-03')
     )
     if not has_schema_0107:
         return
@@ -1493,8 +1542,10 @@ def report_program_updates_0307(R, dbg):
     debug_schema = dbg[0].get('_schema', '')
     looks_current = (
         debug_schema == '2026-07-01-overlap-penalty-queue-wait'
+        or str(debug_schema).startswith('2026-07-03')
         or debug_field_available(dbg, 'queue_wait_bonus')
         or debug_field_available(dbg, 'crossing_blocked_t')
+        or debug_field_available(dbg, 'current_trigger')
     )
     if not looks_current:
         return
@@ -1572,6 +1623,20 @@ def report_program_updates_0307(R, dbg):
             f'({reverse_rows}/{nd}), CorrectingWrong={correcting_wrong_total:.2f} '
             f'({correcting_wrong_rows}/{nd}).'
         )
+    if debug_field_available(dbg, 'current_trigger'):
+        trigger_counts = Counter(
+            r.get('current_trigger_short') or short_actor_name(r.get('current_trigger', ''), empty='')
+            for r in dbg
+        )
+        trigger_counts.pop('', None)
+        if trigger_counts:
+            top_trigger, top_n = trigger_counts.most_common(1)[0]
+            R.p(
+                f'  CurrentTrigger exportado: {len(trigger_counts)} triggers con datos; '
+                f'top={top_trigger} ({top_n}/{nd}).'
+            )
+        else:
+            R.p('  CurrentTrigger exportado, pero sin valores validos en este lote.')
 
 
 def report_debug_scope(R, info):
@@ -2991,7 +3056,12 @@ def save_json_snapshot(
     round_ticks_total = sum(r.get('round_ticks', 0.0) for r in dbg_rows)
     collision_stats = summarize_collision_deaths(dbg_rows)
     debug_schema = dbg_rows[0].get('_schema', '') if dbg_rows else ''
-    debug_schema_0107 = debug_schema == '2026-07-01-overlap-penalty-queue-wait'
+    debug_schema_0107 = (
+        debug_schema == '2026-07-01-overlap-penalty-queue-wait'
+        or str(debug_schema).startswith('2026-07-03')
+        or debug_field_available(dbg_rows, 'queue_wait_bonus')
+        or debug_field_available(dbg_rows, 'current_trigger')
+    )
     freerun_censored_rows = [r for r in summary_rows if int(num(r.get('censored_count', 0), 0.0)) > 0]
     freerun_censoring = {
         'enabled': bool(freerun_censored_rows),
@@ -3046,6 +3116,33 @@ def save_json_snapshot(
             'steer_gap_p50': pctl(steer_gap_vals, 50),
             'steer_gap_avg_abs_p50': pctl([r.get('steer_gap_avg_abs', 0.0) for r in rows_sp], 50),
         })
+    current_trigger_stats = []
+    if debug_field_available(dbg_rows, 'current_trigger'):
+        by_trigger = defaultdict(list)
+        for row in dbg_rows:
+            trigger = row.get('current_trigger_short') or short_actor_name(row.get('current_trigger', ''), empty='')
+            if trigger:
+                by_trigger[trigger].append(row)
+        for trigger, rows_tr in by_trigger.items():
+            ntr = len(rows_tr)
+            legal_n = sum(1 for r in rows_tr if death_family(r.get('death', '')) == 'VIOLATION')
+            collision_n = sum(1 for r in rows_tr if is_collision_reason(r.get('death', '')))
+            lazy_n = sum(1 for r in rows_tr if is_lazy_reason(r.get('death', '')))
+            top_death = Counter(r.get('death', '') for r in rows_tr).most_common(1)[0]
+            current_trigger_stats.append({
+                'trigger': trigger,
+                'kind': trigger_kind(rows_tr[0].get('current_trigger', '')),
+                'n': ntr,
+                'lazy_pct': sdiv(lazy_n * 100.0, ntr),
+                'legal_fail_pct': sdiv(legal_n * 100.0, ntr),
+                'collision_pct': sdiv(collision_n * 100.0, ntr),
+                'problem_pct': sdiv((lazy_n + legal_n + collision_n) * 100.0, ntr),
+                'fit_median': pctl([r.get('fit', 0.0) for r in rows_tr], 50),
+                'time_median': pctl([r.get('time', 0.0) for r in rows_tr], 50),
+                'top_death': top_death[0],
+                'top_death_count': top_death[1],
+            })
+        current_trigger_stats.sort(key=lambda x: (x['problem_pct'], x['n']), reverse=True)
     data = {
         'mode': MODE,
         'label': LABEL,
@@ -3067,6 +3164,7 @@ def save_json_snapshot(
         'yield_stuck_detection': yield_stuck or {},
         'stop_stuck_detection': stop_stuck or {},
         'auto_insights': auto_insights or [],
+        'current_trigger_stats': current_trigger_stats,
         'program_updates_0107': {
             'schema_detected': debug_schema,
             'single_car_test_mode_note': (

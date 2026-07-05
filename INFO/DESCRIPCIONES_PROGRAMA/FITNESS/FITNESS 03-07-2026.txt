@@ -224,6 +224,12 @@ Debug_Acum_CarOverlapPenalty float 0.0
 
 Debug_Acum_QueueWaitBonus float 0.0
 
+CarOverlapCount integer 0
+
+TimeInCarOverlap integer 0
+
+CarOverlapDeathThreshold float 0.0
+
 -----------------------------------------------------------------------------------------------------------------------------------------------------
 
 
@@ -237,7 +243,7 @@ EventGraph:
 
 BeginPlay:
 
-lo primero hay un Parent:BeginPlay, luego hay un CasttoBP_aicontroller de GetController. Del cast lo primero hay un isvalid?, si es así se setea AiController con el cast. Luego hay un setColor. Luego hay un Casttochaoswheeledvehiclemovementcomponent de vehiclemovementcomponent. Del cast se setea AsChaosWheeledVehicleMovementComponent. Luego, se setea NavPenaltyDeathThreshold como MaxVisionDistancedelAiController^2 / MaxSpeeddelAiController. 
+lo primero hay un Parent:BeginPlay, luego hay un CasttoBP_aicontroller de GetController. Del cast lo primero hay un isvalid?, si es así se setea AiController con el cast. Luego hay un setColor. Luego hay un Casttochaoswheeledvehiclemovementcomponent de vehiclemovementcomponent. Del cast se setea AsChaosWheeledVehicleMovementComponent. Luego, se setea NavPenaltyDeathThreshold como MaxVisionDistancedelAiController^2 / MaxSpeeddelAiController. Luego, se setea CarOverlapDeathThreshold como MaxVisionDistancedelAiController^2 / MaxSpeeddelAiController.
 
 Luego se setea LastLocation con GetActorLocation. Después de eso hay un SetTimerbyEvent, que tiene como opciones Time 1.0, y looping en True. Por último se setea CheckStuckTimerHandle como el returnvalue del SetTimerByEvent.
 
@@ -257,7 +263,14 @@ CheckStuck:
 
 Está conectada con el hilo rojo que sale del SetTimerbyEvent. 
 
-El flujo de este evento es: Branch cuya condition es IsDead, si es true hace un ClearandInvalidateTimerbyHandle(CheckStuckTimerHandle), si es false, time alived ++. Luego un Branch cuya condición es si time alived es mayor que 3. Si el Branch es false, setea TimeSinceLastMove como 0, setea WasInStopContextLastCheck como (ForceStopdelAiController) OR ((bIsTrafficLightActivedelAiController) AND ((TrafficLightStatedelAiController)<=0.5)), setea LastLocation como getactorlocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true). 
+El flujo de este evento es: Branch cuya condition es IsDead, si es true hace un ClearandInvalidateTimerbyHandle(CheckStuckTimerHandle), si es false, time alived ++. 
+
+Luego, hay un branch cuya condition es CarOverlapCount > 0. Si es false, setea TimeInCarOverlap como 0.0 y pasa directamente al branch de timealived.
+
+Si CarOverlapCount > 0 es true, hace un ++ de TimeInCarOverlap. Luego, un branch cuya condition es TimeInCarOverlap >= Truncate(CarOverlapDeathThreshold / MaxVisionDistance). Si es false, pasa directamente al branch de timealived. Si es true, setea Debug_DeathPenalty como TimeInCarOverlap y llama a KillCar(Cause = "OVERLAP_TIMEOUT").
+
+
+Tras las comprobaciones de overlap, hay un Branch cuya condición es si time alived es mayor que 3. Si el Branch es false, setea TimeSinceLastMove como 0, setea WasInStopContextLastCheck como (ForceStopdelAiController) OR ((bIsTrafficLightActivedelAiController) AND ((TrafficLightStatedelAiController)<=0.5)), setea LastLocation como getactorlocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true). 
 
 Si es true, primero pasa a un branch cuya condition es NOT(NOT(WasInStopContextLastCheck) AND (ForceStop OR (IsTrafficLightActive AND (TrafficLightState<=0.5)))), si es true pasa al branch A, si es false, hace un ++ de Debug_NumStopZonesEntered y luego pasa al Branch A.
 
@@ -271,7 +284,11 @@ Si B es true, pasa a un Branch (llamemosle D), cuya condición es: ((DistanceVec
 
 Si el branch D es True, hace un ++ de TimeSinceLastMove, y luego llama a ApplyLazyMovePenalty. 
 
-Por último hay un Branch (E) cuya condition es TimeSinceLastMove>=3, si es false setea WasInStopContextLastCheck, setea LastLocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true), si es true, setea Debug_DeathPenalty como LocalLazyPenaltydeloutput y llama a killcar cuya cause es "LAZY". 
+Por último hay un Branch (E) cuya condition es TimeSinceLastMove>=3, si es false setea WasInStopContextLastCheck, setea LastLocation y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true).
+
+si E es true, pasa a otro Branch (F) cuya condition es NavOverlapCount > 0. Si F es true, setea Debug_DeathPenalty como AccumNavPenalty y llama a killcar cuya cause es "NAV_VIOLATION".
+
+Si F es false, pasa a otro branch (G), cuya condition es CarOverlapCount > 0. Si G es true, setea Debug_DeathPenalty como LocalLazyPenaltydeloutput y llama a killcar cuya cause es "OVERLAP_TIMEOUT". Si G es false, setea Debug_DeathPenalty como LocalLazyPenaltydeloutput y llama a killcar cuya cause es "LAZY".
 
 Si el branch D es false, setea TimeSinceLastMove, WasInStopContextLastCheck, setea Last Location y llama a CheckNavViolation(SafeDelta = 1.0, bCountSeconds = true).
 
@@ -284,7 +301,7 @@ Lo primero hay un isvalid? de otheractor. Luego hay un CasttoBPIntersectionBorde
 
 Si A es false, pasa a un branch (llamemosle B) cuya condition es ActorHasTag=Semaforo del otheractor. Si es true, hace un casttoBPTrafficLight y del cast setea ActualTrafficLight.
 
-Si B es false, hace un CasttoBP_VehicleAI2(OtherActor), si el cast es válido, pasa a un Branch cuya condition es IsDead(cast) OR IsDead(Self). Si es true vacío, si es false, llama a ApplyCarOverlapPenalty(OtherCar=cast).
+Si B es false, hace un CasttoBP_VehicleAI2(OtherActor), si el cast es válido, primero hace un ++ de CarOverlapCount, luego pasa a un Branch cuya condition es IsDead(cast) OR IsDead(Self). Si es true vacío, si es false, llama a ApplyCarOverlapPenalty(OtherCar=cast).
 
 Si el cast de intersectionBorders es false, pasa a un branch cuya condition es (ActorHasTag=Obstaculo). Si es true llama a ApplyCollisionDeathPenalty con CollisionCause = ("COLLISION_WITH_" + getDisplayName de otherActor).
 
@@ -297,9 +314,11 @@ EventActorEndOverlap:
 
 Lo primero hay un CastToTrafficLight(OtherActor). Si el Cast es fallido, pasa al Branch de FueraDeCalle. Si el Cast es válido, pasa a un Branch cuya condition es casttotrafficlight == ActualTrafficLight. Si es true setea ActualTrafficLight como vacío y setea ForceStopdelAiController como False. 
 
-Ambos caminos del Branch, dan al Branch de FueraDeCalle, cuya condition es ActorHasTag("FueraDeCalle", OtherActor). Si el Branch es false, vacio, si es true setea NavOverlapCount como MAX(0, NavOverlapCount - 1).
+Ambos caminos del Branch del match, dan a un Sequence:
 
-Por último hay otro Branch cuya condition es NavOverlapCount == 0. Si es false vacío, si es true setea AccumNavPenalty como 0.0.
+Then 0: lo primero hay un Branch de FueraDeCalle, cuya condition es ActorHasTag("FueraDeCalle", OtherActor). Si el Branch es false, vacio, si es true setea NavOverlapCount como MAX(0, NavOverlapCount - 1). Luego, hay otro Branch cuya condition es NavOverlapCount == 0. Si es false vacío, si es true setea AccumNavPenalty como 0.0.
+
+Then 1: lo primero hay un CastToBP_VehicleAI2(OtherActor), si el cast es válido, setea CarOverlapCount como MAX(0, CarOverlapCount - 1).
 
 
 
@@ -317,7 +336,7 @@ Luego, hay un IsValid? de CurrentTrigger de AiController, si es valido, pasa a u
 
 
 
-Por último hace un SaveStringTexttoFile, con filename=Fitness_Debug.csv, savetext que guarda GenerationCount, GetDisplayName(self), Fitness, TimeAlived, SpawnPoint, DeathReason, DebugDeathPenalty, DebugAcumPenaltyVelocidad, DebugAcumA, DebugAcumF, DebugAcumWaitBonus, DebugAcumNetNormal, DebugAcumPenaltyCorrectingWrong, DebugAcumPenaltyTrafficViolation, DebugTicksNormal, DebugTicksTotal, TrainingModedelAicontroller, Debug_Acum_ThrottlePositive, Debug_Acum_BrakeInput, Debug_Acum_CoastTime, Debug_Acum_StopContextBrake, Debug_Acum_StopContextThrottle ,Debug_Ticks_StopContext, Debug_Acum_CreepingPenalty, Debug_Acum_ReversePenalty, Debug_Acum_LazyPenalty, Debug_Acum_SteeringWhileStopped, Debug_Acum_ThrottleDuringGraceTime, Debug_Acum_BrakeDuringGraceTime, YieldValidationTime, StopValidationTime, Debug_Acum_SteeringInput, Debug_Acum_TargetSteering, Debug_CarIndex, Debug_Acum_ABS_Steering, Debug_Ticks_StopContext_TrafficLight, Debug_Ticks_StopContext_Stop, Debug_Ticks_StopContext_Yield, Debug_MutNumChanged, Debug_MutAvgMagnitude, Debug_MutNumLarge, Debug_MutParentFitness, Debug_Acum_SteerApproachPenalty, Debug_NumStopZonesEntered, Debug_NotNorm_PeakFitness, Debug_Acum_StopCompletionBonus, Debug_NumStopsCompleted, Debug_Acum_YieldCompletionBonus, Debug_NumYieldsCompleted, Debug_Acum_NavPenalty, Debug_NumRoundaboutsEntered, Debug_NumRoundaboutsCompleted, Debug_Acum_SpeedAtRoundaboutEntry, Debug_Acum_FrontObstAtRoundaboutEntry, Debug_Ticks_InRoundabout, Debug_Acum_SteeringInRoundabout, Debug_Acum_ThrottleInRoundabout, Debug_CollisionsInRoundabout, Debug_R_CurrentExitNumber, Debug_R_EntryDir_First, Debug_R_EntryDir_Second, Debug_R_EntryDir_Third, Debug_R_Exit1_Count, Debug_R_Exit2_Count, Debug_R_Exit3Plus_Count, Debug_R_Exit1_Deaths, Debug_R_Exit2_Deaths, Debug_R_Exit3Plus_Deaths, Debug_R_Exit1_Steering, Debug_R_Exit2_Steering, Debug_R_Exit3Plus_Steering, Debug_R_Exit1_Ticks, Debug_R_Exit2_Ticks, Debug_R_Exit3Plus_Ticks, Debug_R_Exit1_Throttle, Debug_R_Exit2_Throttle, Debug_R_Exit3Plus_Throttle, Debug_Acum_RoundaboutBonus, Debug_Acum_RndCompletionBonus, Debug_Acum_RndEntryPenalty, Debug_Acum_RndThrottlePenalty, Debug_Acum_AlignmentPenalty, Debug_NumCarOverlaps, Debug_NumYieldFreePasses, Debug_SpeedAtYieldValidation, Debug_Acum_TimeBlockedAtCrossing, Debug_FrontObstAtDeath, Debug_Acum_SteerApproachWrongDir, Debug_Acum_SteerApproachRightDir, Debug_Acum_CarOverlapPenaltyShadow, Debug_FirstSteerAfterReleaseTicks(AIController), Debug_Acum_CarOverlapPenalty, Debug_Acum_QueueWaitBonus. Allowoverwritting=false
+Por último hace un SaveStringTexttoFile, con filename=Fitness_Debug.csv, savetext que guarda GenerationCount, GetDisplayName(self), Fitness, TimeAlived, SpawnPoint, DeathReason, DebugDeathPenalty, DebugAcumPenaltyVelocidad, DebugAcumA, DebugAcumF, DebugAcumWaitBonus, DebugAcumNetNormal, DebugAcumPenaltyCorrectingWrong, DebugAcumPenaltyTrafficViolation, DebugTicksNormal, DebugTicksTotal, TrainingModedelAicontroller, Debug_Acum_ThrottlePositive, Debug_Acum_BrakeInput, Debug_Acum_CoastTime, Debug_Acum_StopContextBrake, Debug_Acum_StopContextThrottle ,Debug_Ticks_StopContext, Debug_Acum_CreepingPenalty, Debug_Acum_ReversePenalty, Debug_Acum_LazyPenalty, Debug_Acum_SteeringWhileStopped, Debug_Acum_ThrottleDuringGraceTime, Debug_Acum_BrakeDuringGraceTime, YieldValidationTime, StopValidationTime, Debug_Acum_SteeringInput, Debug_Acum_TargetSteering, Debug_CarIndex, Debug_Acum_ABS_Steering, Debug_Ticks_StopContext_TrafficLight, Debug_Ticks_StopContext_Stop, Debug_Ticks_StopContext_Yield, Debug_MutNumChanged, Debug_MutAvgMagnitude, Debug_MutNumLarge, Debug_MutParentFitness, Debug_Acum_SteerApproachPenalty, Debug_NumStopZonesEntered, Debug_NotNorm_PeakFitness, Debug_Acum_StopCompletionBonus, Debug_NumStopsCompleted, Debug_Acum_YieldCompletionBonus, Debug_NumYieldsCompleted, Debug_Acum_NavPenalty, Debug_NumRoundaboutsEntered, Debug_NumRoundaboutsCompleted, Debug_Acum_SpeedAtRoundaboutEntry, Debug_Acum_FrontObstAtRoundaboutEntry, Debug_Ticks_InRoundabout, Debug_Acum_SteeringInRoundabout, Debug_Acum_ThrottleInRoundabout, Debug_CollisionsInRoundabout, Debug_R_CurrentExitNumber, Debug_R_EntryDir_First, Debug_R_EntryDir_Second, Debug_R_EntryDir_Third, Debug_R_Exit1_Count, Debug_R_Exit2_Count, Debug_R_Exit3Plus_Count, Debug_R_Exit1_Deaths, Debug_R_Exit2_Deaths, Debug_R_Exit3Plus_Deaths, Debug_R_Exit1_Steering, Debug_R_Exit2_Steering, Debug_R_Exit3Plus_Steering, Debug_R_Exit1_Ticks, Debug_R_Exit2_Ticks, Debug_R_Exit3Plus_Ticks, Debug_R_Exit1_Throttle, Debug_R_Exit2_Throttle, Debug_R_Exit3Plus_Throttle, Debug_Acum_RoundaboutBonus, Debug_Acum_RndCompletionBonus, Debug_Acum_RndEntryPenalty, Debug_Acum_RndThrottlePenalty, Debug_Acum_AlignmentPenalty, Debug_NumCarOverlaps, Debug_NumYieldFreePasses, Debug_SpeedAtYieldValidation, Debug_Acum_TimeBlockedAtCrossing, Debug_FrontObstAtDeath, Debug_Acum_SteerApproachWrongDir, Debug_Acum_SteerApproachRightDir, Debug_Acum_CarOverlapPenaltyShadow, Debug_FirstSteerAfterReleaseTicks(AIController), Debug_Acum_CarOverlapPenalty, Debug_Acum_QueueWaitBonus, CurrentTrigger. Allowoverwritting=false
 
  
 

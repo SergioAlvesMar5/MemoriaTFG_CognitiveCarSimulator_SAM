@@ -805,6 +805,32 @@ def compute_auto_insights(summary_rows, dbg_rows, data_coherence=None, yield_stu
                     f'y {collision_stats["normal"]} normales.'
                 )
 
+            if debug_field_available(dbg_rows, 'current_trigger'):
+                trigger_groups = defaultdict(list)
+                for row in dbg_rows:
+                    trigger = row.get('current_trigger_short') or short_actor_name(row.get('current_trigger', ''), empty='')
+                    if trigger:
+                        trigger_groups[trigger].append(row)
+                trigger_candidates = []
+                min_trigger_n = max(3, int(math.ceil(n_dbg * 0.05)))
+                for trigger, rows_tr in trigger_groups.items():
+                    if len(rows_tr) < min_trigger_n:
+                        continue
+                    problem_n = sum(
+                        1 for r in rows_tr
+                        if is_lazy_reason(r.get('death', ''))
+                        or is_collision_reason(r.get('death', ''))
+                        or death_family(r.get('death', '')) == 'VIOLATION'
+                    )
+                    trigger_candidates.append((sdiv(problem_n * 100.0, len(rows_tr)), len(rows_tr), trigger, problem_n))
+                if trigger_candidates:
+                    problem_pct, n_tr, trigger, problem_n = sorted(trigger_candidates, reverse=True)[0]
+                    if problem_pct >= 50.0:
+                        insights.append(
+                            f'CurrentTrigger {trigger} concentra {problem_n}/{n_tr} eventos problematicos '
+                            f'({problem_pct:.1f}%: LAZY/violacion/colision).'
+                        )
+
         mutation_rows = [
             r for r in dbg_rows
             if not r.get('is_weight_initialization', False)
@@ -1605,6 +1631,27 @@ def report_external_ai_brief(
                 f'{collision_stats["normal"]}/{collision_stats["roundabout"]} '
                 f'(rotonda {fmt_pct_ratio(collision_stats["roundabout"], collision_stats["total"], 1)} de colisiones)',
             )
+        if debug_field_available(debug_rows, 'current_trigger'):
+            trigger_groups = defaultdict(list)
+            for row in debug_rows:
+                trigger = row.get('current_trigger_short') or short_actor_name(row.get('current_trigger', ''), empty='')
+                if trigger:
+                    trigger_groups[trigger].append(row)
+            if trigger_groups:
+                ranked_triggers = []
+                for trigger, rows_tr in trigger_groups.items():
+                    legal_tr = sum(1 for r in rows_tr if death_family(r.get('death', '')) == 'VIOLATION')
+                    collision_tr = sum(1 for r in rows_tr if is_collision_reason(r.get('death', '')))
+                    lazy_tr = sum(1 for r in rows_tr if is_lazy_reason(r.get('death', '')))
+                    ranked_triggers.append((legal_tr + collision_tr + lazy_tr, len(rows_tr), trigger, legal_tr, collision_tr, lazy_tr))
+                _, n_tr, trigger, legal_tr, collision_tr, lazy_tr = sorted(ranked_triggers, reverse=True)[0]
+                add_kv(
+                    R,
+                    'CurrentTrigger top',
+                    f'{trigger}: N={n_tr}, legal={fmt_pct_ratio(legal_tr, n_tr, 1)}, '
+                    f'col={fmt_pct_ratio(collision_tr, n_tr, 1)}, lazy={fmt_pct_ratio(lazy_tr, n_tr, 1)} '
+                    f'({len(trigger_groups)} triggers)',
+                )
         add_kv(R, 'Fallo legal', f'{fmt_pct_ratio(legal_fail_n, nd, 2)} ({fmt_int(legal_fail_n)}/{fmt_int(nd)})')
         add_kv(R, 'LAZY', f'{fmt_pct_ratio(lazy_n, nd, 2)} ({fmt_int(lazy_n)}/{fmt_int(nd)})')
         fail_label = 'Fail por muerte' if MODE == 'test' else 'Muertes no exitosas segun TEST'
@@ -1820,6 +1867,30 @@ def report_external_ai_brief(
         right_total = sum(r.get('steer_app_right', 0.0) for r in debug_rows)
         if wrong_total + right_total > 0.0 and sdiv(wrong_total, wrong_total + right_total) >= 0.60:
             priority_lines.append(f'SteerApproach wrong-dir alto ({sdiv(wrong_total*100.0, wrong_total + right_total):.1f}% del desglose).')
+    if debug_rows and debug_field_available(debug_rows, 'current_trigger'):
+        trigger_groups = defaultdict(list)
+        for row in debug_rows:
+            trigger = row.get('current_trigger_short') or short_actor_name(row.get('current_trigger', ''), empty='')
+            if trigger:
+                trigger_groups[trigger].append(row)
+        trigger_hotspots = []
+        min_trigger_n = max(3, int(math.ceil(len(debug_rows) * 0.05)))
+        for trigger, rows_tr in trigger_groups.items():
+            if len(rows_tr) < min_trigger_n:
+                continue
+            problem_n = sum(
+                1 for r in rows_tr
+                if is_lazy_reason(r.get('death', ''))
+                or is_collision_reason(r.get('death', ''))
+                or death_family(r.get('death', '')) == 'VIOLATION'
+            )
+            trigger_hotspots.append((problem_n, len(rows_tr), trigger))
+        if trigger_hotspots:
+            problem_n, n_tr, trigger = sorted(trigger_hotspots, reverse=True)[0]
+            priority_lines.append(
+                f'CurrentTrigger foco: {trigger} con {problem_n}/{n_tr} eventos LAZY/violacion/colision '
+                f'({sdiv(problem_n*100.0, n_tr):.1f}%).'
+            )
     for line in priority_lines[:8] or ['Sin diagnosticos prioritarios adicionales fuera de los insights automaticos.']:
         R.p(f'  - {line}')
     for line in auto_insights[:8]:
@@ -1845,6 +1916,7 @@ def report_external_ai_brief(
     R.p('  - CreepingPenalty 03/07 solo aplica en semaforo/stop antes de linea; no atribuirlo a yield ni a comportamiento despues de cruzar la linea.')
     R.p('  - TimeBlockedAtCrossing 03/07 mezcla pasos de stop y yield; usarlo como tiempo bloqueado agregado, no como contador uniforme.')
     R.p('  - Reverse 03/07 separa REVERSE, REVERSING_WRONG y Penalty_CorrectingWrong; no agruparlos sin mirar el contexto de direccion/obstaculo.')
+    R.p('  - CurrentTrigger 03/07 identifica el trigger/interseccion activo al morir; usarlo para localizar focos, no como causalidad aislada.')
     R.p('  - SpeedAtYieldValidation 30/06 es la velocidad puntual al validar ceda, no un acumulado por coche.')
     R.p('  - STOP_VIOLATION_EXIT/TIMEOUT se agrupan como VIOLATION, pero el subtipo indica salida indebida vs espera agotada.')
     R.p('  - Mutacion 26/06: GenerationsWithoutImprovement no se exporta; el informe valida rangos esperados, no el valor exacto por individuo.')
