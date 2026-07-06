@@ -1,211 +1,204 @@
 \chapter{Gestión del proyecto}
 
-\section{Metodología}
+\section{Metodología y criterio de seguimiento}
 
-El desarrollo se ha organizado mediante un enfoque iterativo e incremental. Las reuniones de seguimiento se celebraron de forma periódica, generalmente cada dos jueves, con participación de tutores, equipo técnico y personas vinculadas al proyecto original. En estas reuniones se revisaban avances, problemas, decisiones de arquitectura y siguientes objetivos. Esta dinámica se aproxima a una metodología ágil por sprints, aunque adaptada al contexto académico y a la disponibilidad del equipo.
+El proyecto se gestionó con una dinámica iterativa e incremental. En lugar de definir desde el inicio una arquitectura cerrada, el trabajo avanzó mediante ciclos de implementación, prueba dentro de Unreal Engine, análisis de resultados y revisión del siguiente bloque de tareas. Esta forma de trabajo fue necesaria porque el sistema no dependía solo de una red neuronal: el comportamiento final surgía de la combinación entre físicas de vehículo, sensores, configuración manual del mapa, reglas de tráfico, función de fitness, persistencia de modelos y datos exportados.
 
-La planificación inicial contemplaba una progresión amplia: semáforos y señales, IA vehicular, stops y cedas, perfiles de conductor, peatones, bicicletas, animales, diversidad de assets y optimización. El desarrollo real concentró el esfuerzo en construir una base sólida de IA vehicular, debido a la dificultad técnica de lograr navegación autónoma estable en la ciudad.
+Las reuniones de seguimiento se celebraron con periodicidad aproximada quincenal durante los primeros meses y permitieron fijar las decisiones de mayor impacto: qué alternativa de navegación probar, qué variables debía recibir la red, cómo separar el modelo de decisión del control físico del coche o cuándo abandonar un enfoque que no respondía bien. A partir de marzo las actas dejaron de redactarse con la misma continuidad, aunque el desarrollo siguió activo. Por ese motivo, la reconstrucción de la gestión no se apoya únicamente en las actas: también utiliza issues y milestones de GitLab, descripciones fechadas de Blueprints, informes automáticos de análisis, CSV experimentales y documentación de prácticas.
 
-Durante el desarrollo se utilizaron asistentes de inteligencia artificial como apoyo de análisis y depuración. Su papel fue generar hipótesis, ordenar alternativas, proponer comprobaciones y ayudar a interpretar logs, Blueprints y CSV\@. Las respuestas no se incorporaron de forma automática: las decisiones se contrastaron con el comportamiento observado en Unreal Engine, las descripciones fechadas del programa, los resultados exportados y las pruebas de regresión. El anexo B documenta una selección depurada de estos prompts.
+Esta combinación de fuentes permite distinguir tres niveles de evidencia. Las actas explican la intención de diseño y los cambios de rumbo discutidos. GitLab aporta fechas, tareas cerradas y continuidad entre sprints. Los CSV y las descripciones del programa muestran qué quedó realmente implementado y qué ocurrió al ejecutarlo. La gestión del proyecto se entiende, por tanto, como trazabilidad entre decisiones, cambios técnicos y resultados medidos.
 
-El seguimiento operativo se registró en GitLab mediante issues y milestones. El CSV depurado contiene 40 issues cerradas agrupadas en 15 sprints, desde el 7 de noviembre de 2025 hasta el 1 de julio de 2026. Esta fuente no sustituye a las actas de reunión ni a los resultados experimentales, pero sí aporta una trazabilidad intermedia: permite relacionar fechas, tareas cerradas y cambios técnicos concretos.
+\clearpage
+\section{Fuentes de gestión utilizadas}
 
-\section{Planificación temporal}
+Para evitar una cronología artificial, las fuentes se han tratado de forma complementaria. Cada una aporta una parte distinta del proceso y ninguna, por sí sola, describe todo el proyecto.
 
-La planificación real del proyecto puede entenderse como un diagrama de Gantt incremental. Las primeras semanas estuvieron dedicadas a comprender el proyecto heredado, ordenar assets y crear una primera señalización funcional. Después se concentró el esfuerzo en el vehículo autónomo, el entrenamiento evolutivo y el entorno de pruebas. A partir de marzo el trabajo se desplazó hacia la instrumentación, la separación entre entrenamiento y test, las intersecciones, la señalización avanzada y, finalmente, la interacción física entre vehículos.
+\begin{itemize}
+  \item \textbf{Actas de reunión.} Cubren el periodo comprendido entre el 27 de noviembre de 2025 y el 19 de marzo de 2026. Son especialmente útiles para justificar el cambio desde navegación determinista hacia percepción local y aprendizaje evolutivo.
+  \item \textbf{GitLab.} El CSV depurado contiene 40 issues cerradas agrupadas en 15 sprints, entre el 7 de noviembre de 2025 y el 1 de julio de 2026. Esta fuente permite reconstruir la continuidad del trabajo después de la última acta formal.
+  \item \textbf{Descripciones del programa.} Las carpetas \texttt{EVOLUTIONMANAGER}, \texttt{REDNEURONAL}, \texttt{FITNESS}, \texttt{INTERSECTIONS} y \texttt{OTROS} documentan la evolución de los Blueprints y el estado de la implementación hasta el 3 de julio.
+  \item \textbf{Análisis de datos.} Los informes, CSV y gráficas de \texttt{INFO/ANALISIS\_DATOS} permiten separar avances reales de mejoras aparentes. Su papel fue decisivo al detectar regresiones por \texttt{STOP\_VIOLATION}, \texttt{NAV\_VIOLATION}, colisiones, rotondas y solapes.
+  \item \textbf{Documentación auxiliar.} La propuesta inicial, la planificación ajustada, la memoria de prácticas y los documentos administrativos de \texttt{INFO/UTILES} delimitan el alcance académico, las horas de prácticas documentadas y el contexto institucional del trabajo.
+\end{itemize}
 
-{\small
-\begin{table}[htbp]
-\centering
-\caption{Diagrama de Gantt simplificado del desarrollo.}%
-\label{tab:gantt}
-\begin{tabularx}{0.98\textwidth}{L{2.55cm}L{1.55cm}L{1.15cm}X}
-\toprule
-\textbf{Fase} & \textbf{Periodo} & \textbf{Esf.} & \textbf{Resultado principal}\\
-\midrule
-Arranque y limpieza del proyecto & Nov.-dic. & \rule{0.9cm}{1.05ex} & Carpeta \texttt{CarSimulator}, assets ordenados y revisión del estado heredado.\\
-Señalización y vehículo inicial & Dic.-ene. & \rule{0.9cm}{1.05ex} & Semáforos, señales verticales, primer coche con sensores y salidas continuas.\\
-Línea de pruebas y aprendizaje básico & Ene.-feb. & \rule{0.9cm}{1.05ex} & Entrenamiento de centrado, corrección de desviación, curvas y primeros checkpoints.\\
-Spawns, bordes e instrumentación & Feb.-mar. & \rule{0.9cm}{1.05ex} & Puntos de aparición distribuidos, bordes virtuales y primeros CSV de diagnóstico.\\
-Train/test y señalización en la red & Mar.-abr. & \rule{0.9cm}{1.05ex} & Separación de modos, contexto one-hot, zonas de espera y cruce.\\
-Fitness avanzado y persistencia & Abr.-may. & \rule{0.9cm}{1.05ex} & Penalizaciones, modelos persistentes, elitismo y mutación dinámica.\\
-Rotondas y análisis de regresión & Jun. & \rule{0.55cm}{1.05ex} & Métricas por salida, balances de recompensa y test reproducibles.\\
-Interacción física entre vehículos & Jun.-jul. & \rule{0.9cm}{1.05ex} & Solapes, distancia de seguridad, cedas con cola y simulación libre con respawn.\\
-\bottomrule
-\end{tabularx}
-\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, milestones, issues y descripciones fechadas.}}
-\end{table}
-}
+También se revisaron las imágenes de \texttt{INFO/FOTOS\_PROGRAMA}, que documentan visualmente señales, semáforos y el entorno urbano. Su utilidad principal no es demostrar resultados cuantitativos, sino mostrar que la señalización usada por la lógica del simulador tiene una correspondencia visual dentro del mapa.
 
-\section{Seguimiento en GitLab}
+\Needspace{14\baselineskip}
+\section{Planificación inicial y reajuste del alcance}
 
-La tabla~\ref{tab:milestones-gitlab} resume las milestones registradas en GitLab. Se han agrupado por sprint para evitar una lista excesiva de issues individuales y para conservar la lectura global de la evolución.
+La planificación inicial era amplia. Además de vehículos autónomos, contemplaba semáforos, señales verticales, stops, cedas, perfiles de conducción, peatones, bicicletas, animales, diversidad de assets y optimización. Esa lista respondía al objetivo general de enriquecer el simulador urbano, pero pronto quedó claro que el núcleo difícil era conseguir que un vehículo físico circulara de forma autónoma por el mapa real.
+
+El primer reajuste consistió en concentrar el alcance en la IA vehicular. Sin una base de circulación estable, añadir peatones o perfiles de conductor habría introducido más variabilidad sin resolver el problema central. El trabajo se orientó entonces a un objetivo más defendible: construir una arquitectura capaz de percibir, decidir, actuar sobre Chaos Vehicle, aprender por evaluación evolutiva, respetar señalización básica y producir métricas suficientes para analizar sus fallos.
+
+El segundo reajuste afectó a la forma de validar el progreso. Al inicio era tentador aceptar una mejora porque el coche parecía recorrer más distancia en pantalla. Las demostraciones de marzo mostraron que esa impresión era insuficiente: algunos vehículos sobrevivían sin progresar, otros fallaban siempre en las mismas zonas y otros aprendían estrategias que el fitness no penalizaba todavía. Por ello la planificación incorporó análisis de CSV, separación entre entrenamiento y test, métricas por punto de aparición, familias de muerte, señalización, rotondas y, al final, solapes entre vehículos.
+
+El alcance resultante no agota todas las ideas de la propuesta original, pero sí deja una base técnica medible. La decisión de aplazar peatones, bicicletas, animales y perfiles diferenciados no fue una reducción arbitraria, sino una consecuencia de priorizar la estabilidad del tráfico vehicular antes de aumentar el número de agentes y fuentes de fallo.
+
+\clearpage
+\section{Evolución temporal del desarrollo}
+
+La tabla~\ref{tab:gantt} resume la evolución real del trabajo. No pretende sustituir a las actas ni a GitLab, sino condensar las fases que estructuraron el proyecto y el resultado técnico que dejó cada una.
 
 {\small
 \setlength{\tabcolsep}{4pt}
-\begin{longtable}{L{1.3cm}L{2.8cm}L{1.6cm}L{7.7cm}}
-\caption{Milestones e issues cerradas registradas en GitLab.}\label{tab:milestones-gitlab}\\
+\begin{longtable}{L{3.0cm}L{1.8cm}L{3.0cm}L{4.8cm}}
+\caption{Evolución temporal del proyecto.}\label{tab:gantt}\\
 \toprule
-\textbf{Sprint} & \textbf{Periodo} & \textbf{Issues} & \textbf{Resultado documentado}\\
+\textbf{Fase} & \textbf{Periodo} & \textbf{Foco de trabajo} & \textbf{Resultado y aprendizaje}\\
 \midrule
 \endfirsthead%
-\caption[]{Milestones e issues cerradas registradas en GitLab (continuación).}\\
+\caption[]{Evolución temporal del proyecto (continuación).}\\
 \toprule
-\textbf{Sprint} & \textbf{Periodo} & \textbf{Issues} & \textbf{Resultado documentado}\\
+\textbf{Fase} & \textbf{Periodo} & \textbf{Foco de trabajo} & \textbf{Resultado y aprendizaje}\\
 \midrule
 \endhead%
 \bottomrule
-\multicolumn{4}{>{\centering\arraybackslash}p{0.92\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir del CSV de issues y milestones de GitLab.}}\\
+\multicolumn{4}{>{\centering\arraybackslash}p{0.92\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, GitLab, descripciones fechadas e informes de análisis.}}\\
 \endfoot%
 \bottomrule
-\multicolumn{4}{>{\centering\arraybackslash}p{0.92\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir del CSV de issues y milestones de GitLab.}}\\
+\multicolumn{4}{>{\centering\arraybackslash}p{0.92\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, GitLab, descripciones fechadas e informes de análisis.}}\\
 \endlastfoot%
-0 & 07/11 a 27/11/2025 & 2 & Reorganización inicial de \texttt{Content}, creación de \texttt{CarSimulator} y limpieza de assets heredados o importados.\\
-1 & 27/11 a 11/12/2025 & 3 & Familiarización con la IA existente, semáforo dinámico y primeras señales verticales con zonas de detección y parada.\\
-2 & 11/12 a 24/12/2025 & 3 & Primer vehículo autónomo con red inicial, mapeo de sensores y definición preliminar de perfiles de conducción con ASPAYM.\\
-3 & 25/12/2025 a 08/01/2026 & 2 & Milestone redefinida como \textit{Gestor evolutivo, persistencia y restricciones de conducción}. Agrupa el sistema evolutivo de evaluación/guardado y las restricciones de velocidad, dirección, marcha atrás y centrado en carril.\\
-4 & 08/01 a 16/01/2026 & 2 & Milestone redefinida como \textit{Validación inicial del modelo y documentación de prácticas}. Agrupa los primeros ciclos train/test sobre desviación y carril junto con la memoria de prácticas externas.\\
-5 & 16/01 a 29/01/2026 & 2 & Ajuste de la red para mantener carril y entrenamiento inicial en curvas en ambos sentidos.\\
-6 & 18/02 a 04/03/2026 & 4 & Bordes virtuales de intersección, mayor variedad de spawns, análisis de datos y multiraytracing.\\
-7 & 05/03 a 19/03/2026 & 4 & Modo test, exportación ampliada de datos, normalización del fitness por spawn y mejora de puntos de aparición.\\
-8 & 24/03 a 06/04/2026 & 4 & Integración de señales y semáforos en la red, zonas de espera, zonas de cruce y modo \textit{train/test}.\\
-9 & 07/04 a 17/04/2026 & 3 & Telemetría ampliada, entradas \textit{one-hot} para contexto de tráfico y validación más segura de cruces.\\
-10 & 20/04 a 30/04/2026 & 3 & Fitness avanzado, tiempo de gracia tras paradas legales, estadísticas de éxito y ampliación de la capa oculta.\\
-11 & 01/05 a 15/05/2026 & 2 & Tasa de mutación dinámica, elitismo visual y refinamiento de la validación de paradas con tiempos aprendidos.\\
-12 & 15/05 a 01/06/2026 & 2 & Penalización por colisión direccional, detección de \texttt{NAV\_VIOLATION} y ajuste de marcha atrás.\\
-13 & 01/06 a 20/06/2026 & 2 & Lógica de rotondas, sensores de entrada y salida, conteo de giros y telemetría específica por salida.\\
-14 & 22/06 a 01/07/2026 & 2 & Detección de solapes entre vehículos, distancia de seguridad y colas dinámicas de liberación en cedas.\\
+Arranque y limpieza & Nov.--dic. 2025 & Revisión del proyecto heredado, orden de \texttt{Content} y primeras señales. & Se crea una base de trabajo más limpia y se confirma que el tráfico autónomo debe centrarse primero en vehículos.\\
+Alternativas de navegación & Dic. 2025--ene. 2026 & Rutas, \textit{Path Finding}, salidas continuas y conexión con Chaos Vehicle. & Se descarta la navegación determinista como solución principal por su rigidez en curvas e intersecciones; la red se orienta a dirección y aceleración/frenado.\\
+Banco de pruebas básico & Ene.--feb. 2026 & Línea controlada, sensores, centrado, curvas y primeros checkpoints. & El sistema aprende maniobras locales, pero la prueba reducida no representa todavía la ciudad completa.\\
+Instrumentación y spawns & Feb.--mar. 2026 & Puntos de aparición distribuidos, bordes virtuales, normalización por spawn y CSV de diagnóstico. & Se pasa de observar el coche en pantalla a medir por vehículo, generación, causa de muerte y zona del mapa.\\
+Train/test y señalización & Mar.--abr. 2026 & Separación de modos, semáforos, stops, cedas, zonas de espera y contexto \textit{one-hot}. & Las reglas de tráfico entran en la red y en el fitness, pero también aparecen nuevas regresiones normativas.\\
+Fitness avanzado y persistencia & Abr.--may. 2026 & Persistencia de modelos, mutación, elitismo, guardas de red y tiempos aprendidos. & El aprendizaje deja de reiniciarse entre sesiones y se pueden comparar modelos con mayor trazabilidad.\\
+Rotondas y test estable & Jun. 2026 & Métricas de rotonda, análisis por salida, referencia del 18 de junio y comparación de bloques. & Se obtiene la referencia principal de la memoria, con 1134 evaluaciones y 57.50\% de acierto, aunque persisten colisiones y desequilibrios de fitness.\\
+Tráfico concurrente y FreeRun & Jun.--jul. 2026 & Solapes entre coches, distancia de seguridad, cedas con cola, bloqueo en cruce y simulación libre. & El sistema se acerca al tráfico real, pero aparecen nuevos problemas de convivencia, navegación y señalización que quedan como diagnóstico para la siguiente iteración.\\
 \end{longtable}
 }
 
-\Needspace{18\baselineskip}
-\section{Cronología de decisiones}
+La evolución no fue lineal. El proyecto avanzó especialmente cuando una prueba fallida obligó a cambiar la forma de medir. La demostración no concluyente del 5 de marzo, por ejemplo, no cerró una fase; abrió la necesidad de instrumentar el fitness. De forma parecida, las regresiones de finales de junio no invalidan el trabajo anterior, sino que muestran que cada cambio en stop, ceda o rotonda altera la presión de selección completa y debe contrastarse con bloques comparables.
 
-La tabla~\ref{tab:cronologia} sintetiza los principales hitos recogidos en las actas de seguimiento.
+\clearpage
+\section{Decisiones técnicas y cambios de enfoque}
 
-\begin{longtable}{L{2.2cm}L{4.4cm}L{7.2cm}}
-\caption{Principales hitos y decisiones documentadas en reuniones.}\label{tab:cronologia}\\
-\toprule
-\textbf{Fecha} & \textbf{Situación revisada} & \textbf{Decisión y consecuencia}\\
-\midrule
-\endfirsthead%
-\caption[]{Principales hitos y decisiones documentadas en reuniones (continuación).}\\
-\toprule
-\textbf{Fecha} & \textbf{Situación revisada} & \textbf{Decisión y consecuencia}\\
-\midrule
-\endhead%
-\bottomrule
-\multicolumn{3}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir de las actas de seguimiento.}}\\
-\endfoot%
-\bottomrule
-\multicolumn{3}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir de las actas de seguimiento.}}\\
-\endlastfoot%
-27/11/2025 & Integración de tráfico y elección de la primera IA\@. & Se prioriza la IA vehicular y se revisan semáforos dinámicos. Se descarta una malla dinámica para reconocer caminos por su coste de desarrollo.\\
-11/12/2025 & Representación de las rutas de la ciudad. & Se descarta mapear todo el escenario con splines y se prueba el \textit{Path Finding} de Unreal. Se separan la decisión del modelo y la aplicación física del control.\\
-17/12/2025 & Interfaz entre la red y el vehículo. & Se fijan dos salidas continuas, dirección y aceleración/frenado, ambas dentro de \texttt{[-1, 1]}.\\
-08/01/2026 & Rigidez observada con \textit{Path Finding}. & Se abandona esta opción como solución principal y se adopta entrenamiento evolutivo por prueba y error para aprender las maniobras básicas.\\
-05/02/2026 & Fallos en curvas e intersecciones. & Se introduce de forma provisional el etiquetado dinámico de bordes y se estudia cómo coordinar la elección de trayectoria con la percepción local.\\
-19/02/2026 & Falta de una validación conjunta de los subsistemas. & Se programa una demostración con red neuronal, sensores y bordes activos en todo el mapa.\\
-05/03/2026 & Demostración fallida y resultados difíciles de interpretar. & Se decide instrumentar la función de fitness y simplificar temporalmente los escenarios más complejos para localizar el origen de los fallos.\\
-19/03/2026 & Segunda demostración con navegación ya estable en buena parte del mapa. & Se acepta la base técnica, se planifica la reorganización del repositorio y se preparan la compilación para Windows y las siguientes mejoras.\\
-\end{longtable}
+Las decisiones principales se pueden agrupar en varios cambios de enfoque. Se presentan como puntos marcados porque cada uno modificó la dirección del trabajo y condicionó el diseño posterior.
 
-\section{Línea evolutiva del desarrollo}
+\begin{itemize}
+  \item \textbf{De rutas prefijadas a percepción local.} Las pruebas con \textit{Path Finding} y rutas ayudaron a entender el mapa, pero no resolvían una conducción física natural. Se optó por sensores y red neuronal para que el coche decidiera a partir de lo que percibe.
+  \item \textbf{De demostración visual a evaluación instrumentada.} La observación en pantalla no bastaba para separar avance útil, supervivencia pasiva, colisión tardía o parada indebida. La exportación de CSV se convirtió en parte central del proyecto.
+  \item \textbf{De una línea de pruebas a múltiples spawns.} El banco inicial permitió aislar errores básicos, pero la ciudad real exigía evaluar zonas heterogéneas. La normalización por spawn y la separación train/test nacen de esa necesidad.
+  \item \textbf{De señalización decorativa a actores con lógica.} Semáforos, stops y cedas dejaron de ser solo elementos visuales. Pasaron a informar al controlador, validar maniobras y producir bonus o penalizaciones específicos.
+  \item \textbf{De coches aislados a tráfico físicamente concurrente.} Las últimas iteraciones introdujeron solapes, distancia de seguridad, colas de ceda y \texttt{FreeRun}. Esta fase aumentó el realismo y también reveló fallos que no aparecían con coches casi independientes.
+  \item \textbf{De mejor resultado puntual a referencia reproducible.} La memoria conserva como referencia el bloque del 18 de junio, no la fecha más reciente. Las sesiones posteriores son valiosas, pero se interpretan como regresión y diagnóstico.
+\end{itemize}
 
-Además de los hitos de reunión, el proyecto ha seguido una evolución técnica marcada por pruebas que no siempre dieron un resultado utilizable a la primera. Esa evolución es relevante porque explica por qué la solución actual no se limita a una red neuronal aislada, sino que integra sensores, reglas de tráfico, persistencia de modelos, análisis de CSV y pruebas de regresión.
+Estas decisiones muestran una tensión constante entre realismo y control experimental. Cada vez que se añadió una parte más realista del tráfico, también aumentó la dificultad de atribuir un fallo a una causa concreta. Por eso la solución final combina implementación y análisis: sin métricas por familia de fallo, actor, spawn y contexto, el sistema sería mucho más difícil de depurar.
 
-La tabla~\ref{tab:linea-evolutiva} resume las fases principales. No pretende listar cada cambio menor de Blueprint, sino recoger las decisiones que modificaron la dirección del trabajo.
+\section{Gestión de pruebas, regresiones y datos}
 
-{\small
-\setlength{\tabcolsep}{4pt}
-\begin{longtable}{L{2.2cm}L{4.2cm}L{7.5cm}}
-\caption{Línea evolutiva del desarrollo técnico.}\label{tab:linea-evolutiva}\\
-\toprule
-\textbf{Periodo} & \textbf{Prueba o problema} & \textbf{Aprendizaje incorporado}\\
-\midrule
-\endfirsthead%
-\caption[]{Línea evolutiva del desarrollo técnico (continuación).}\\
-\toprule
-\textbf{Periodo} & \textbf{Prueba o problema} & \textbf{Aprendizaje incorporado}\\
-\midrule
-\endhead%
-\bottomrule
-\multicolumn{3}{>{\centering\arraybackslash}p{0.9\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, issues de GitLab, descripciones de Blueprints y análisis de datos.}}\\
-\endfoot%
-\bottomrule
-\multicolumn{3}{>{\centering\arraybackslash}p{0.9\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir de actas, issues de GitLab, descripciones de Blueprints y análisis de datos.}}\\
-\endlastfoot%
-Noviembre-diciembre & Tráfico autónomo inicial y conexión red-vehículo. & Se comprobó que el objetivo debía centrarse primero en IA vehicular. La red quedó acoplada a dos salidas continuas, dirección y aceleración/frenado, para respetar la física del vehículo.\\
-Enero-febrero & Rigidez de NavMesh y \textit{Path Finding}. & Las rutas deterministas ayudaban a desplazar actores, pero no resolvían bien curvas, cruces ni control continuo. Se adoptó percepción local con sensores y aprendizaje evolutivo.\\
-Marzo & Demostración fallida e interpretación insuficiente de los fallos. & La observación visual dejó de ser suficiente. Se instrumentó el fitness, se exportaron métricas por coche y se simplificaron temporalmente escenarios para localizar causas.\\
-Marzo-abril & Precisión de parada, marcha atrás y coches inmóviles. & Se introdujeron penalizaciones específicas para parada imprecisa, retroceso y estancamiento injustificado. Las consultas de apoyo insistieron en evitar constantes arbitrarias y en derivar umbrales de variables ya presentes en el simulador.\\
-Abril-mayo & Señalización, stops, cedas e intersecciones. & Los actores de tráfico pasaron a comunicar contexto al controlador. Los bordes de cruce se asociaron a dirección y trigger para que cada maniobra tuviera límites sensoriales coherentes.\\
-Mayo-junio & Persistencia de modelos, duplicados y selección para reentrenar. & Se revisó la estrategia de \texttt{SuperCarModel}, \texttt{SessionCarModel} y copias fechadas. También se compararon respaldos para evitar repetir tests sobre modelos equivalentes y para elegir candidatos de reentrenamiento con datos, no solo por fitness máximo.\\
-Junio-julio & Separación train/test, rotondas y análisis de regresión. & Se diferenciaron spawns y trayectorias por modo, se añadieron métricas de rotonda, solapes entre vehículos, bloqueo en cruce y colas dinámicas de liberación en cedas. La serie final muestra que una mejora local del fitness puede degradar otra parte del sistema, por lo que cada cambio debe validarse con bloques comparables antes de aceptarse.\\
-\end{longtable}
-}
+El proyecto terminó utilizando tres tipos de ejecución. El entrenamiento genera poblaciones, muta pesos y selecciona individuos. El test carga un modelo fijo, desactiva la mutación y evalúa spawns diferenciados. \texttt{FreeRun} crea tráfico continuo con respawn y coches vivos censurados, por lo que sirve para observar convivencia entre vehículos pero no para calcular una tasa de acierto comparable con un test generacional.
 
-\section{Entorno de pruebas inicial}
+Esta distinción es importante para interpretar los resultados. El 18 de junio se obtiene la referencia principal porque combina un entrenamiento amplio, cuatro sesiones de test, cobertura completa y 1134 evaluaciones distribuidas sobre 54 puntos de aparición. En cambio, los bloques posteriores introducen cambios de fitness, stop, ceda, rotonda, solapes y cola de liberación. Algunos mejoran métricas locales, pero otros degradan el comportamiento global. Por ello se utilizan como diagnóstico de regresión.
 
-Una parte decisiva del desarrollo fue construir una línea de pruebas pequeña antes de intentar que los vehículos circularan por toda la ciudad. Esa zona inicial reducía deliberadamente el problema: un mismo punto de aparición, carril reconocible, bordes controlados, checkpoints simples y una función de fitness centrada en avanzar, mantenerse dentro del carril, corregir desviaciones y aprender a girar. El objetivo no era representar todavía todo el tráfico urbano, sino aislar los conceptos mínimos que un coche físico necesitaba dominar antes de enfrentarse a intersecciones y señales.
+La evolución de julio ilustra bien el criterio seguido. El test del 2 de julio recupera parcialmente el acierto, con 193 éxitos sobre 354 evaluaciones, pero sigue por debajo de la referencia y mantiene problemas de stop. Las sesiones \texttt{FreeRun} del 3 de julio no son test estadístico: la primera expone muchas muertes \texttt{LAZY} y la segunda elimina ese síntoma terminal, pero concentra \texttt{NAV\_VIOLATION} y \texttt{STOP\_VIOLATION\_EXIT} en actores y triggers concretos. El aprendizaje de gestión es claro: una mejora local solo debe aceptarse cuando no traslada el fallo a otra familia.
 
-Esta decisión evitó mezclar demasiadas causas de fallo en la misma prueba. Cuando el coche no giraba o se salía del carril, la explicación estaba en sensores, red, suavizado o fitness, no en una rotonda mal delimitada o en un stop situado demasiado cerca del spawn. Por eso la línea inicial funcionó como un banco de ensayo: permitió comprobar la conexión entre entradas, pesos, salidas y físicas de Chaos Vehicle, y también obligó a abandonar fórmulas de fitness que premiaban estrategias visualmente pobres.
+Los scripts de análisis funcionaron como una herramienta de gestión, no solo como apoyo a resultados. Permitieron detectar duplicados de CSV, descuadres de cobertura, generaciones incompletas, hotspots por actor, diferencias por spawn y métricas situacionales mal interpretables si se promediaban sobre coches no expuestos al evento. Esta capa de análisis redujo el riesgo de tomar decisiones a partir de una sesión visualmente atractiva pero estadísticamente débil.
 
-El salto posterior a puntos de aparición dinámicos alrededor del mapa cambió el problema de escala. El gestor dejó de evaluar una habilidad local y pasó a distribuir la población entre zonas heterogéneas, con curvas, cruces, semáforos, stops y cedas. La introducción de \texttt{SpawnBag}, marcas \texttt{ValidForTrain}/\texttt{ValidForTest} y normalización por spawn convirtió el entrenamiento en un proceso mucho más representativo, pero también más exigente: una mejora en un punto fácil podía dejar de ser dominante si no se sostenía en puntos de mayor dificultad. Ese cambio revolucionó el manager evolutivo porque obligó a seleccionar modelos por robustez espacial, no solo por el máximo de fitness alcanzado en una línea controlada.
+\Needspace{13\baselineskip}
+\section{Entorno de pruebas y complejidad del mapa}
 
-\section{Alcance}
+La construcción del entorno de pruebas fue una tarea de ingeniería por sí misma. Un cambio de mapa o de zona no implica únicamente que la red deba aprender curvas nuevas. También exige colocar y revisar bordes de intersección, volúmenes de navegación, triggers, zonas de espera, líneas de parada, cajas de cruce, puntos de aparición y propiedades específicas de cada actor. Si uno de estos elementos queda mal orientado o asociado a una dirección incorrecta, el coche recibe una percepción incoherente aunque los pesos de la red sean razonables.
 
-El alcance funcional completado se centra en conseguir que los vehículos de tráfico puedan aprender y circular dentro del escenario existente. El trabajo no modifica el vehículo conducido por el paciente ni rediseña la ciudad: actúa sobre los coches autónomos, su controlador y los elementos del mapa que les proporcionan información. El resultado es un controlador capaz de transformar las salidas de la red neuronal en dirección, aceleración y frenado sobre el sistema físico de Unreal Engine.
+Por eso la línea inicial de pruebas tuvo sentido. Reducía el problema a avance, centrado, giro y frenado básico, y permitía distinguir si el fallo estaba en la red, el suavizado, los sensores o el fitness. Al pasar a la ciudad completa aparecieron dificultades nuevas: puntos de aparición con dificultad desigual, cruces donde los bordes dependían de la salida elegida, rotondas con varias trayectorias posibles y señales próximas al spawn.
 
-Para alimentar ese controlador se ha incorporado percepción local mediante raycasting y se han normalizado las variables que entran en la red. El aprendizaje se realiza con poblaciones de vehículos, selección, mutación y elitismo. Los pesos obtenidos pueden guardarse y cargarse en sesiones posteriores, lo que evita reiniciar el proceso cada vez que se abre el simulador. La evaluación se apoya en una función de fitness que combina avance, centrado, velocidad, cumplimiento de señales y penalizaciones por comportamientos no deseados.
+La gestión del mapa quedó así integrada con la gestión del aprendizaje. Los hotspots detectados en resultados, como determinados bordes de intersección, volúmenes de navegación, triggers y puntos de aparición, no se tratan como simples errores visuales. Son parte del sistema de IA porque determinan qué percibe el vehículo, qué cuenta como salida de zona válida y cuándo una maniobra debe considerarse legal. En futuras iteraciones convendría automatizar verificaciones visuales de estos elementos antes de lanzar entrenamientos largos.
 
-Incluye además semáforos, stops, cedas, líneas de parada y validación de maniobras. En cruces y rotondas se registran trayectorias, entrada, salida, giro, colisiones y recompensa, con puntos de aparición separados para entrenamiento y test. Los CSV resultantes permiten comparar ejecuciones y localizar fallos repetidos por zona.
+\section{Alcance funcional consolidado}
 
-No forman parte de esta versión la implementación completa de peatones, bicicletas y animales, ni los perfiles de conductor diferenciados previstos en la propuesta inicial. Tampoco se aborda todavía una validación con pacientes. Estas ampliaciones requieren primero consolidar la navegación vehicular y disponer de un protocolo de prueba estable, por lo que se mantienen como trabajo posterior.
+El alcance completado se centra en vehículos autónomos dentro del escenario existente. El trabajo no rediseña la ciudad ni sustituye el vehículo del usuario; añade coches controlados por IA, actores de tráfico con lógica, persistencia de modelos y una línea de análisis reproducible. El resultado permite entrenar, guardar, cargar y evaluar políticas de control dentro de Unreal Engine.
 
-\section{Complejidad del cambio de mapa}
+El sistema consolidado incluye percepción mediante once sensores, vector de 20 entradas, red neuronal con 16 neuronas ocultas, dos salidas continuas, aplicación suavizada sobre Chaos Vehicle, gestor evolutivo, mutación de pesos, modelos histórico y de sesión, normalización por spawn, separación train/test, métricas de fitness, semáforos, stops, cedas, rotondas, solapes entre coches, bloqueo en cruce y modo \texttt{FreeRun}. También exporta CSV suficientes para analizar causas de muerte, puntuaciones, señalización, rotondas, genealogía de mutación, spawns y familias de fallo.
 
-El cambio o ampliación de mapa no fue un simple problema de que la red neuronal tuviera que aprender curvas nuevas. La dificultad temporal más importante estuvo en preparar manualmente la geometría útil para la percepción: colocar bordes de calzada, volúmenes de navegación, triggers de intersección, cajas de espera, zonas de cruce, flechas de parada y propiedades específicas de cada actor. Si un borde quedaba asociado a la dirección equivocada, si un volumen se solapaba con una zona válida o si una línea de stop no estaba bien orientada, el coche recibía una lectura incoherente aunque la política neuronal fuese razonable.
-
-Esta carga de configuración explica por qué algunas regresiones se concentraron en actores concretos, como bordes de intersección o \texttt{NavModifierVolume}\@. La red podía responder de forma aceptable ante una curva o rotonda nueva cuando los sensores recibían límites consistentes; en cambio, una propiedad mal asignada en el escenario convertía el entrenamiento en ruido. Por ello, el trabajo de mapa debe considerarse parte del sistema de IA\@: define qué percibe el agente, qué cuenta como salida de calzada, qué trayectoria está habilitada y cuándo una espera se valida como legal. En futuras ampliaciones convendría automatizar parte de esta configuración o crear herramientas de verificación visual antes de lanzar entrenamientos largos.
+Quedan fuera de esta versión los perfiles de conductor normal, inseguro y agresivo, la incorporación completa de peatones, bicicletas y animales, el cambio de carril, los adelantamientos y una validación con pacientes. Estas líneas futuras requieren que la base vehicular sea más estable. Añadir nuevos agentes antes de resolver las colisiones y regresiones actuales dificultaría interpretar cada fallo.
 
 \section{Gestión de riesgos}
 
-La tabla~\ref{tab:riesgos} relaciona los riesgos más relevantes con su impacto, probabilidad y estrategia de mitigación.
+La tabla~\ref{tab:riesgos} recoge los riesgos que marcaron el proyecto y la respuesta aplicada. Se incluyen riesgos técnicos, experimentales y de trazabilidad porque los tres afectaron al resultado final.
 
+\clearpage
 {\small
 \setlength{\tabcolsep}{4pt}
-\begin{longtable}{L{3cm}L{3.6cm}L{1.8cm}L{5.1cm}}
-\caption{Riesgos principales del proyecto.}\label{tab:riesgos}\\
+\begin{longtable}{L{3.05cm}L{3.6cm}L{1.55cm}L{5.35cm}}
+\caption{Riesgos principales del proyecto y mitigación aplicada.}\label{tab:riesgos}\\
 \toprule
 \textbf{Riesgo} & \textbf{Impacto} & \textbf{Prob.} & \textbf{Mitigación}\\
 \midrule
 \endfirsthead%
-\caption[]{Riesgos principales del proyecto (continuación).}\\
+\caption[]{Riesgos principales del proyecto y mitigación aplicada (continuación).}\\
 \toprule
 \textbf{Riesgo} & \textbf{Impacto} & \textbf{Prob.} & \textbf{Mitigación}\\
 \midrule
 \endhead%
 \bottomrule
-\multicolumn{4}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
+\multicolumn{4}{>{\centering\arraybackslash}p{0.92\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
 \endfoot%
 \bottomrule
-\multicolumn{4}{c}{\textit{\textbf{Fuente.} Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
+\multicolumn{4}{>{\centering\arraybackslash}p{0.92\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir del seguimiento técnico del proyecto.}}\\
 \endlastfoot%
-Rigidez de navegación determinista & Comportamiento poco realista y baja utilidad clínica & Alta & Pivotar a percepción local con sensores y red neuronal.\\
-Fitness mal calibrado & Aprendizaje de estrategias no deseadas & Alta & Instrumentar componentes, exportar CSV y analizar penalizaciones por familia de muerte.\\
-Coste computacional & Entrenamientos lentos y dependencia de GPU/CPU & Media & Poblaciones moderadas, análisis offline y propuesta futura de modo sin renderizado.\\
-Complejidad de intersecciones & Colisiones y violaciones normativas en cruces & Alta & Bordes dinámicos, zonas de cruce, validación de stops/cedas y separación train/test.\\
-Configuración manual del mapa & Lecturas sensoriales incoherentes y regresiones localizadas & Alta & Revisar propiedades de bordes, volúmenes, triggers y líneas de parada antes de cada entrenamiento largo; documentar hotspots por actor.\\
-Sobreajuste a spawns concretos & Buen rendimiento local pero mala generalización & Media & Normalización por punto de aparición y test con spawns diferenciados.\\
-Pérdida de conocimiento entrenado & Reinicio de aprendizaje entre sesiones & Media & Persistencia de modelos \texttt{SuperCarModel} y \texttt{SessionCarModel}.\\
+Navegación determinista rígida & Recorridos poco naturales y mal adaptados a un coche físico. & Alta & Abandono progresivo de \textit{Path Finding} como solución principal y adopción de sensores con red neuronal.\\
+Fitness mal calibrado & Aprendizaje de estrategias no deseadas, como sobrevivir sin avanzar o compensar colisiones con puntos previos. & Alta & Desglose por componentes, exportación de CSV, análisis por familia de muerte y pruebas de regresión.\\
+Configuración manual del mapa & Lecturas sensoriales incoherentes y fallos concentrados en actores concretos. & Alta & Documentación de bordes, triggers, spawns y volúmenes; diagnóstico por actor y propuesta de verificaciones previas.\\
+Sobreajuste a zonas fáciles & Buen rendimiento en recorridos concretos y mala generalización espacial. & Media & Separación train/test, normalización por spawn y análisis de dificultad por punto de aparición.\\
+Coste computacional & Iteraciones lentas al ejecutar físicas, renderizado y poblaciones completas. & Media & Poblaciones moderadas, persistencia de modelos, reutilización de tests y propuesta futura de modo sin renderizado.\\
+Regresiones normativas & Una mejora en rotonda, stop o ceda degrada el comportamiento global. & Alta & Mantener el 18 de junio como referencia, comparar bloques posteriores por familias de fallo y no aceptar mejoras aisladas.\\
+Pérdida de trazabilidad & Dificultad para reconstruir qué cambió en Blueprints binarios. & Media & Uso combinado de GitLab, descripciones fechadas, informes, CSV y anexos de fuentes.\\
 \end{longtable}
 }
 
 \section{Estimación de recursos y presupuesto}
 
-El proyecto se ha desarrollado durante las prácticas y el TFG, sin contratación externa ni compra específica de material. El recurso principal ha sido el tiempo dedicado a implementar Blueprints, ejecutar entrenamientos, revisar resultados y documentar cambios. Parte de ese tiempo no es programación directa: los entrenamientos ocupan el equipo durante periodos prolongados y obligan a repetir pruebas cuando cambia el fitness o la geometría de una intersección.
+La estimación económica se basa en las fuentes disponibles, pero no existe un registro horario exacto de todo el TFG. Sí consta una dedicación documentada de 150 horas de prácticas entre octubre de 2025 y enero de 2026, vinculada al aprendizaje del proyecto, Unreal Engine, Blueprints, GitLab y la preparación de la línea de trabajo. Para el periodo posterior se ha estimado la dedicación a partir de las 40 issues cerradas, las actas, la cantidad de versiones descritas, los bloques de entrenamiento y test, los scripts de análisis y la redacción de la memoria. Por transparencia, las cifras de la tabla~\ref{tab:presupuesto-horas} deben leerse como estimación razonada, no como parte horario certificado.
 
-El trabajo técnico se ha realizado en un equipo capaz de ejecutar Unreal Engine 5 y las físicas de varios vehículos de forma simultánea. El control de versiones se ha gestionado con GitLab y el análisis con Python y bibliotecas libres. Unreal Engine no ha generado coste de licencia en este contexto académico. Por tanto, no existen costes directos de software ni de infraestructura; el hardware ya estaba disponible y solo correspondería imputar amortización y consumo eléctrico si se elaborase un presupuesto comercial.
+{\small
+\begin{table}[htbp]
+\centering
+\caption{Estimación de dedicación por tipo de actividad.}%
+\label{tab:presupuesto-horas}
+\begin{tabularx}{0.96\textwidth}{L{4.3cm}rX}
+\toprule
+\textbf{Actividad} & \textbf{Horas} & \textbf{Criterio de estimación}\\
+\midrule
+Análisis inicial y asimilación del proyecto heredado & 65 & Revisión del simulador previo, orden de assets, aprendizaje de Unreal Engine y delimitación del alcance.\\
+Desarrollo en Unreal Engine y Blueprints & 210 & Controlador, red neuronal, gestor evolutivo, señalización, intersecciones, spawns, persistencia y modo libre.\\
+Entrenamiento y pruebas en simulador & 90 & Ejecución supervisada de generaciones, tests, FreeRun, repetición de bloques y revisión de sesiones fallidas.\\
+Análisis de datos y scripts & 85 & Limpieza de logs, validación de CSV, generación de informes, gráficas, métricas situacionales y diagnóstico de regresiones.\\
+Documentación académica y anexos & 95 & Memoria, revisión de capítulos, tablas, figuras, bibliografía, anexos y coherencia entre resultados y conclusiones.\\
+Reuniones, GitLab y gestión & 40 & Reuniones de seguimiento, issues, milestones, planificación, reorganización de tareas y trazabilidad.\\
+Depuración y regresiones & 55 & Corrección de fallos por stop, ceda, rotonda, navegación, solapes, modelos incompatibles y configuración del mapa.\\
+\midrule
+\textbf{Total estimado} & \textbf{640} & Incluye las 150 horas de prácticas documentadas y la dedicación posterior estimada del TFG.\\
+\bottomrule
+\end{tabularx}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de memoria de prácticas, GitLab, actas, descripciones del programa y análisis de resultados.}}
+\end{table}
+}
 
-En la memoria final, la valoración económica deberá convertir las horas efectivas de desarrollo y experimentación a un coste de ingeniería acordado con el tutor, y añadir la parte proporcional del equipo utilizado. Mantener separadas ambas partidas evita presentar como gasto real una licencia no pagada y permite actualizar el presupuesto cuando se cierre el registro definitivo de dedicación.
+\Needspace{7\baselineskip}
+Para valorar económicamente el trabajo se aplica una tarifa orientativa de 25 EUR/hora, coherente con un perfil técnico junior dedicado a desarrollo en Unreal Engine, análisis de datos e integración de IA en un contexto académico. Con esa hipótesis, el coste de personal asciende a 16000 EUR. La cifra no representa una factura real, sino el coste equivalente de desarrollo si el trabajo se presupuestara como proyecto técnico.
+
+{\small
+\begin{table}[htbp]
+\centering
+\caption{Presupuesto estimado del proyecto.}%
+\label{tab:presupuesto-economico}
+\begin{tabularx}{0.96\textwidth}{L{3.8cm}L{2.8cm}>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Concepto} & \textbf{Coste estimado} & \textbf{Observaciones}\\
+\midrule
+Personal técnico & 16000.00 EUR & 640 horas estimadas a 25 EUR/hora.\\
+Software de desarrollo & 0.00 EUR & Unreal Engine, Git/GitLab, Python, bibliotecas de análisis y LaTeX se usan sin coste directo imputado en este contexto.\\
+Assets incorporados & 0.00 EUR & No consta compra específica en la documentación revisada; los assets se tratan según sus licencias.\\
+Amortización de equipo & 180.00 EUR & Estimación provisional pendiente de confirmar características, precio y antigüedad del ordenador utilizado.\\
+Consumo eléctrico de pruebas & 20.00 EUR & Estimación conservadora para ejecuciones prolongadas de Unreal y análisis; debe ajustarse si se conoce consumo real.\\
+\midrule
+\textbf{Total estimado} & \textbf{16200.00 EUR} & Presupuesto orientativo, no gasto real desembolsado.\\
+\bottomrule
+\end{tabularx}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia. Las partidas de hardware y electricidad son provisionales por falta de datos exactos del equipo.}}
+\end{table}
+}
+
+Los recursos software principales fueron Unreal Engine 5.5.4, Blueprints, Chaos Vehicle, Git/GitLab, Python, NumPy, Matplotlib, Seaborn, LaTeX y MiKTeX. El recurso hardware fue un ordenador personal capaz de ejecutar Unreal Engine 5 con el mapa urbano, físicas de vehículo y poblaciones simultáneas. Para cerrar una versión económica más precisa falta confirmar CPU, GPU, memoria RAM, almacenamiento, precio aproximado del equipo, antigüedad y, si se desea imputar consumo, potencia media o factura eléctrica de referencia. Hasta disponer de esos datos, la amortización se mantiene como hipótesis explícita.

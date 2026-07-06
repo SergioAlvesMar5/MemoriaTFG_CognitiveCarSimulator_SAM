@@ -6,13 +6,21 @@ La solución actual se estructura como un sistema de agentes autónomos entrenad
 
 El sistema se completa con elementos de tráfico que comunican contexto a los controladores: semáforos, señales de stop, señales de ceda y zonas de cruce. Estos elementos no son meros objetos visuales, sino actores con lógica propia que activan zonas de detección, informan al vehículo de líneas de parada, controlan estados y aplican penalizaciones o bonus según el comportamiento observado.
 
+\begin{figure}[htbp]
+\centering
+\caption[Entorno de pruebas del simulador.]{Entorno de pruebas del simulador con calzada, señalización, cajas de detección y elementos auxiliares de configuración visibles en el editor.}%
+\label{fig:entorno-pruebas}
+\includegraphics[width=0.92\textwidth]{assets/foto_circuito.png}
+\caption*{\textit{\textbf{Fuente.} Captura propia del proyecto en Unreal Engine.}}
+\end{figure}
+
 \section{Subsistemas}
 
 \subsection{Gestor evolutivo}
 
 \texttt{BP\_EvolutionManager} coordina el ciclo de entrenamiento y las ejecuciones de test. Al comenzar comprueba si existe un modelo histórico en \texttt{SuperCarModel}. Si lo encuentra, carga sus pesos; en caso contrario, inicializa una red aleatoria que servirá como punto de partida. Después actualiza la lista de puntos de aparición permitidos para el modo activo y crea la población de vehículos, asignando a cada coche su controlador y su red.
 
-En la primera generación, el gestor parte de redes aleatorias o del modelo guardado según la configuración. A partir de la segunda, el índice del coche determina su familia: se conserva una copia sin mutar del mejor modelo histórico y otra del mejor modelo de la sesión; un 40\% de los puestos disponibles se muta desde cada una de esas dos semillas con una tasa del 3\%; los puestos restantes se derivan del modelo histórico con una tasa del 6\%. Cada coche registra el número de pesos modificados, su magnitud media y el fitness de su progenitor, lo que permite comprobar después si una familia de mutación aporta mejora real.
+En la primera generación, el gestor parte de redes aleatorias o del modelo guardado según la configuración. A partir de la segunda, el índice del coche determina su familia: se conserva una copia sin mutar del mejor modelo histórico y otra del mejor modelo de la sesión; una parte de la población se deriva de esas dos semillas y el resto mantiene presión exploratoria desde el modelo histórico. En las versiones intermedias esta lógica usó tasas fijas del 3\% y del 6\%; la versión final documentada calcula una tasa dinámica limitada por el número total de pesos y el historial de generaciones sin mejora. Cada coche registra el número de pesos modificados, su magnitud media y el fitness de su progenitor, lo que permite comprobar después si una familia de mutación aporta mejora real.
 
 La generación termina cuando todos los vehículos han finalizado o han sido eliminados por alguna condición de muerte. El gestor ordena entonces los resultados y persiste el mejor de sesión en \texttt{SessionCarModel}. Solo sustituye \texttt{SuperCarModel} cuando el candidato mejora el fitness histórico y sus pesos son distintos; antes de sobrescribirlo guarda además una copia fechada del modelo anterior. La función \texttt{SaveWeightsToSlot} centraliza este proceso para que ambos ficheros almacenen los mismos bloques de pesos y el fitness asociado.
 
@@ -62,6 +70,15 @@ La decisión se modela mediante la enumeración \texttt{E\_DirectionIntent}, con
 
 Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos.
 
+\begin{figure}[htbp]
+\centering
+\caption[Lectura sensorial en Blueprint.]{Fragmento de \texttt{GetSensorsData} en el controlador de IA. El bloque muestra la traza física, el recorrido de impactos y el filtrado de bordes de intersección mediante \texttt{CheckMatch}.}%
+\label{fig:blueprint-sensores}
+\includegraphics[width=0.98\textwidth]{assets/bp_get_sensors_data_core.png}
+\caption*{\textit{\textbf{Fuente.} Captura propia del proyecto en Unreal Engine a partir de \texttt{BP\_AIController2}.}}
+\end{figure}
+
+\Needspace{16\baselineskip}
 \subsection{Sistema de fitness}
 
 La función de fitness convierte lo que ocurre durante la conducción en una puntuación que el gestor evolutivo puede comparar. En este proyecto no se planteó como una fórmula única y cerrada, sino como una suma acumulativa de pequeñas decisiones: avanzar de forma útil aumenta la puntuación, mientras que circular sin espacio, corregir mal, incumplir una señal o quedar bloqueado la reduce. Esta elección fue práctica. En Unreal Engine el coche no se mueve sobre una línea ideal, sino con físicas, inercia, rozamiento, colisiones y sensores que pueden cambiar de lectura en cada cruce.
@@ -107,6 +124,14 @@ El sistema de semáforos se compone de un controlador de intersección y de acto
 
 Cuando un vehículo entra en la zona, el semáforo comunica estado, línea de parada y distancia. Si el semáforo está en rojo o ámbar restrictivo, el controlador activa contexto de parada. Al salir de la zona, se comprueba si el vehículo atravesó la línea a una velocidad legal. El sistema aprende umbrales de velocidad legal a partir de muestras previas, evitando depender siempre de un valor fijo.
 
+\begin{figure}[htbp]
+\centering
+\caption[Semáforo integrado en el escenario.]{Semáforo integrado en el escenario de Unreal Engine. El actor visual se acompaña de zonas de detección y línea de parada utilizadas por la lógica de control.}%
+\label{fig:semaforo-escenario}
+\includegraphics[width=0.72\textwidth]{assets/foto_semaforo.png}
+\caption*{\textit{\textbf{Fuente.} Captura propia del proyecto en Unreal Engine.}}
+\end{figure}
+
 \subsection{Stop y ceda el paso}
 
 Las señales \texttt{BP\_Sign\_Stop} y \texttt{BP\_Sign\_Yield} amplían la interacción normativa. En stop se exige detención suficiente dentro de una ventana dinámica antes de la línea, espera mínima y comprobación de cruce libre. Si se cumple, se aplica bonus y se libera el vehículo; si no, se aplica penalización y muerte por \texttt{STOP\_VIOLATION}. En ceda se monitoriza velocidad, aproximación y disponibilidad de la zona de cruce, con penalización por \texttt{YIELD\_VIOLATION} y bonus al completar correctamente. La lógica más reciente diferencia, además, los cedas donde el vehículo puede continuar porque el cruce está libre de los casos en los que queda retenido por otros coches.
@@ -115,7 +140,22 @@ La liberación de cedas se ha refinado con una cola específica de vehículos pe
 
 La diferencia entre stop y ceda es metodológicamente importante. El stop requiere detención explícita; el ceda permite continuar si la velocidad y la prioridad son compatibles con la seguridad del cruce.
 
-La validación del stop aprende de las maniobras legales una velocidad máxima y un tiempo mínimo de espera. Con ellos calcula una ventana de parada a partir de la distancia de entrada y del tiempo estimado hasta la línea. La revisión de final de junio simplifica el límite de validación a la suma del tiempo aprendido y el tiempo de aproximación. Como se muestra en el capítulo de resultados, este cambio coincide con un aumento acusado de \texttt{STOP\_VIOLATION} y queda pendiente de recalibración. La separación posterior entre \texttt{STOP\_VIOLATION\_EXIT} y \texttt{STOP\_VIOLATION\_TIMEOUT} ayuda a distinguir si el coche cruza indebidamente la línea o si queda atrapado esperando demasiado tiempo.
+La validación del stop aprende de las maniobras legales una velocidad máxima y un tiempo mínimo de espera. Con ellos calcula una ventana de parada a partir de la distancia de entrada y del tiempo estimado hasta la línea. Las revisiones posteriores separan mejor tres condiciones que antes quedaban demasiado acopladas: estar suficientemente detenido, permanecer en una posición legal respecto a la línea y haber esperado el tiempo mínimo aprendido. La descripción del 6 de julio añade \texttt{LearnedMinTimeCache} al controlador para que el fitness y \texttt{BP\_Sign\_Stop} compartan la misma referencia temporal. Además, si el tiempo de validación se agota pero el vehículo sigue en posición legal, el contador se reinicia y se reevalúa la espera; la penalización por \texttt{STOP\_VIOLATION\_TIMEOUT} queda reservada para los casos en los que la posición ya no es legal. Este cambio mejora la trazabilidad de la infracción, aunque todavía debe validarse con bloques comparables antes de considerarse estable.
+
+\begin{figure}[htbp]
+\centering
+\caption[Señales de stop y ceda en el mapa.]{Señales de stop y ceda en el mapa, con línea de referencia y cajas de detección visibles durante la edición del escenario.}%
+\label{fig:stop-ceda-escenario}
+\begin{minipage}{0.43\textwidth}
+\centering
+\includegraphics[width=\linewidth]{assets/foto_stop.png}
+\end{minipage}\hfill
+\begin{minipage}{0.43\textwidth}
+\centering
+\includegraphics[width=\linewidth]{assets/foto_ceda.png}
+\end{minipage}
+\caption*{\textit{\textbf{Fuente.} Capturas propias del proyecto en Unreal Engine.}}
+\end{figure}
 
 \subsection{Rotondas}
 
@@ -124,6 +164,7 @@ Los triggers de intersección pueden marcarse como entrada o tramo de rotonda. A
 El fitness incluye además una penalización cuando el acelerador supera la distancia frontal normalizada dentro de la rotonda. En la revisión de final de junio, su escala se normaliza con el cociente entre el cuadrado de la velocidad máxima y la distancia máxima de visión, evitando que dependa de unidades incompatibles. Las recompensas de entrada y completado y las penalizaciones de aproximación y aceleración se exportan por separado; así puede comprobarse si el saldo neto favorece realmente completar la maniobra. Las descripciones posteriores añaden el análisis por salida, lo que permite detectar si la primera, la segunda o las salidas posteriores concentran una parte desproporcionada de los fallos.
 
 \section{Pipeline experimental}
+\enlargethispage{\baselineskip}
 
 Cada ejecución genera un registro por vehículo y un resumen por generación. Una vez terminada la sesión, los scripts de Python validan que ambos CSV contienen el número de filas esperado y que sus identificadores pueden alinearse. Solo después de esa comprobación se calculan los indicadores y se generan las gráficas. De esta manera, una fila incompleta o una generación duplicada no queda oculta dentro de una media agregada.
 

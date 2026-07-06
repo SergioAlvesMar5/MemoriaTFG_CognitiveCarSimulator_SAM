@@ -9,7 +9,8 @@ La evaluación de test agrega las cuatro carpetas del 18 de junio: \texttt{12-41
 
 Los tamaños efectivos se obtienen de los CSV\@: 30 vehículos por generación de entrenamiento y 54 por ejecución de test. Esta comprobación es necesaria porque \texttt{PopulationSize} es editable en la instancia del mapa y su valor por defecto no describe necesariamente la sesión archivada. También se detectó que las carpetas de test \texttt{2026-06-11\_11-55} y \texttt{2026-06-11\_13-08} contienen un \texttt{Fitness\_Debug.csv} idéntico; en las comparaciones se cuenta una sola vez.
 
-Los bloques posteriores de final de junio y comienzo de julio se emplean como pruebas de regresión y diagnóstico, no como nueva referencia principal. En esa serie aparecen recuperaciones parciales, caídas por \texttt{STOP\_VIOLATION}, sesiones demasiado cortas y nuevos indicadores sobre cedas, solapes y bloqueo en cruces. El 2 de julio alcanza 193 aciertos sobre 354 evaluaciones, un 54.52\%, pero procede de un único bloque más pequeño que la referencia del día 18. El 3 de julio cambia además el modo experimental: se activa \texttt{FreeRun}, con coches vivos censurados y respawn por spawnpoint, por lo que debe interpretarse como simulación libre de tráfico y no como test estadístico generacional. Por ello, los resultados principales del capítulo se apoyan en la configuración validada del 18 de junio y las sesiones posteriores se interpretan como evidencia para decidir las siguientes correcciones.
+\Needspace{8\baselineskip}
+Los bloques posteriores de final de junio y comienzo de julio se emplean como pruebas de regresión y diagnóstico, no como nueva referencia principal. En esa serie aparecen recuperaciones parciales, caídas por \texttt{STOP\_VIOLATION}, sesiones demasiado cortas y nuevos indicadores sobre cedas, solapes y bloqueo en cruces. El 2 de julio alcanza 193 aciertos sobre 354 evaluaciones, un 54.52\%, pero procede de un único bloque más pequeño que la referencia del día 18. El 3 de julio cambia además el modo experimental: se activa \texttt{FreeRun}, con coches vivos censurados y respawn por spawnpoint. Se revisan dos sesiones de ese tipo, una dominada por \texttt{LAZY} y otra por \texttt{NAV\_VIOLATION}; ambas deben interpretarse como simulación libre de tráfico y no como test estadístico generacional. Por ello, los resultados principales del capítulo se apoyan en la configuración validada del 18 de junio y las sesiones posteriores se interpretan como evidencia para decidir las siguientes correcciones.
 
 \section{Resumen cuantitativo}
 
@@ -39,11 +40,12 @@ Tasa de acierto & \multicolumn{1}{c}{No aplica} & 57.50\%\\
 
 El test no mejora el modelo durante la ejecución: carga pesos fijos y desactiva la mutación. Su mayor \textit{MeanFit} responde a que cambia la distribución de puntos y trayectorias y a que cada ejecución cubre los 54 spawns de test. Por ello, la tabla~\ref{tab:resultados-principales} describe cada modo, pero no permite atribuir la diferencia de fitness únicamente a la calidad de la política.
 
+\clearpage
 \section{Evolución del entrenamiento}
 
 El mejor fitness se alcanza en la generación 56, con 134959.45, y el fitness medio máximo en la generación 33, con 44373.00. Ninguna de las 548 generaciones presenta \textit{MeanFit} negativo.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \caption[Tendencia del fitness en el entrenamiento del 18 de junio de 2026.]{Tendencia del fitness en el entrenamiento del 18 de junio de 2026.}%
 \label{fig:tendencia-entrenamiento}
@@ -53,7 +55,7 @@ El mejor fitness se alcanza en la generación 56, con 134959.45, y el fitness me
 
 La figura~\ref{fig:tendencia-entrenamiento} muestra variabilidad persistente y obliga a separar supervivencia de aptitud. Entre las primeras y las últimas 50 generaciones, el \textit{MeanFit} desciende un 17.5\%, de 33263.23 a 27433.45, mientras el tiempo medio aumenta un 43.1\%, de 54.83 a 78.46 segundos. El informe no identifica convergencia clara y registra 492 generaciones desde el último máximo. El modelo aprende a permanecer activo durante más tiempo, pero esa supervivencia no se traduce en una mejora monotónica del objetivo.
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{Evolución de la red neuronal y del fitness durante el proyecto.}%
 \label{tab:evolucion-red-fitness}
@@ -75,6 +77,7 @@ De los 16432 registros, 8511 terminan por tiempo y 7483 por colisión. Los 348 f
 
 La sesión registra además 5365 entradas en rotonda, 1075 completaciones confirmadas por una nueva entrada y 2350 colisiones dentro de ese contexto. La tasa de completado del 20.04\% es un límite inferior porque el contador solo confirma la maniobra al alcanzar de nuevo el trigger de entrada. El saldo específico de rotonda es negativo, con \(-553966.78\) puntos acumulados, debido principalmente a la penalización de aceleración.
 
+\clearpage
 \section{Evaluación de test}
 
 El criterio implementado considera fallo cualquier colisión, infracción, estancamiento, corrección o marcha atrás incorrecta, vuelco, red inválida o navegación fuera de zona; también exige al menos 60 segundos de vida. El umbral de fitness de 25000 está configurado, pero desactivado mediante \texttt{TestUseFitness}. Con estas reglas, el bloque del 18 de junio obtiene 652 aciertos de 1134 evaluaciones, un 57.50\%. El intervalo de confianza de Wilson al 95\% se sitúa entre el 54.60\% y el 60.34\%~\cite{wilson}. Las cuatro sesiones oscilan entre el 53.70\% y el 61.42\%, con una mediana del 57.04\%.
@@ -156,8 +159,13 @@ Las pruebas del 30 de junio añaden dos bloques pequeños de test con 236 evalua
 
 Los entrenamientos del 30 de junio y del 1 de julio refuerzan esa lectura. Ambos usan el nuevo esquema de métricas, pero continúan dominados por fallos legales; el segundo desplaza el problema hacia \texttt{STOP\_VIOLATION\_TIMEOUT} y detecta tiempo bloqueado en cruce en 6390 de 8872 coches seleccionados. Esto señala que la lógica de cruce, liberación y espera debe revisarse junto al fitness.
 
+\Needspace{8\baselineskip}
 El 1 de julio agrupa cinco bloques de test con 767 evaluaciones declaradas y un 27.38\% de acierto. La causa dominante ya no es una única familia: conviven \texttt{TIMEFINISHED}, \texttt{STOP\_VIOLATION\_TIMEOUT}, \texttt{YIELD\_VIOLATION\_TIMEOUT} y colisiones en volúmenes de navegación. El 2 de julio recupera parcialmente el comportamiento, con 193 aciertos sobre 354 evaluaciones y 54.52\% de éxito, aunque todavía queda por debajo del 57.50\% del 18 de junio y presenta 65 \texttt{STOP\_VIOLATION\_EXIT}. Por tanto, el día 2 se interpreta como recuperación parcial, no como nueva referencia cerrada.
 
-La sesión del 3 de julio debe leerse aparte. El informe automático detecta \texttt{FreeRun}: 300 eventos terminales exportados, 50 vehículos vivos censurados estimados y unos 350 intentos totales. En los eventos terminales aparecen 203 muertes \texttt{LAZY}, 53 \texttt{STOP\_VIOLATION\_EXIT}, 7 \texttt{YIELD\_VIOLATION\_EXIT} y 37 colisiones. También se registran 419 solapes entre coches en 247 de los 300 vehículos terminales, 63399.08 puntos de penalización real por solape, 697.60 segundos acumulados de bloqueo en cruce y 122 entradas en rotonda con 6 completaciones confirmadas. Estos datos son valiosos para evaluar tráfico continuo y coches no fantasma, pero no deben compararse directamente con la tasa de acierto de un test por generaciones.
+La primera sesión del 3 de julio debe leerse aparte. El informe automático detecta \texttt{FreeRun}: 300 eventos terminales exportados, 50 vehículos vivos censurados estimados y unos 350 intentos totales. En los eventos terminales aparecen 203 muertes \texttt{LAZY}, 53 \texttt{STOP\_VIOLATION\_EXIT}, 7 \texttt{YIELD\_VIOLATION\_EXIT} y 37 colisiones. También se registran 419 solapes entre coches en 247 de los 300 vehículos terminales, 63399.08 puntos de penalización real por solape, 697.60 segundos acumulados de bloqueo en cruce y 122 entradas en rotonda con 6 completaciones confirmadas. Estos datos son valiosos para evaluar tráfico continuo y coches no fantasma, pero no deben compararse directamente con la tasa de acierto de un test por generaciones.
+
+La segunda sesión \texttt{FreeRun} del 3 de julio, \texttt{test\_2026-07-03\_15-31}, modifica el diagnóstico. Registra 177 eventos terminales, 50 vehículos vivos censurados y unos 227 intentos totales. Desaparece \texttt{LAZY} como causa terminal, pero la muerte dominante pasa a ser \texttt{NAV\_VIOLATION}, con 83 casos, el 46.9\% de los eventos terminales. También aparecen 48 \texttt{STOP\_VIOLATION\_EXIT}, 2 \texttt{YIELD\_VIOLATION\_EXIT} y 44 colisiones. Las rotondas mejoran respecto a la sesión anterior en completaciones mínimas, con 16 salidas confirmadas sobre 55 entradas, pero todavía acumulan 18 colisiones. El bloqueo en cruce afecta a 97 de 177 coches terminales y se concentra parte del problema en triggers como \texttt{IT58}, \texttt{IT55} e \texttt{IT54}, además del \texttt{BP\_SpawnPoint40}. Esta sesión confirma que una corrección puede eliminar un síntoma, como \texttt{LAZY}, y desplazar el fallo dominante hacia navegación o señalización.
+
+Las descripciones técnicas del 6 de julio corrigen la validación de stop separando posición legal, espera mínima aprendida y timeout. Esa actualización no se utiliza para recalcular las tasas anteriores, porque no existe todavía un bloque experimental comparable posterior a ella. Por tanto, se conserva como cambio de implementación pendiente de prueba, no como sustitución de la referencia ni como evidencia de mejora medida.
 
 La conclusión experimental es que el bloque del 18 de junio sigue siendo la referencia de esta memoria. Mejora la tasa de acierto, reduce colisiones respecto a etapas previas y amplía la evaluación a 54 spawns. Aun así, el 40.04\% de colisiones, la diferencia entre puntos de aparición, el saldo negativo en rotondas y las regresiones posteriores mantienen abierto el problema. La versión estable debe definirse por un bloque reproducible de entrenamiento y test; las sesiones posteriores sirven para decidir la siguiente corrección, no para reemplazar la referencia por fecha.
