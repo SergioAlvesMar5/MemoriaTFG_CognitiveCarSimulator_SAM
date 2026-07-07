@@ -1,0 +1,49 @@
+\chapter{Tecnologías y herramientas}
+
+\section{Unreal Engine 5}
+
+Unreal Engine 5 es el motor sobre el que se desarrolla el simulador. Proporciona renderizado 3D, editor visual, sistema de actores, colisiones, físicas, Blueprints y herramientas de depuración~\cite{unreal,blueprints}. Su elección viene heredada de la versión inicial del proyecto y resulta coherente con los requisitos de realismo visual, interacción en tiempo real y despliegue del simulador como aplicación ejecutable.
+
+El trabajo se implementa principalmente mediante Blueprints, lo que permite integrar lógica de IA, controladores, sensores y eventos de tráfico dentro del propio editor. Este enfoque facilita la iteración rápida, aunque introduce retos de mantenibilidad cuando los grafos crecen. Por ello se han documentado los Blueprints principales del gestor evolutivo, el controlador de IA, el vehículo autónomo y los actores de señalización. Las denominaciones concretas de estos módulos se recogen en el anexo de fuentes para mantener la trazabilidad técnica sin sobrecargar el texto principal.
+
+\section{Sistema de físicas Chaos Vehicle}
+
+El vehículo se controla mediante el sistema de físicas Chaos Vehicles de Unreal Engine~\cite{chaos}. La red neuronal no mueve directamente el actor, sino que genera consignas continuas que se aplican al componente de movimiento del vehículo. La salida de dirección se envía como \textit{steering input}; la salida de aceleración/frenado se interpreta de forma separada: valores positivos se aplican como acelerador y valores negativos como freno.
+
+Esta separación es importante porque mantiene el comportamiento dentro de la física del motor. El agente aprende a actuar sobre el vehículo, pero la respuesta final depende de velocidad, fricción, inercia, contacto con el suelo y restricciones propias del modelo físico.
+
+\section{Raycasting y percepción local}
+
+La percepción del vehículo se implementa mediante trazas o rayos simulados, una técnica soportada por Unreal Engine para consultar colisiones a lo largo de una línea de la escena~\cite{traces}. El controlador lanza once sensores en un ángulo de visión de 180 grados desde el vehículo. Cada sensor devuelve una distancia normalizada al primer obstáculo relevante, con valor cercano a 1 cuando no se detecta un obstáculo próximo y valores menores cuando existe un límite, pared, vehículo o borde de intersección.
+
+Además de los sensores laterales y frontales, se calculan variables derivadas como la distancia frontal a obstáculo, la distancia del sensor izquierdo, la distancia del sensor derecho y la diferencia horizontal entre ambos. Estas magnitudes permiten construir una señal de centrado en carril y detectar correcciones equivocadas.
+
+\section{Red neuronal}
+
+La red neuronal empleada es un perceptrón multicapa ligero. Las primeras trece posiciones de su vector de entrada describen el movimiento y el espacio próximo al vehículo: velocidad longitudinal, velocidad angular y once distancias obtenidas mediante raycasting. Todas ellas se normalizan antes de ejecutar la inferencia para evitar que una magnitud domine a las demás únicamente por su escala.
+
+Las siete posiciones restantes incorporan el contexto de señalización y el sesgo. Dos contienen el estado numérico del control activo y la distancia normalizada a la línea de parada; esta última solo se utiliza cuando hay un semáforo activo o una orden de parada, y vale 1 en el resto de situaciones. Otras cuatro posiciones forman una codificación \textit{one-hot} que distingue entre semáforo, stop, ceda el paso o ausencia de control. La última posición es un sesgo constante. La configuración vigente suma así 20 entradas y permite que una misma lectura geométrica produzca respuestas distintas según la norma aplicable.
+
+La capa oculta contiene 16 neuronas y utiliza \(\tanh\) como función de activación. La capa de salida contiene dos neuronas, también con \(\tanh\), de modo que sus valores se encuentran en el rango \texttt{[-1, 1]}. La primera salida controla dirección y la segunda controla aceleración o frenado. La arquitectura emplea 320 pesos entre entrada y capa oculta y 32 entre capa oculta y salida, 352 en total. La rutina de inferencia deduce el número esperado de entradas a partir de la longitud del primer bloque de pesos y comprueba ambas dimensiones antes de calcular las salidas. Esta guarda permite rechazar modelos incompatibles si la configuración cambia.
+
+\section{Algoritmos evolutivos}
+
+El entrenamiento se basa en población, selección y mutación. El gestor evolutivo crea una población de vehículos, les asigna pesos iniciales o mutados, ejecuta la simulación y registra el fitness final de cada individuo. Los mejores pesos se guardan en disco como modelos reutilizables, distinguiendo entre el mejor modelo histórico y el mejor de sesión.
+
+La configuración documentada el 17 de junio aplica una tasa ordinaria del 3\% a los descendientes del modelo histórico y del mejor modelo de sesión. Cada generación conserva además una copia sin mutar de ambos modelos y reserva el resto de la población a una mutación del 6\%, más intensa. El reparto equilibra explotación y diversidad sin reinicializar aleatoriamente individuos después de la primera generación. Los tamaños de población son parámetros editables del mapa; por ello, los valores efectivos se obtienen de la columna \texttt{N} de cada ejecución y no del valor por defecto del Blueprint.
+
+\section{Análisis de datos}
+
+La instrumentación se diseñó para separar el detalle de cada vehículo de los resúmenes utilizados al comparar generaciones. Esta separación evita que los ficheros agregados crezcan innecesariamente y, al mismo tiempo, permite volver al registro individual cuando aparece una colisión, una penalización o un resultado anómalo. El proyecto genera tres ficheros principales:
+
+\begin{itemize}[leftmargin=*]
+  \item \texttt{Fitness\_Debug.csv}, con métricas por coche: fitness, tiempo de vida, punto de aparición, razón de muerte, penalizaciones, bonus, datos de conducción, validación de stops y cedas, mutaciones, genealogía y comportamiento en rotondas.
+  \item \texttt{Training\_Summary.csv}, con resumen por generación de entrenamiento.
+  \item \texttt{Test\_Summary.csv}, con resumen por generación de test, incluyendo aciertos, errores y tasas.
+\end{itemize}
+
+El análisis posterior se realiza mediante Python, NumPy, Matplotlib y Seaborn. El script \texttt{analyse\_current.py} valida la calidad de los CSV, detecta automáticamente si la sesión es de entrenamiento o test, genera informes textuales y produce gráficas de evolución, muertes, distribución de fitness, ranking por spawn, control de entradas, convergencia, diversidad, correlaciones, solapes entre coches y diagnósticos de paradas, cedas, bloqueo en cruces y rotondas. La versión actual calcula las métricas situacionales solo sobre filas con exposición al evento correspondiente, evitando que los ceros de coches que nunca alcanzaron una rotonda diluyan los promedios. El script \texttt{clean\_unreal\_log.py} permite limpiar logs de Unreal Engine conservando errores, avisos relevantes, mensajes de Blueprint y trazas propias del proyecto.
+
+\section{Control de versiones}
+
+El trabajo se ha desarrollado con Git/GitLab en un contexto colaborativo. La documentación de seguimiento recoge tareas de limpieza de repositorio, configuración de \texttt{.gitignore}, eliminación de binarios pesados y organización de issues y milestones. Esta disciplina ha sido relevante porque el proyecto combina assets de Unreal, Blueprints, datos generados y modelos guardados.

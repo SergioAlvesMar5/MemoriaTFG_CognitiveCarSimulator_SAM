@@ -16,12 +16,18 @@ Para evitar una cronología artificial, las fuentes se han tratado de forma comp
 \begin{itemize}
   \item \textbf{Actas de reunión.} Cubren el periodo comprendido entre el 27 de noviembre de 2025 y el 19 de marzo de 2026. Son especialmente útiles para justificar el cambio desde navegación determinista hacia percepción local y aprendizaje evolutivo.
   \item \textbf{GitLab.} El CSV depurado contiene 40 issues cerradas agrupadas en 15 sprints, entre el 7 de noviembre de 2025 y el 1 de julio de 2026. Esta fuente permite reconstruir la continuidad del trabajo después de la última acta formal.
-  \item \textbf{Descripciones del programa.} Las carpetas \texttt{EVOLUTIONMANAGER}, \texttt{REDNEURONAL}, \texttt{FITNESS}, \texttt{INTERSECTIONS} y \texttt{OTROS} documentan la evolución de los Blueprints y el estado de la implementación hasta el 3 de julio.
+  \item \textbf{Descripciones del programa.} Las carpetas \texttt{EVOLUTIONMANAGER}, \texttt{REDNEURONAL}, \texttt{FITNESS}, \texttt{INTERSECTIONS} y \texttt{OTROS} documentan la evolución de los Blueprints y el estado de la implementación hasta el 6 de julio. Las notas finales sobre stop se tratan como actualización técnica pendiente de validación experimental comparable.
   \item \textbf{Análisis de datos.} Los informes, CSV y gráficas de \texttt{INFO/ANALISIS\_DATOS} permiten separar avances reales de mejoras aparentes. Su papel fue decisivo al detectar regresiones por \texttt{STOP\_VIOLATION}, \texttt{NAV\_VIOLATION}, colisiones, rotondas y solapes.
   \item \textbf{Documentación auxiliar.} La propuesta inicial, la planificación ajustada, la memoria de prácticas y los documentos administrativos de \texttt{INFO/UTILES} delimitan el alcance académico, las horas de prácticas documentadas y el contexto institucional del trabajo.
 \end{itemize}
 
 También se revisaron las imágenes de \texttt{INFO/FOTOS\_PROGRAMA}, que documentan visualmente señales, semáforos y el entorno urbano. Su utilidad principal no es demostrar resultados cuantitativos, sino mostrar que la señalización usada por la lógica del simulador tiene una correspondencia visual dentro del mapa.
+
+\subsection{Declaración de uso de herramientas de IA}
+
+Durante el proyecto se utilizaron herramientas de IA generativa como apoyo metodológico y documental. Su uso se limitó a tareas de contraste, ordenación de alternativas, revisión de explicaciones, generación de hipótesis de depuración y preparación de prompts para analizar problemas concretos. No se incorporaron respuestas de forma automática ni se aceptó una propuesta sin comprobarla contra Blueprints, CSV, informes de análisis, documentación técnica o pruebas dentro de Unreal Engine.
+
+Las herramientas empleadas aparecen documentadas en el anexo~\ref{anexo:prompts}. Ese anexo no se presenta como fuente primaria de resultados, sino como trazabilidad del proceso de apoyo: recoge consultas representativas, el objetivo de cada una y la comprobación realizada antes de aprovechar cualquier idea. La responsabilidad técnica de la implementación, la selección de datos, la interpretación de resultados y la redacción final corresponde al autor del TFG, con revisión humana de las propuestas generadas por IA antes de incorporarlas.
 
 \Needspace{14\baselineskip}
 \section{Planificación inicial y reajuste del alcance}
@@ -32,12 +38,88 @@ El primer reajuste consistió en concentrar el alcance en la IA vehicular. Sin u
 
 El segundo reajuste afectó a la forma de validar el progreso. Al inicio era tentador aceptar una mejora porque el coche parecía recorrer más distancia en pantalla. Las demostraciones de marzo mostraron que esa impresión era insuficiente: algunos vehículos sobrevivían sin progresar, otros fallaban siempre en las mismas zonas y otros aprendían estrategias que el fitness no penalizaba todavía. Por ello la planificación incorporó análisis de CSV, separación entre entrenamiento y test, métricas por punto de aparición, familias de muerte, señalización, rotondas y, al final, solapes entre vehículos.
 
-El alcance resultante no agota todas las ideas de la propuesta original, pero sí deja una base técnica medible. La decisión de aplazar peatones, bicicletas, animales y perfiles diferenciados no fue una reducción arbitraria, sino una consecuencia de priorizar la estabilidad del tráfico vehicular antes de aumentar el número de agentes y fuentes de fallo.
+El alcance resultante no agota todas las ideas de la propuesta original, pero sí deja una base técnica medible. El aplazamiento de peatones, bicicletas, animales y perfiles diferenciados se justificó por la necesidad de estabilizar primero el tráfico vehicular antes de aumentar el número de agentes y fuentes de fallo.
+
+\subsection{Requisitos funcionales y no funcionales}
+
+A partir de la propuesta inicial, las actas, GitLab y las descripciones técnicas, el alcance consolidado puede expresarse como requisitos verificables. La tabla~\ref{tab:requisitos-proyecto} no introduce funcionalidades nuevas; resume lo que el proyecto debía cubrir para que los resultados fueran evaluables.
+
+\begin{table}[htbp]
+\centering
+\caption{Requisitos funcionales y no funcionales consolidados.}%
+\label{tab:requisitos-proyecto}
+\begin{tabularx}{0.96\textwidth}{L{1.7cm}L{4.2cm}>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Tipo} & \textbf{Requisito} & \textbf{Criterio de aceptación}\\
+\midrule
+RF & Vehículos autónomos con físicas reales. & El coche debe actuar sobre Chaos Vehicle mediante dirección, acelerador y freno, sin mover directamente el actor.\\
+RF & Percepción local del entorno. & El controlador debe construir un vector de entrada con sensores, velocidad y contexto de señalización.\\
+RF & Inferencia neuronal. & La red debe producir dos salidas continuas y rechazar modelos incompatibles mediante guardas de dimensión.\\
+RF & Entrenamiento evolutivo. & El gestor debe crear poblaciones, mutar pesos, seleccionar individuos y persistir modelos reutilizables.\\
+RF & Separación de modos. & Entrenamiento, test y \texttt{FreeRun} deben diferenciarse en configuración, interpretación y CSV exportados.\\
+RF & Señalización urbana básica. & Semáforos, stops, cedas y rotondas deben influir en la entrada de red, el fitness y las causas de fallo.\\
+RF & Exportación de métricas. & Cada sesión debe generar CSV suficientes para analizar fitness, causas de muerte, spawns y eventos de tráfico.\\
+RNF & Trazabilidad. & Las decisiones deben poder reconstruirse desde actas, GitLab, descripciones, CSV e informes.\\
+RNF & Rendimiento interactivo. & El sistema debe ejecutarse en Unreal Engine con poblaciones moderadas y control físico en tiempo real.\\
+RNF & Mantenibilidad. & Los Blueprints principales deben quedar documentados y los datos experimentales separados de ficheros temporales.\\
+RNF & Reproducibilidad parcial. & Los bloques archivados deben conservar modelos, carpetas de sesión, CSV e informes, aunque no conste una semilla global.\\
+RNF & Privacidad y confidencialidad. & El repositorio y los datos del proyecto deben tratarse como material no público cuando contengan assets, colaboración o información técnica sensible.\\
+\bottomrule
+\end{tabularx}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de propuesta, actas, GitLab, descripciones técnicas y resultados.}}
+\end{table}
+
+\subsection{Historias de usuario y dependencias}
+
+Las historias de usuario se plantean como apoyo de gestión, no como validación clínica. Sirven para comprobar que el desarrollo no se limita a hacer circular un coche en pantalla, sino que atiende a perfiles que necesitarían usar o revisar el sistema. La Tabla~\ref{tab:historias-usuario} recoge esos perfiles y los criterios asociados a cada historia de usuario.
+
+\begin{table}[htbp]
+\centering
+\caption{Historias de usuario y criterios de aceptación.}%
+\label{tab:historias-usuario}
+\begin{tabularx}{0.96\textwidth}{L{3.2cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Perfil} & \textbf{Necesidad} & \textbf{Criterio de aceptación}\\
+\midrule
+Desarrollador o investigador & Entrenar y comparar modelos sin perder trazabilidad. & Existen modos separados, modelos persistidos, CSV e informes por sesión.\\
+Tutor o equipo técnico & Revisar decisiones y cambios de alcance. & Las fases se justifican con actas, GitLab, descripciones y resultados medidos.\\
+Responsable de análisis & Detectar regresiones y familias de fallo. & Los scripts separan colisiones, infracciones, spawns, rotondas, solapes y \texttt{FreeRun}.\\
+Profesional sanitario futuro & Configurar escenarios progresivos y repetibles. & La memoria identifica dificultad, densidad, spawns y eventos como parámetros a trasladar a una interfaz profesional.\\
+Usuario o paciente futuro & Realizar sesiones seguras en un entorno controlado. & El trabajo delimita el uso como base experimental supervisable y deja la validación clínica como requisito futuro.\\
+\bottomrule
+\end{tabularx}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir del alcance del proyecto y del contexto de uso previsto.}}
+\end{table}
+
+Las dependencias entre tareas explican por qué algunas líneas de la propuesta se aplazaron. El coche físico debía estar estable antes de entrenar; los sensores debían existir antes de construir el vector de entrada; la persistencia era necesaria para comparar modelos; los CSV debían funcionar antes de defender resultados; la señalización tenía que comunicarse al controlador antes de valorar cumplimiento normativo; y los coches no fantasma solo podían incorporarse cuando existía una política individual mínimamente evaluable.
 
 \clearpage
 \section{Evolución temporal del desarrollo}
 
-La tabla~\ref{tab:gantt} resume la evolución real del trabajo. No pretende sustituir a las actas ni a GitLab, sino condensar las fases que estructuraron el proyecto y el resultado técnico que dejó cada una.
+La figura~\ref{fig:gantt-proyecto} y la tabla~\ref{tab:gantt} resumen la evolución real del trabajo. No pretenden sustituir a las actas ni a GitLab, sino condensar las fases que estructuraron el proyecto y el resultado técnico que dejó cada una.
+
+\begin{figure}[htbp]
+\centering
+\caption[Diagrama de Gantt del proyecto.]{Diagrama de Gantt simplificado del proyecto, reconstruido a partir de actas, GitLab y descripciones fechadas.}%
+\label{fig:gantt-proyecto}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{L{3.5cm}cccccccc}
+\toprule
+\textbf{Fase} & \textbf{Nov.} & \textbf{Dic.} & \textbf{Ene.} & \textbf{Feb.} & \textbf{Mar.} & \textbf{Abr.} & \textbf{May.} & \textbf{Jun.--jul.}\\
+\midrule
+Arranque y limpieza & \rule{0.55cm}{0.16cm} & \rule{0.55cm}{0.16cm} & & & & & &\\
+Alternativas de navegación & & \rule{0.55cm}{0.16cm} & \rule{0.55cm}{0.16cm} & & & & &\\
+Banco de pruebas básico & & & \rule{0.55cm}{0.16cm} & \rule{0.55cm}{0.16cm} & & & &\\
+Instrumentación y spawns & & & & \rule{0.55cm}{0.16cm} & \rule{0.55cm}{0.16cm} & & &\\
+Train/test y señalización & & & & & \rule{0.55cm}{0.16cm} & \rule{0.55cm}{0.16cm} & &\\
+Fitness y persistencia & & & & & & \rule{0.55cm}{0.16cm} & \rule{0.55cm}{0.16cm} &\\
+Rotondas y test estable & & & & & & & & \rule{0.55cm}{0.16cm}\\
+FreeRun y regresiones & & & & & & & & \rule{0.55cm}{0.16cm}\\
+\bottomrule
+\end{tabular}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia. Las barras indican periodos principales de actividad, no exclusividad absoluta.}}
+\end{figure}
 
 {\small
 \setlength{\tabcolsep}{4pt}
@@ -64,7 +146,7 @@ Banco de pruebas básico & Ene.--feb. 2026 & Línea controlada, sensores, centra
 Instrumentación y spawns & Feb.--mar. 2026 & Puntos de aparición distribuidos, bordes virtuales, normalización por spawn y CSV de diagnóstico. & Se pasa de observar el coche en pantalla a medir por vehículo, generación, causa de muerte y zona del mapa.\\
 Train/test y señalización & Mar.--abr. 2026 & Separación de modos, semáforos, stops, cedas, zonas de espera y contexto \textit{one-hot}. & Las reglas de tráfico entran en la red y en el fitness, pero también aparecen nuevas regresiones normativas.\\
 Fitness avanzado y persistencia & Abr.--may. 2026 & Persistencia de modelos, mutación, elitismo, guardas de red y tiempos aprendidos. & El aprendizaje deja de reiniciarse entre sesiones y se pueden comparar modelos con mayor trazabilidad.\\
-Rotondas y test estable & Jun. 2026 & Métricas de rotonda, análisis por salida, referencia del 18 de junio y comparación de bloques. & Se obtiene la referencia principal de la memoria, con 1134 evaluaciones y 57.50\% de acierto, aunque persisten colisiones y desequilibrios de fitness.\\
+Rotondas y test estable & Jun. 2026 & Métricas de rotonda, análisis por salida, referencia del 18 de junio y comparación de bloques. & Se obtiene la referencia principal de la memoria, con 1134 evaluaciones y 57.50\% de acierto operativo, aunque persisten colisiones y desequilibrios de fitness.\\
 Tráfico concurrente y FreeRun & Jun.--jul. 2026 & Solapes entre coches, distancia de seguridad, cedas con cola, bloqueo en cruce y simulación libre. & El sistema se acerca al tráfico real, pero aparecen nuevos problemas de convivencia, navegación y señalización que quedan como diagnóstico para la siguiente iteración.\\
 \end{longtable}
 }
@@ -179,26 +261,36 @@ Depuración y regresiones & 55 & Corrección de fallos por stop, ceda, rotonda, 
 \Needspace{7\baselineskip}
 Para valorar económicamente el trabajo se aplica una tarifa orientativa de 25 EUR/hora, coherente con un perfil técnico junior dedicado a desarrollo en Unreal Engine, análisis de datos e integración de IA en un contexto académico. Con esa hipótesis, el coste de personal asciende a 16000 EUR. La cifra no representa una factura real, sino el coste equivalente de desarrollo si el trabajo se presupuestara como proyecto técnico.
 
-{\small
-\begin{table}[htbp]
+La tabla~\ref{tab:presupuesto-economico} presenta una estimación con formato comercial. Las partidas de amortización, electricidad, costes indirectos y contingencia se mantienen como hipótesis al no disponer de factura, antigüedad exacta, medición energética ni condiciones reales de contratación. No se imputan licencias de Unreal Engine, Python, Git/GitLab ni LaTeX porque no consta coste directo asociado en las fuentes revisadas.
+
+Los recursos software principales fueron Unreal Engine 5.5.4, Blueprints, Chaos Vehicle, Git/GitLab, Python, NumPy, Matplotlib, Seaborn, LaTeX y MiKTeX. El desarrollo y las pruebas principales se realizaron sobre un equipo OMEN 45L GT22-0021ns, equipado con procesador Intel Core i9-12900K, 32 GB de memoria RAM, unidad SSD de 2 TB y tarjeta gráfica NVIDIA GeForce RTX 3080 Ti. Este equipo se utilizó para ejecutar Unreal Engine 5, realizar pruebas del simulador con vehículos autónomos, entrenar poblaciones mediante el algoritmo evolutivo y analizar posteriormente los ficheros CSV generados. Las especificaciones del equipo sí están confirmadas; el coste de adquisición, la antigüedad y el consumo eléctrico se mantienen como estimaciones al no disponer de factura ni medición energética.
+
+{\footnotesize
+\begin{table}[H]
 \centering
-\caption{Presupuesto estimado del proyecto.}%
+\caption{Presupuesto comercial estimado del proyecto.}%
 \label{tab:presupuesto-economico}
-\begin{tabularx}{0.96\textwidth}{L{3.8cm}L{2.8cm}>{\raggedright\arraybackslash}X}
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{0.9}
+\begin{tabularx}{0.96\textwidth}{L{3.55cm}r>{\raggedright\arraybackslash}X}
 \toprule
-\textbf{Concepto} & \textbf{Coste estimado} & \textbf{Observaciones}\\
+\textbf{Concepto} & \textbf{Coste} & \textbf{Observaciones}\\
 \midrule
 Personal técnico & 16000.00 EUR & 640 horas estimadas a 25 EUR/hora.\\
-Software de desarrollo & 0.00 EUR & Unreal Engine, Git/GitLab, Python, bibliotecas de análisis y LaTeX se usan sin coste directo imputado en este contexto.\\
-Assets incorporados & 0.00 EUR & No consta compra específica en la documentación revisada; los assets se tratan según sus licencias.\\
-Amortización de equipo & 180.00 EUR & Estimación provisional pendiente de confirmar características, precio y antigüedad del ordenador utilizado.\\
-Consumo eléctrico de pruebas & 20.00 EUR & Estimación conservadora para ejecuciones prolongadas de Unreal y análisis; debe ajustarse si se conoce consumo real.\\
+Software de desarrollo & 0.00 EUR & Herramientas sin coste directo imputado.\\
+Assets incorporados & 0.00 EUR & No consta compra específica; licencias revisadas.\\
+Amortización de equipo & 180.00 EUR & Estimación académica para OMEN 45L GT22-0021ns: Intel Core i9-12900K, 32 GB RAM, SSD 2 TB y NVIDIA RTX 3080 Ti; sin factura ni antigüedad confirmadas.\\
+Consumo eléctrico de pruebas & 20.00 EUR & Estimación académica; no se dispone de medición energética ni factura eléctrica de referencia.\\
 \midrule
-\textbf{Total estimado} & \textbf{16200.00 EUR} & Presupuesto orientativo, no gasto real desembolsado.\\
+\textbf{Subtotal directo} & \textbf{16200.00 EUR} & Personal, software, assets, amortización y electricidad.\\
+Costes indirectos de gestión & 1620.00 EUR & Hipótesis del 10\% sobre subtotal directo.\\
+Contingencia y beneficio industrial & 1782.00 EUR & Hipótesis del 10\% sobre subtotal operativo.\\
+\midrule
+\textbf{Total sin IVA} & \textbf{19602.00 EUR} & Presupuesto orientativo, no gasto real desembolsado.\\
+IVA 21\% & 4116.42 EUR & Impuesto aplicado solo para estimación comercial.\\
+\textbf{Total con IVA} & \textbf{23718.42 EUR} & Cifra orientativa; las especificaciones del equipo son reales, pero sus importes económicos siguen estimados.\\
 \bottomrule
 \end{tabularx}
-\caption*{\textit{\textbf{Fuente.} Elaboración propia. Las partidas de hardware y electricidad son provisionales por falta de datos exactos del equipo.}}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia. Las especificaciones del equipo están confirmadas; hardware, electricidad, costes indirectos y contingencia se valoran mediante estimaciones académicas.}}
 \end{table}
 }
-
-Los recursos software principales fueron Unreal Engine 5.5.4, Blueprints, Chaos Vehicle, Git/GitLab, Python, NumPy, Matplotlib, Seaborn, LaTeX y MiKTeX. El recurso hardware fue un ordenador personal capaz de ejecutar Unreal Engine 5 con el mapa urbano, físicas de vehículo y poblaciones simultáneas. Para cerrar una versión económica más precisa falta confirmar CPU, GPU, memoria RAM, almacenamiento, precio aproximado del equipo, antigüedad y, si se desea imputar consumo, potencia media o factura eléctrica de referencia. Hasta disponer de esos datos, la amortización se mantiene como hipótesis explícita.

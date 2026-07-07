@@ -13,6 +13,8 @@ El desarrollo no siguió una línea directa desde la primera implementación has
 
 Por tanto, esta memoria no presenta únicamente el estado final del programa. También reconstruye la evolución técnica que llevó hasta él: qué se intentó, qué falló, qué hubo que instrumentar y qué decisiones cambiaron el rumbo del proyecto. Esta lectura es importante porque el sistema combina aprendizaje automático, físicas en tiempo real, configuración manual del mapa y reglas de tráfico. Una mejora local en el fitness, en un stop o en una rotonda puede provocar una regresión en otra parte del escenario; por eso los resultados deben interpretarse como una base funcional y medible, no como una solución cerrada lista para validación clínica.
 
+La Tabla~\ref{tab:vision-inicial} resume los elementos principales de esta visión inicial del sistema y el papel que desempeñan dentro del TFG.
+
 \begin{table}[htbp]
 \centering
 \caption{Visión inicial del sistema desarrollado.}%
@@ -25,13 +27,13 @@ Simulador base & Ciudad urbana en Unreal Engine 5 heredada de \textit{CognitiveC
 Agente autónomo & Vehículo controlado por red neuronal que decide dirección y aceleración/frenado a partir de sensores, estado dinámico y contexto de tráfico.\\
 Aprendizaje & Gestor evolutivo que evalúa poblaciones, conserva modelos destacados, muta pesos y separa entrenamiento, test y simulación libre.\\
 Entorno de prueba & Progresión desde una línea inicial controlada hasta puntos de aparición distribuidos por todo el mapa, con trayectorias de entrenamiento y test diferenciadas.\\
-Validación & Registros CSV, análisis reproducible en Python, tasas de acierto, familias de fallo, métricas por spawn, señalización, rotondas y solapes entre vehículos.\\
+Validación & Registros CSV, análisis reproducible en Python, tasas de acierto operativo, familias de fallo, métricas por spawn, señalización, rotondas y solapes entre vehículos.\\
 \bottomrule
 \end{tabularx}
 \caption*{\textit{\textbf{Fuente.} Elaboración propia a partir del código, las descripciones fechadas de Blueprints y los CSV experimentales.}}
 \end{table}
 
-La evaluación principal utiliza el entrenamiento del 18 de junio de 2026 y cuatro sesiones de test posteriores sobre 54 puntos de aparición. Ese bloque obtiene una tasa de acierto del 57.50\%, con 652 aciertos sobre 1134 evaluaciones. La serie posterior, desde finales de junio hasta el 3 de julio, se conserva como diagnóstico: algunas pruebas mantienen parte del comportamiento aprendido, otras revelan regresiones de señalización y las sesiones \texttt{FreeRun} amplían la observación de cedas, stops, solapes, colas de liberación, bloqueo en cruces y navegación fuera de zona. Esta separación evita presentar la fecha más reciente como la mejor por defecto y permite distinguir una referencia estable de una iteración exploratoria.
+La evaluación principal utiliza el entrenamiento del 18 de junio de 2026 y cuatro sesiones de test posteriores sobre 54 puntos de aparición. Ese bloque obtiene una tasa de acierto operativo del 57.50\%, con 652 aciertos sobre 1134 evaluaciones según el criterio de test definido en el capítulo de resultados. La serie posterior, desde finales de junio hasta el 7 de julio, se conserva como diagnóstico y validación posterior: algunas pruebas mantienen parte del comportamiento aprendido, otras revelan regresiones de señalización, las sesiones \texttt{FreeRun} amplían la observación de cedas, stops, solapes, colas de liberación, bloqueo en cruces y navegación fuera de zona, y el bloque final comprueba la versión instrumentada del programa. Esta separación evita presentar la fecha más reciente como la mejor por defecto y permite distinguir una referencia estable de una iteración exploratoria o posterior.
 
 \section{Organización de la memoria}
 

@@ -1,0 +1,54 @@
+\chapter{Estudio del problema}
+
+\section{Introducción}
+
+Esta memoria presenta el desarrollo de un sistema de movilidad autónoma para \textit{CognitiveCarSimulatorReloaded}, un simulador urbano de conducción orientado a actividades de rehabilitación y valoración cognitiva. El trabajo parte de una ciudad ya construida en Unreal Engine 5 y aborda una carencia concreta de la versión previa: la ausencia de tráfico autónomo capaz de generar situaciones dinámicas, repetibles y medibles para el usuario.
+
+La solución propuesta integra vehículos controlados por una red neuronal ligera, sensores simulados mediante raycasting, contexto de señalización y un algoritmo evolutivo que ajusta los pesos de la red dentro del propio simulador. El controlador no desplaza el coche de forma directa, sino que produce dirección y aceleración o frenado sobre el sistema físico de Unreal Engine. Esta decisión obliga a tratar problemas propios de la conducción, como inercia, giro, frenada, límites de calzada, stops, cedas, semáforos e intersecciones.
+
+El proyecto también incorpora una parte importante de instrumentación y análisis de datos. Cada ejecución exporta métricas por vehículo y resúmenes por generación, que después se validan con scripts de Python. Esta trazabilidad permite distinguir entre una mejora real, un comportamiento visualmente aceptable pero incorrecto y una regresión causada por cambios en fitness o señalización.
+
+La evaluación principal utiliza el entrenamiento del 18 de junio de 2026 y cuatro sesiones de test posteriores sobre 54 puntos de aparición. En ese bloque se obtiene una tasa de acierto del 57.50\%, con 652 aciertos sobre 1134 evaluaciones, un 40.04\% de colisiones y un 2.29\% de fallos legales. La serie experimental posterior no se interpreta como una simple carrera hacia la fecha más reciente, sino como una herramienta para entender la evolución del sistema: algunas pruebas mantienen parte del comportamiento aprendido, otras revelan regresiones de señalización y las últimas amplían el diagnóstico de cedas, stops, solapes y bloqueo en cruces. Por tanto, el resultado actual debe entenderse como una base funcional y medible sobre la que seguir iterando, no como una solución final lista para validación clínica.
+
+\section{Contexto}
+
+La conducción es una actividad compleja que exige coordinación motora, atención sostenida, atención dividida, interpretación de señales, percepción espacial y toma de decisiones bajo restricciones temporales. En personas que han sufrido daño cerebral adquirido, estas capacidades pueden verse alteradas aunque existan adaptaciones físicas que permitan manejar un vehículo. Por ello, antes de exponer al paciente a situaciones reales de tráfico, resulta de interés disponer de entornos controlados donde observar, entrenar y valorar comportamientos de conducción de forma segura.
+
+El proyecto \textit{CognitiveCarSimulatorReloaded} nace dentro de esta necesidad. La propuesta original define un simulador realista de conducción urbana para entrenamiento y valoración de alteraciones cognitivas tras un daño cerebral adquirido, desarrollado en colaboración con ASPAYM~\cite{propuesta}. La versión inicial del simulador, desarrollada durante el curso 2024-2025, ya incluía un entorno urbano, vehículo, interacción física, señalización y registro de datos~\cite{cognitivecar2025}. Sin embargo, las evaluaciones posteriores identificaron una carencia clave: el escenario necesitaba tráfico autónomo y dinámico para trasladar al usuario a una situación más realista.
+
+El presente TFG aborda esa carencia desde el ámbito de la Ingeniería de Datos e Inteligencia Artificial. El foco no se sitúa en crear un simulador desde cero, sino en diseñar e integrar modelos de movilidad autónoma capaces de aprender comportamientos de conducción dentro de un entorno urbano ya existente. El trabajo combina redes neuronales, algoritmos evolutivos, sensores simulados, control físico en tiempo real y análisis de datos experimentales.
+
+\Needspace{10\baselineskip}
+\section{Problema que se resuelve}
+
+El problema técnico principal consiste en conseguir que agentes autónomos, inicialmente vehículos, circulen por un mapa urbano de forma suficientemente estable, medible y compatible con las normas básicas de tráfico. A diferencia de un recorrido prefijado, un agente autónomo debe responder a múltiples condiciones locales: límites de la calzada, obstáculos, intersecciones, semáforos, señales de stop, señales de ceda el paso y cambios en su propio estado dinámico.
+
+Durante el desarrollo se evaluaron soluciones deterministas de navegación, como el uso de NavMesh o recorridos mediante \textit{Path Finding}. Estas aproximaciones resultaron útiles como punto de partida, pero presentaron limitaciones para el objetivo clínico y experimental del simulador: rutas rígidas, giros poco naturales, dificultad para representar la toma de decisiones local y menor capacidad de adaptación a situaciones imprevistas. Como consecuencia, el proyecto evolucionó hacia una solución basada en percepción local mediante sensores y aprendizaje evolutivo.
+
+Además, el problema requiere que el comportamiento obtenido sea observable y explicable. No basta con que los vehículos se desplacen por el escenario; es necesario registrar por qué avanzan, se detienen, colisionan, incumplen una señal o completan correctamente una maniobra. Esta trazabilidad condiciona la arquitectura de la solución, porque cada decisión de control debe poder relacionarse con sensores, contexto de tráfico, componentes de fitness y resultados experimentales.
+
+\section{Objetivo general}
+
+El objetivo general del trabajo es desarrollar e integrar un sistema de movilidad autónoma para un simulador urbano de conducción, basado en redes neuronales y algoritmos evolutivos, que permita entrenar, evaluar y analizar vehículos autónomos dentro de Unreal Engine 5.
+
+De forma complementaria, el proyecto busca dejar una base reutilizable para futuras ampliaciones del simulador. La movilidad vehicular autónoma actúa como primer bloque técnico sobre el que podrán incorporarse perfiles de conducción, otros agentes dinámicos y escenarios de validación más cercanos al uso clínico previsto.
+
+\newpage
+\section{Objetivos específicos}
+
+El objetivo general se concreta en tareas que cubren el ciclo completo de desarrollo: conocer el punto de partida, construir el controlador, entrenarlo y comprobar su comportamiento con datos. No se plantea únicamente obtener vehículos que se desplacen por el mapa; también se busca que las decisiones de diseño queden justificadas y que los resultados puedan repetirse y compararse. A partir de este criterio, los objetivos específicos son:
+
+\begin{itemize}[leftmargin=*]
+  \item Analizar el estado inicial del simulador y las restricciones técnicas heredadas de la versión previa.
+  \item Diseñar una arquitectura de percepción para vehículos autónomos basada en sensores simulados mediante raycasting.
+  \item Implementar una red neuronal ligera capaz de transformar entradas sensoriales y de contexto en acciones de conducción.
+  \item Diseñar un proceso de entrenamiento evolutivo que evalúe poblaciones de vehículos, seleccione individuos destacados y aplique mutaciones sobre sus pesos.
+  \item Integrar señales de tráfico, semáforos, stops y cedas en la lógica de percepción, parada y validación de la IA.
+  \item Construir una función de fitness interpretable, con componentes positivos y penalizaciones, que permita medir progreso, errores y comportamientos no deseados.
+  \item Generar registros experimentales en CSV y analizarlos mediante scripts reproducibles para evaluar entrenamiento y test.
+  \item Identificar limitaciones, riesgos y líneas futuras para ampliar la movilidad autónoma a perfiles de conductor, peatones, bicicletas y otros agentes.
+\end{itemize}
+
+\section{Estructura del trabajo}
+
+El documento se organiza en ocho capítulos principales. Tras este estudio del problema, el capítulo 2 resume el estado del arte y los retos asociados a simuladores, agentes autónomos y aprendizaje evolutivo. El capítulo 3 describe las tecnologías y herramientas utilizadas. El capítulo 4 presenta la gestión del proyecto, la evolución temporal, los riesgos y una estimación preliminar de recursos. El capítulo 5 desarrolla el núcleo técnico de la solución. El capítulo 6 recoge los resultados experimentales. El capítulo 7 trata normativa, protección de datos y accesibilidad. Finalmente, el capítulo 8 expone conclusiones, aportaciones y líneas futuras.

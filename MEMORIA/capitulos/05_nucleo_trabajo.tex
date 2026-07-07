@@ -6,13 +6,70 @@ La solución actual se estructura como un sistema de agentes autónomos entrenad
 
 El sistema se completa con elementos de tráfico que comunican contexto a los controladores: semáforos, señales de stop, señales de ceda y zonas de cruce. Estos elementos no son meros objetos visuales, sino actores con lógica propia que activan zonas de detección, informan al vehículo de líneas de parada, controlan estados y aplican penalizaciones o bonus según el comportamiento observado.
 
-\begin{figure}[htbp]
+La Figura~\ref{fig:arquitectura-sistema} resume esa arquitectura y muestra la relación entre motor, vehículo, percepción, controlador neuronal, gestor evolutivo, persistencia y análisis de datos.
+
+\begin{figure}[H]
 \centering
-\caption[Entorno de pruebas del simulador.]{Entorno de pruebas del simulador con calzada, señalización, cajas de detección y elementos auxiliares de configuración visibles en el editor.}%
-\label{fig:entorno-pruebas}
-\includegraphics[width=0.92\textwidth]{assets/foto_circuito.png}
-\caption*{\textit{\textbf{Fuente.} Captura propia del proyecto en Unreal Engine.}}
+\caption[Arquitectura general del sistema.]{Arquitectura general del sistema de movilidad autónoma implementado sobre \textit{CognitiveCarSimulatorReloaded}.}%
+\label{fig:arquitectura-sistema}
+\small
+\begin{tikzpicture}[
+  block/.style={draw, rounded corners=2pt, align=center, minimum height=0.95cm, text width=2.55cm, inner sep=3pt},
+  wide/.style={block, text width=2.75cm},
+  arrow/.style={-{Latex[length=2.1mm]}, line width=0.45pt},
+  feedback/.style={arrow,dashed}
+]
+\node[wide]  (ue)       at (0,0)       {Unreal Engine 5\\escenario urbano};
+\node[wide]  (vehicle)  at (3.15,0)    {Vehículo autónomo\\Chaos Vehicle};
+\node[block] (sensors)  at (6.30,0)    {Sensores\\raycasting};
+\node[wide]  (ctrl)     at (9.45,0)    {Controlador neuronal\\20 entradas, 16 ocultas, 2 salidas};
+\node[wide]  (action)   at (12.50,0)   {Acción física\\dirección\\acelerador/freno};
+
+\node[wide]  (traffic)  at (6.30,2.05) {Semáforos, STOP, ceda\\rotondas e intersecciones};
+\node[wide]  (fitness)  at (3.15,-2.65){Fitness\\métricas y causas de fallo};
+\node[wide]  (evo)      at (6.30,-2.65){Gestor evolutivo\\selección y mutación};
+\node[wide]  (models)   at (9.45,-2.65){Persistencia\\modelos guardados};
+\node[wide]  (csv)      at (3.15,-4.75){Exportación CSV\\train, test y depuración};
+\node[wide]  (analysis) at (6.30,-4.75){Scripts Python\\análisis de datos};
+
+\draw[arrow] (ue) -- (vehicle);
+\draw[arrow] (vehicle) -- (sensors);
+\draw[arrow] (traffic) -- (sensors);
+\draw[arrow] (sensors) -- (ctrl);
+\draw[arrow] (ctrl) -- (action);
+\draw[arrow] (vehicle) -- (fitness);
+\draw[arrow] (fitness) -- (evo);
+\draw[arrow] (evo) -- (models);
+\draw[arrow] (models.north) -- (ctrl.south);
+\draw[arrow] (fitness) -- (csv);
+\draw[arrow] (csv) -- (analysis);
+\draw[feedback] (analysis.north) -- (evo.south);
+\end{tikzpicture}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de Blueprints, descripciones del programa y CSV exportados.}}
 \end{figure}
+
+La Figura~\ref{fig:entorno-pruebas} muestra una vista general del mapa durante las pruebas y una escena de rotonda con el raycasting visible.
+
+\begin{figure}[H]
+\centering
+\caption[Capturas representativas del sistema en ejecución.]{Capturas representativas del sistema en ejecución: mapa de pruebas con múltiples vehículos y percepción mediante raycasting en una rotonda.}%
+\label{fig:entorno-pruebas}
+\begin{minipage}{0.88\textwidth}
+\centering
+\includegraphics[width=\linewidth]{assets/mapa_coches_ejecucion_test.png}\\[-0.2em]
+{\scriptsize (a) Mapa de pruebas con varios vehículos autónomos en ejecución.}
+\end{minipage}
+
+\vspace{0.45em}
+\begin{minipage}{0.88\textwidth}
+\centering
+\includegraphics[width=\linewidth]{assets/coches_rotonda_rayos_visibles.png}\\[-0.2em]
+{\scriptsize (b) Raycasting visible durante la circulación en rotonda.}
+\end{minipage}
+\caption*{\textit{\textbf{Fuente.} Capturas propias del proyecto en Unreal Engine.}}
+\end{figure}
+
+\clearpage
 
 \section{Subsistemas}
 
@@ -36,11 +93,11 @@ Las primeras generaciones utilizaron una lógica equivalente a coches ``fantasma
 
 La fase final introdujo vehículos con colisiones y solapes reales entre sí. El controlador pasó a detectar coches visibles mediante las trazas, almacenar el vehículo más cercano y ajustar la distancia efectiva de obstáculo con la velocidad relativa. Además, \texttt{BP\_VehicleAI2} penaliza invasiones de espacio mediante \texttt{NumCarOverlaps}, \texttt{CarOverlapPenaltyShadow} y, desde julio, \texttt{CarOverlapPenalty} aplicado al fitness. Los \texttt{BP\_SpawnPoint} incorporan una zona \texttt{FreeCheckZone} para impedir respawns inmediatos sobre vehículos activos.
 
-Este cambio no se plantea como una corrección tardía, sino como una mejora progresiva del realismo. Primero se necesitaba una política capaz de circular de forma individual; después, al añadir tráfico físicamente concurrente, el sistema comenzó a medir distancia de seguridad, espera en cola, bloqueo de cruce y liberación dinámica de cedas. El coste fue una mayor complejidad experimental: un fallo podía proceder ya de la red, del fitness, de la geometría o de la interacción con otro coche. La ventaja es que los resultados finales se acercan más al objetivo real del simulador, que no es tener vehículos aislados, sino tráfico autónomo capaz de crear situaciones dinámicas para el usuario.
+La incorporación de coches no fantasma forma parte de esa mejora progresiva del realismo. Primero se necesitaba una política capaz de circular de forma individual; después, al añadir tráfico físicamente concurrente, el sistema comenzó a medir distancia de seguridad, espera en cola, bloqueo de cruce y liberación dinámica de cedas. El coste fue una mayor complejidad experimental: un fallo podía proceder ya de la red, del fitness, de la geometría o de la interacción con otro coche. La ventaja es que los resultados finales se acercan más al objetivo real del simulador, que no es tener vehículos aislados, sino tráfico autónomo capaz de crear situaciones dinámicas para el usuario.
 
 \subsection{Controlador de IA y red neuronal}
 
-\texttt{BP\_AiController} actúa como intermediario entre red neuronal y vehículo físico. En cada tick comprueba que el vehículo controlado existe y no está muerto, prepara las entradas de red, ejecuta la inferencia y aplica las salidas al componente de movimiento.
+\texttt{BP\_ControllerAI} actúa como intermediario entre red neuronal y vehículo físico. En cada tick comprueba que el vehículo controlado existe y no está muerto, prepara las entradas de red, ejecuta la inferencia y aplica las salidas al componente de movimiento.
 
 Para evitar saltos bruscos, el controlador dispone de variables de suavizado como \texttt{MaxSteeringRate} y \texttt{MaxThrottleRate}. La versión documentada mantiene un seguimiento estable entre objetivo y entrada aplicada, con gap medio cero en los informes finales, lo que indica que la señal de control se está transmitiendo sin divergencias instrumentales.
 
@@ -56,7 +113,7 @@ h_j = \tanh\left(\sum_{i=1}^{20} W^{(1)}_{j,i} x_i\right),\; j=1,\ldots,16.
 y_k = \tanh\left(\sum_{j=1}^{16} W^{(2)}_{k,j} h_j\right),\; k=1,2.
 \end{equation}
 
-La ecuación~\ref{eq:capa-oculta} calcula la activación de cada neurona oculta a partir del vector de entrada. La ecuación~\ref{eq:capa-salida} obtiene después las dos salidas de control a partir de esas activaciones. En estas expresiones, \(i\) recorre las entradas, \(j\) recorre las neuronas ocultas y \(k\) recorre las dos salidas. Por tanto, el uso de índices distintos sí está justificado: cada uno pertenece a una dimensión diferente de la red. En la segunda ecuación, \(j\) vuelve a aparecer como índice de suma porque las salidas se calculan a partir de todas las activaciones ocultas.
+La ecuación~\ref{eq:capa-oculta} calcula la activación de cada neurona oculta a partir del vector de entrada. La ecuación~\ref{eq:capa-salida} obtiene después las dos salidas de control a partir de esas activaciones. En estas expresiones, \(i\) recorre las entradas, \(j\) recorre las neuronas ocultas y \(k\) recorre las dos salidas. El vector de entrada incluye un sesgo constante como vigésima componente; la capa de salida no añade un sesgo independiente, porque el bloque \texttt{WeightsHO} documentado contiene 16 pesos por salida.
 
 \texttt{IH} significa \textit{Input to Hidden} y corresponde a las conexiones entre la entrada y la capa oculta. \texttt{HO} significa \textit{Hidden to Output}, se denomina \texttt{WeightsHO} en los Blueprints y corresponde a las conexiones entre la capa oculta y las dos salidas. En las ecuaciones se ha usado \(W^{(1)}\) y \(W^{(2)}\) para que la notación matemática no dependa del nombre interno de los arrays.
 
@@ -68,15 +125,17 @@ El controlador lanza once trazas en abanico sobre 180 grados. Cada sensor devuel
 
 La decisión se modela mediante la enumeración \texttt{E\_DirectionIntent}, con tres alternativas: primera, segunda y tercera salida. Al entrar en el trigger correspondiente, el vehículo selecciona aleatoriamente una de las opciones habilitadas para el modo de entrenamiento o de test. El controlador conserva tanto la dirección elegida como el trigger que la originó. Cada borde de intersección declara una o varias parejas formadas por dirección y trigger, y admite, cuando procede, cualquier trigger o cualquier dirección. De este modo, los rayos perciben únicamente los límites que delimitan la trayectoria seleccionada sin duplicar actores para los casos compartidos.
 
-Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos.
+Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos. La Figura~\ref{fig:blueprint-sensores} muestra un fragmento representativo de esa lectura sensorial en Blueprint; su valor es apoyar la trazabilidad visual, mientras que el flujo lógico se resume a continuación en texto.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \caption[Lectura sensorial en Blueprint.]{Fragmento de \texttt{GetSensorsData} en el controlador de IA. El bloque muestra la traza física, el recorrido de impactos y el filtrado de bordes de intersección mediante \texttt{CheckMatch}.}%
 \label{fig:blueprint-sensores}
 \includegraphics[width=0.98\textwidth]{assets/bp_get_sensors_data_core.png}
-\caption*{\textit{\textbf{Fuente.} Captura propia del proyecto en Unreal Engine a partir de \texttt{BP\_AIController2}.}}
+\caption*{\textit{\textbf{Fuente.} Captura propia del proyecto en Unreal Engine a partir de \texttt{BP\_ControllerAI}.}}
 \end{figure}
+
+De forma sintética, \texttt{GetSensorsData} realiza cuatro pasos: lanza once trazas en abanico, selecciona el impacto relevante más cercano, filtra bordes de intersección según la maniobra elegida y devuelve distancias normalizadas para construir el vector de entrada.
 
 \Needspace{16\baselineskip}
 \subsection{Sistema de fitness}
@@ -84,6 +143,28 @@ Las entradas sensoriales se combinan con información de tráfico. Si el vehícu
 La función de fitness convierte lo que ocurre durante la conducción en una puntuación que el gestor evolutivo puede comparar. En este proyecto no se planteó como una fórmula única y cerrada, sino como una suma acumulativa de pequeñas decisiones: avanzar de forma útil aumenta la puntuación, mientras que circular sin espacio, corregir mal, incumplir una señal o quedar bloqueado la reduce. Esta elección fue práctica. En Unreal Engine el coche no se mueve sobre una línea ideal, sino con físicas, inercia, rozamiento, colisiones y sensores que pueden cambiar de lectura en cada cruce.
 
 La primera versión era deliberadamente simple. En la línea de pruebas inicial bastaba con premiar avance, centrado y supervivencia para comprobar si la red podía aprender a mantenerse dentro del carril y tomar curvas básicas. Al llevar el sistema a la ciudad completa, esa puntuación dejó de ser suficiente: algunos coches sobrevivían sin progresar, otros compensaban una colisión con puntos acumulados y otros aceleraban en zonas donde había una señal o un obstáculo cercano. La evolución del fitness consistió precisamente en separar esos casos para que el modelo no aprendiera atajos visualmente aceptables pero inútiles para tráfico real.
+
+Aunque el cálculo real se reparte en varios bloques de Blueprint, puede resumirse como una suma temporal de recompensas y penalizaciones:
+
+\begin{equation}
+\label{eq:fitness-resumen}
+\begin{aligned}
+F = \sum_t (&R_{\text{avance}} + R_{\text{progreso}} + R_{\text{espera}} + R_{\text{señal}} + R_{\text{rotonda}} \\
+&- P_{\text{velocidad}} - P_{\text{corrección}} - P_{\text{normativa}} - P_{\text{retroceso}} - P_{\text{navegación}} - P_{\text{bloqueo}}) - P_{\text{terminal}}.
+\end{aligned}
+\end{equation}
+
+La ecuación~\ref{eq:fitness-resumen} no sustituye al Blueprint ni introduce pesos nuevos: resume las familias de términos exportadas después a CSV\@. Algunos componentes documentados tienen forma explícita, por ejemplo \(P_{\text{velocidad}}=\max(0,v_n-d_f)^2\,v_{\max}\,\Delta t\), donde \(v_n\) es la velocidad normalizada y \(d_f\) la distancia frontal normalizada. Para la corrección lateral se usa \(\delta=d_{\text{der}}-d_{\text{izq}}\), siendo \(d_{\text{der}}\) y \(d_{\text{izq}}\) las lecturas laterales normalizadas, \(s\in[-1,1]\) la salida de dirección de la red, con \(s>0\) como giro hacia la derecha, y \(D_{\max}\) el alcance máximo de visión del sensor. La penalización conceptual queda:
+\[
+P_{\text{corrección}} =
+\begin{cases}
+D_{\max}|s|\,|\delta|\,\Delta t, & d_f \ge 0.99,\ |\delta|>0.075,\ s\delta<0,\\
+0, & \text{en otro caso.}
+\end{cases}
+\]
+Esta condición reproduce la rama documentada del Blueprint: solo se penaliza cuando el giro va hacia el lado contrario a la corrección lateral necesaria. En las colisiones, el término terminal concreto se resume como \(P_{\text{terminal,colisión}}=(v^2/v_{\max})(1-d_f)\). Las constantes concretas y otras ramas condicionales permanecen en los Blueprints, pero esta formulación aclara qué signo tiene cada familia de cálculo.
+
+La Tabla~\ref{tab:componentes-fitness} resume la lectura práctica de esos términos y explica por qué cada componente se incorporó al aprendizaje.
 
 \begin{table}[H]
 \centering
@@ -122,7 +203,7 @@ El resultado final es un fitness más largo de implementar, pero más claro de i
 
 El sistema de semáforos se compone de un controlador de intersección y de actores de semáforo. El controlador alterna fases norte-sur y este-oeste, incluyendo verde, ámbar y todo rojo. Cada semáforo mantiene materiales dinámicos para representar estado visual y una zona de sensor que detecta vehículos.
 
-Cuando un vehículo entra en la zona, el semáforo comunica estado, línea de parada y distancia. Si el semáforo está en rojo o ámbar restrictivo, el controlador activa contexto de parada. Al salir de la zona, se comprueba si el vehículo atravesó la línea a una velocidad legal. El sistema aprende umbrales de velocidad legal a partir de muestras previas, evitando depender siempre de un valor fijo.
+Cuando un vehículo entra en la zona, el semáforo comunica estado, línea de parada y distancia. Si el semáforo está en rojo o ámbar restrictivo, el controlador activa contexto de parada. Al salir de la zona, se comprueba si el vehículo atravesó la línea a una velocidad legal. El sistema aprende umbrales de velocidad legal a partir de muestras previas, evitando depender siempre de un valor fijo. La Figura~\ref{fig:semaforo-escenario} muestra el actor visual integrado en el escenario junto a la lógica de detección asociada.
 
 \begin{figure}[htbp]
 \centering
@@ -142,6 +223,8 @@ La diferencia entre stop y ceda es metodológicamente importante. El stop requie
 
 La validación del stop aprende de las maniobras legales una velocidad máxima y un tiempo mínimo de espera. Con ellos calcula una ventana de parada a partir de la distancia de entrada y del tiempo estimado hasta la línea. Las revisiones posteriores separan mejor tres condiciones que antes quedaban demasiado acopladas: estar suficientemente detenido, permanecer en una posición legal respecto a la línea y haber esperado el tiempo mínimo aprendido. La descripción del 6 de julio añade \texttt{LearnedMinTimeCache} al controlador para que el fitness y \texttt{BP\_Sign\_Stop} compartan la misma referencia temporal. Además, si el tiempo de validación se agota pero el vehículo sigue en posición legal, el contador se reinicia y se reevalúa la espera; la penalización por \texttt{STOP\_VIOLATION\_TIMEOUT} queda reservada para los casos en los que la posición ya no es legal. Este cambio mejora la trazabilidad de la infracción, aunque todavía debe validarse con bloques comparables antes de considerarse estable.
 
+La Figura~\ref{fig:stop-ceda-escenario} recoge las señales usadas en el mapa y sus zonas de referencia durante la edición del escenario.
+
 \begin{figure}[htbp]
 \centering
 \caption[Señales de stop y ceda en el mapa.]{Señales de stop y ceda en el mapa, con línea de referencia y cajas de detección visibles durante la edición del escenario.}%
@@ -159,7 +242,7 @@ La validación del stop aprende de las maniobras legales una velocidad máxima y
 
 \subsection{Rotondas}
 
-Los triggers de intersección pueden marcarse como entrada o tramo de rotonda. Al entrar se registra la dirección escogida y se penaliza una velocidad superior a la aconsejada por la distancia frontal. Una nueva llegada a la entrada confirma que se ha completado una vuelta y aplica una bonificación proporcional a velocidad y espacio disponible. Durante el recorrido se acumulan giro, aceleración, colisiones y tiempo para la primera, segunda y tercera o posteriores salidas.
+Los triggers de intersección pueden marcarse como entrada o tramo de rotonda. Al entrar se registra la dirección escogida y se penaliza una velocidad superior a la aconsejada por la distancia frontal. La completación instrumentada se confirma cuando un vehículo que ya había entrado vuelve a alcanzar un trigger de entrada de rotonda y aplica entonces una bonificación proporcional a velocidad y espacio disponible. Esta métrica se interpreta como contador conservador: permite detectar vueltas o recorridos largos completados, pero puede infracontar salidas tempranas que abandonen la rotonda sin volver a activar la entrada. Durante el recorrido se acumulan giro, aceleración, colisiones y tiempo para la primera, segunda y tercera o posteriores salidas.
 
 El fitness incluye además una penalización cuando el acelerador supera la distancia frontal normalizada dentro de la rotonda. En la revisión de final de junio, su escala se normaliza con el cociente entre el cuadrado de la velocidad máxima y la distancia máxima de visión, evitando que dependa de unidades incompatibles. Las recompensas de entrada y completado y las penalizaciones de aproximación y aceleración se exportan por separado; así puede comprobarse si el saldo neto favorece realmente completar la maniobra. Las descripciones posteriores añaden el análisis por salida, lo que permite detectar si la primera, la segunda o las salidas posteriores concentran una parte desproporcionada de los fallos.
 
@@ -167,6 +250,44 @@ El fitness incluye además una penalización cuando el acelerador supera la dist
 \enlargethispage{\baselineskip}
 
 Cada ejecución genera un registro por vehículo y un resumen por generación. Una vez terminada la sesión, los scripts de Python validan que ambos CSV contienen el número de filas esperado y que sus identificadores pueden alinearse. Solo después de esa comprobación se calculan los indicadores y se generan las gráficas. De esta manera, una fila incompleta o una generación duplicada no queda oculta dentro de una media agregada.
+
+La Figura~\ref{fig:pipeline-metodologico} sintetiza el flujo completo seguido durante el proyecto, desde la revisión del simulador hasta la corrección de Blueprints a partir de los resultados.
+
+\begin{figure}[H]
+\centering
+\caption[Pipeline metodológico de implementación y análisis.]{Pipeline metodológico seguido para implementar, ejecutar, analizar y corregir el sistema.}%
+\label{fig:pipeline-metodologico}
+\footnotesize
+\begin{tikzpicture}[
+  pipeblock/.style={draw, rounded corners=2pt, align=center, minimum height=0.95cm, text width=2.65cm, inner sep=3pt},
+  longpipe/.style={pipeblock, text width=6.35cm},
+  arrow/.style={-{Latex[length=2.1mm]}, line width=0.45pt},
+  returnarrow/.style={arrow, rounded corners=5pt}
+]
+\node[pipeblock] (review) at (0,0) {Revisión del simulador base\\y alcance};
+\node[pipeblock] (perception) at (3.70,0) {Diseño de percepción\\sensores y entradas};
+\node[pipeblock] (controller) at (7.40,0) {Controlador neuronal\\e inferencia};
+\node[pipeblock] (training) at (11.10,0) {Entrenamiento evolutivo\\en Unreal Engine};
+
+\node[pipeblock] (execution) at (11.10,-2.25) {Ejecución de pruebas\\train, test y FreeRun};
+\node[pipeblock] (csv) at (7.40,-2.25) {Exportación CSV\\y modelos};
+\node[pipeblock] (scripts) at (3.70,-2.25) {Análisis con scripts\\validación y gráficas};
+\node[pipeblock] (interpretation) at (0,-2.25) {Interpretación\\de resultados};
+
+\node[longpipe] (iteration) at (5.55,-4.35) {Iteración: corrección de Blueprints, ajuste de fitness y nuevas pruebas de regresión};
+
+\draw[arrow] (review) -- (perception);
+\draw[arrow] (perception) -- (controller);
+\draw[arrow] (controller) -- (training);
+\draw[arrow] (training) -- (execution);
+\draw[arrow] (execution) -- (csv);
+\draw[arrow] (csv) -- (scripts);
+\draw[arrow] (scripts) -- (interpretation);
+\draw[returnarrow] (interpretation.south) |- (iteration.west);
+\draw[returnarrow] (iteration.east) -- ++(4.45,0) |- ([yshift=-0.23cm]training.east);
+\end{tikzpicture}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir del flujo real de trabajo y de los scripts de análisis.}}
+\end{figure}
 
 El diagnóstico comienza con \textit{BestFit}, \textit{MeanFit} y tiempo de vida, pero no termina en esas tres cifras. Las razones de muerte se agrupan por familias para separar colisiones, finalizaciones por tiempo y fallos normativos. Los bonus de stop y ceda se contrastan con el contexto de frenado, y los resultados se desglosan por punto de aparición. También se revisan correlaciones entre componentes, genealogía de mutaciones y métricas de rotonda por salida. El analizador excluye de los promedios situacionales los coches que no estuvieron expuestos al evento, lo que evita interpretar un cero por ausencia de rotonda como una maniobra correcta.
 

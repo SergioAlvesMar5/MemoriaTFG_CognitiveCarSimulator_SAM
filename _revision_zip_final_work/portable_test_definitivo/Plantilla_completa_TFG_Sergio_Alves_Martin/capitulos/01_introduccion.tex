@@ -1,0 +1,42 @@
+\chapter{Introducción}
+
+Este Trabajo de Fin de Grado se enmarca en la evolución de \textit{CognitiveCarSimulatorReloaded}, un simulador urbano de conducción desarrollado en Unreal Engine 5 y orientado a actividades de rehabilitación y valoración cognitiva. El simulador ya disponía de una ciudad funcional, un vehículo conducible, señalización y registro de datos, pero todavía carecía de un elemento clave para aproximarse a una situación de tráfico real: la presencia de vehículos autónomos capaces de circular, detenerse, reaccionar ante señales y generar eventos dinámicos alrededor del usuario.
+
+La motivación del proyecto nace precisamente de esa carencia. Un escenario urbano vacío permite practicar el manejo básico, pero no reproduce la carga cognitiva que aparece cuando hay otros agentes en movimiento, decisiones de prioridad, esperas, cruces, rotondas o situaciones imprevistas. Para un simulador que aspira a servir como apoyo a profesionales y usuarios en contextos de rehabilitación, el tráfico autónomo no es un adorno visual: es una herramienta para construir situaciones repetibles, graduables y medibles.
+
+La solución desarrollada introduce vehículos controlados por una red neuronal ligera, entrenada mediante un algoritmo evolutivo dentro del propio simulador. Cada coche percibe el entorno mediante sensores simulados con raycasting, recibe contexto de semáforos, stops, cedas e intersecciones, y transforma esas entradas en dos acciones continuas: dirección y aceleración o frenado. El controlador no teletransporta ni desplaza el coche por una ruta prefijada, sino que aplica esas acciones sobre el sistema físico de Unreal Engine. Esta decisión hace el problema más difícil, porque aparecen inercia, radio de giro, frenada, colisiones y pérdida de control, pero también lo acerca más al objetivo real del simulador.
+
+\enlargethispage{\baselineskip}
+{\looseness=-1
+El desarrollo no siguió una línea directa desde la primera implementación hasta el resultado final. En las fases iniciales se probaron enfoques deterministas, como rutas y \textit{Path Finding}, útiles para entender el mapa pero rígidos en un vehículo físico. Después se construyó una línea de pruebas reducida para aprender centrado, avance y giros. Más adelante se introdujeron puntos de aparición distribuidos, separación train/test, señalización, intersecciones, rotondas, persistencia de modelos y análisis sistemático de CSV\@. La última fase incorporó interacción física entre coches, detección de solapes, distancia de seguridad y simulación libre.
+\par}
+
+Por tanto, esta memoria no presenta únicamente el estado final del programa. También reconstruye la evolución técnica que llevó hasta él: qué se intentó, qué falló, qué hubo que instrumentar y qué decisiones cambiaron el rumbo del proyecto. Esta lectura es importante porque el sistema combina aprendizaje automático, físicas en tiempo real, configuración manual del mapa y reglas de tráfico. Una mejora local en el fitness, en un stop o en una rotonda puede provocar una regresión en otra parte del escenario; por eso los resultados deben interpretarse como una base funcional y medible, no como una solución cerrada lista para validación clínica.
+
+\begin{table}[htbp]
+\centering
+\caption{Visión inicial del sistema desarrollado.}%
+\label{tab:vision-inicial}
+\begin{tabularx}{0.96\textwidth}{L{3.1cm}X}
+\toprule
+\textbf{Elemento} & \textbf{Papel dentro del TFG}\\
+\midrule
+Simulador base & Ciudad urbana en Unreal Engine 5 heredada de \textit{CognitiveCarSimulatorReloaded}, utilizada como entorno físico y visual de experimentación.\\
+Agente autónomo & Vehículo controlado por red neuronal que decide dirección y aceleración/frenado a partir de sensores, estado dinámico y contexto de tráfico.\\
+Aprendizaje & Gestor evolutivo que evalúa poblaciones, conserva modelos destacados, muta pesos y separa entrenamiento, test y simulación libre.\\
+Entorno de prueba & Progresión desde una línea inicial controlada hasta puntos de aparición distribuidos por todo el mapa, con trayectorias de entrenamiento y test diferenciadas.\\
+Validación & Registros CSV, análisis reproducible en Python, tasas de acierto operativo, familias de fallo, métricas por spawn, señalización, rotondas y solapes entre vehículos.\\
+\bottomrule
+\end{tabularx}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir del código, las descripciones fechadas de Blueprints y los CSV experimentales.}}
+\end{table}
+
+La evaluación principal utiliza el entrenamiento del 18 de junio de 2026 y cuatro sesiones de test posteriores sobre 54 puntos de aparición. Ese bloque obtiene una tasa de acierto operativo del 57.50\%, con 652 aciertos sobre 1134 evaluaciones según el criterio de test definido en el capítulo de resultados. La serie posterior, desde finales de junio hasta el 3 de julio, se conserva como diagnóstico: algunas pruebas mantienen parte del comportamiento aprendido, otras revelan regresiones de señalización y las sesiones \texttt{FreeRun} amplían la observación de cedas, stops, solapes, colas de liberación, bloqueo en cruces y navegación fuera de zona. Esta separación evita presentar la fecha más reciente como la mejor por defecto y permite distinguir una referencia estable de una iteración exploratoria.
+
+\section{Organización de la memoria}
+
+La lectura del documento sigue el mismo recorrido que siguió el proyecto. Primero se delimita la necesidad que motiva el trabajo; después se justifican las alternativas técnicas; a continuación se describe cómo se planificó, implementó y evaluó la solución; por último se interpretan los resultados y se señalan los límites que todavía impiden considerar el sistema cerrado. Esta organización busca que el lector no vea la red neuronal como un componente aislado, sino como una pieza dentro de un simulador con físicas, mapa, señalización, registros y restricciones de uso.
+
+También se separan de forma explícita tres niveles de evidencia. El primero es el código y la configuración de Blueprints, que explican qué hace el sistema. El segundo son las actas, issues y descripciones fechadas, que permiten reconstruir por qué se tomaron determinadas decisiones. El tercero son los CSV experimentales, que muestran qué ocurrió al ejecutar el simulador. Mantener esos niveles separados ayuda a distinguir una intención de diseño, una modificación implementada y un resultado medido.
+
+El documento se organiza en nueve capítulos principales. Tras esta introducción, el capítulo 2 estudia el problema que se quiere resolver y concreta los objetivos del trabajo. El capítulo 3 resume el estado del arte y los retos asociados a simuladores, agentes autónomos y aprendizaje evolutivo. El capítulo 4 describe las tecnologías y herramientas utilizadas. El capítulo 5 presenta la gestión del proyecto, la evolución temporal, los riesgos y una estimación preliminar de recursos. El capítulo 6 desarrolla el núcleo técnico de la solución. El capítulo 7 recoge los resultados experimentales. El capítulo 8 trata normativa, protección de datos, licencias de assets y accesibilidad. Finalmente, el capítulo 9 expone conclusiones, aportaciones y líneas futuras.

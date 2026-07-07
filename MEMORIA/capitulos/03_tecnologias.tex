@@ -20,17 +20,23 @@ Además de los sensores laterales y frontales, se calculan variables derivadas c
 
 \section{Red neuronal}
 
-La red neuronal empleada es un perceptrón multicapa ligero. Las primeras trece posiciones de su vector de entrada describen el movimiento y el espacio próximo al vehículo: velocidad longitudinal, velocidad angular y once distancias obtenidas mediante raycasting. Todas ellas se normalizan antes de ejecutar la inferencia para evitar que una magnitud domine a las demás únicamente por su escala.
+La red neuronal empleada es un perceptrón multicapa ligero. Las primeras trece posiciones de su vector de entrada describen el movimiento y el espacio próximo al vehículo: velocidad longitudinal, velocidad angular y once distancias obtenidas mediante raycasting. Todas ellas se normalizan antes de ejecutar la inferencia para evitar que una magnitud domine a las demás únicamente por su escala. En la versión documentada, la velocidad longitudinal se divide entre \texttt{MaxSpeed} y se acota a \([0,1]\); la velocidad angular en \(Z\) se remapea de \([-90,90]\) grados/s a \([-1,1]\); y las lecturas de los once sensores ya se expresan como distancias normalizadas por el alcance máximo de visión.
 
-Las siete posiciones restantes incorporan el contexto de señalización y el sesgo. Dos contienen el estado numérico del control activo y la distancia normalizada a la línea de parada; esta última solo se utiliza cuando hay un semáforo activo o una orden de parada, y vale 1 en el resto de situaciones. Otras cuatro posiciones forman una codificación \textit{one-hot} que distingue entre semáforo, stop, ceda el paso o ausencia de control. La última posición es un sesgo constante. La configuración vigente suma así 20 entradas y permite que una misma lectura geométrica produzca respuestas distintas según la norma aplicable.
+Las siete posiciones restantes incorporan el contexto de señalización y el sesgo. Dos contienen el estado numérico del control activo y la distancia normalizada a la línea de parada; esta última se calcula como distancia actual dividida entre \texttt{SensorEntryDistance}, acotada a \([0,1]\), y se relaja gradualmente hacia 1 mediante \texttt{ReleaseFadeAlpha} tras liberar una parada forzada. Otras cuatro posiciones forman una codificación \textit{one-hot} que distingue entre semáforo, stop, ceda el paso o ausencia de control, usando \texttt{TrafficControlType}. La última posición es un sesgo constante de valor 1. La configuración vigente suma así 20 entradas y permite que una misma lectura geométrica produzca respuestas distintas según la norma aplicable.
 
-La capa oculta contiene 16 neuronas y utiliza \(\tanh\) como función de activación. La capa de salida contiene dos neuronas, también con \(\tanh\), de modo que sus valores se encuentran en el rango \texttt{[-1, 1]}. La primera salida controla dirección y la segunda controla aceleración o frenado. La arquitectura emplea 320 pesos entre entrada y capa oculta y 32 entre capa oculta y salida, 352 en total. La rutina de inferencia deduce el número esperado de entradas a partir de la longitud del primer bloque de pesos y comprueba ambas dimensiones antes de calcular las salidas. Esta guarda permite rechazar modelos incompatibles si la configuración cambia.
+La capa oculta contiene 16 neuronas y utiliza \(\tanh\) como función de activación. Esta cifra se fijó de forma empírica al ampliar el vector de entrada con contexto de señalización; no consta en las fuentes revisadas un barrido sistemático entre tamaños alternativos. La capa de salida contiene dos neuronas, también con \(\tanh\), de modo que sus valores se encuentran en el rango \texttt{[-1, 1]}. La primera salida controla dirección y la segunda controla aceleración o frenado. La arquitectura emplea 320 pesos entre entrada y capa oculta y 32 entre capa oculta y salida, 352 en total. La rutina de inferencia deduce el número esperado de entradas a partir de la longitud del primer bloque de pesos y comprueba ambas dimensiones antes de calcular las salidas. Esta guarda permite rechazar modelos incompatibles si la configuración cambia.
 
 \section{Algoritmos evolutivos}
 
 El entrenamiento se basa en población, selección y mutación. El gestor evolutivo crea una población de vehículos, les asigna pesos iniciales o mutados, ejecuta la simulación y registra el fitness final de cada individuo. Los mejores pesos se guardan en disco como modelos reutilizables, distinguiendo entre el mejor modelo histórico y el mejor de sesión.
 
-Durante el desarrollo se probaron tasas fijas para equilibrar explotación y diversidad, con mutaciones ordinarias y otras más intensas sobre el modelo histórico y el mejor modelo de sesión. En la versión final documentada, el gestor conserva copias sin mutar de ambas semillas y calcula una tasa dinámica a partir del número de generaciones sin mejora y del total de pesos disponibles. De esta manera, la presión exploratoria aumenta cuando el sistema deja de mejorar, sin reinicializar aleatoriamente la población después de la primera generación. Los tamaños de población son parámetros editables del mapa; por ello, los valores efectivos se obtienen de la columna \texttt{N} de cada ejecución y no del valor por defecto del Blueprint.
+Durante el desarrollo se probaron tasas fijas para equilibrar explotación y diversidad, con mutaciones ordinarias y otras más intensas sobre el modelo histórico y el mejor modelo de sesión. En la versión final documentada, el gestor conserva copias sin mutar de ambas semillas y calcula una tasa dinámica a partir del número de generaciones sin mejora y del total de pesos disponibles. La tasa base se documenta como:
+
+\[
+r_m=\operatorname{clamp}\left(\frac{g_{\text{sin mejora}}}{W_{\text{total}}},\frac{1}{W_{\text{total}}},\frac{W_{\text{HO}}}{W_{\text{total}}}\right),
+\]
+
+donde \(W_{\text{total}}\) es la suma de pesos de entrada-oculta y oculta-salida, \(W_{\text{HO}}\) es el número de pesos de la capa oculta a salida, y \(g_{\text{sin mejora}}\) corresponde a las generaciones acumuladas sin superar el mejor histórico. Para la rama exploratoria final, el Blueprint eleva el valor con \(\max(g_{\text{sin mejora}},1)+W_{\text{HO}}\) y lo acota hasta \(2W_{\text{HO}}/W_{\text{total}}\). De esta manera, la presión exploratoria aumenta cuando el sistema deja de mejorar, sin reinicializar aleatoriamente la población después de la primera generación. Los tamaños de población son parámetros editables del mapa; por ello, los valores efectivos se obtienen de la columna \texttt{N} de cada ejecución y no del valor por defecto del Blueprint.
 
 \Needspace{15\baselineskip}
 \section{Análisis de datos}
@@ -43,10 +49,51 @@ La instrumentación se diseñó para separar el detalle de cada vehículo de los
   \item \texttt{Test\_Summary.csv}, con resumen por generación de test, incluyendo aciertos, errores y tasas.
 \end{itemize}
 
-El análisis posterior se realiza mediante Python, NumPy, Matplotlib y Seaborn. El script \texttt{analyse\_current.py} valida la calidad de los CSV, detecta automáticamente si la sesión es de entrenamiento o test, genera informes textuales y produce gráficas de evolución, muertes, distribución de fitness, ranking por spawn, control de entradas, convergencia, diversidad, correlaciones, solapes entre coches y diagnósticos de paradas, cedas, bloqueo en cruces y rotondas. La versión actual calcula las métricas situacionales solo sobre filas con exposición al evento correspondiente, evitando que los ceros de coches que nunca alcanzaron una rotonda diluyan los promedios. El script \texttt{clean\_unreal\_log.py} permite limpiar logs de Unreal Engine conservando errores, avisos relevantes, mensajes de Blueprint y trazas propias del proyecto.
+El análisis posterior se realiza mediante Python~\cite{python}, NumPy~\cite{numpy}, Matplotlib~\cite{matplotlib} y Seaborn~\cite{seaborn}. El script \texttt{analyse\_current.py} valida la calidad de los CSV, detecta automáticamente si la sesión es de entrenamiento o test, genera informes textuales y produce gráficas de evolución, muertes, distribución de fitness, ranking por spawn, control de entradas, convergencia, diversidad, correlaciones, solapes entre coches y diagnósticos de paradas, cedas, bloqueo en cruces y rotondas. La versión actual calcula las métricas situacionales solo sobre filas con exposición al evento correspondiente, evitando que los ceros de coches que nunca alcanzaron una rotonda diluyan los promedios. El script \texttt{clean\_unreal\_log.py} permite limpiar logs de Unreal Engine conservando errores, avisos relevantes, mensajes de Blueprint y trazas propias del proyecto.
 
 \section{Control de versiones}
 
-El trabajo se ha desarrollado con Git/GitLab en un contexto colaborativo. La documentación de seguimiento recoge tareas de limpieza de repositorio, configuración de \texttt{.gitignore}, eliminación de binarios pesados y organización de issues y milestones. El registro depurado utilizado en esta memoria contiene 40 issues cerradas distribuidas en 15 sprints, lo que permite reconstruir la evolución desde la reorganización inicial del proyecto hasta las últimas mejoras de cedas, solapes y rotondas. Esta disciplina ha sido relevante porque el proyecto combina assets de Unreal, Blueprints, datos generados y modelos guardados.
+El trabajo se ha desarrollado con Git y GitLab en un contexto colaborativo~\cite{git,gitlabdocs}. La documentación de seguimiento recoge tareas de limpieza de repositorio, configuración de \texttt{.gitignore}, eliminación de binarios pesados y organización de issues y milestones. El registro depurado utilizado en esta memoria contiene 40 issues cerradas distribuidas en 15 sprints, lo que permite reconstruir la evolución desde la reorganización inicial del proyecto hasta las últimas mejoras de cedas, solapes y rotondas. Esta disciplina ha sido relevante porque el proyecto combina assets de Unreal, Blueprints, datos generados y modelos guardados.
 
 El uso de control de versiones también condicionó la forma de documentar el trabajo. Los cambios de comportamiento no siempre quedaban reflejados en una única clase textual, ya que una parte importante de la lógica vive en Blueprints y assets binarios. Por ello, las issues y milestones se usaron como una capa descriptiva complementaria: cada bloque de trabajo resume el objetivo, la fecha y la consecuencia técnica, mientras que las carpetas de \texttt{INFO} conservan descripciones exportadas y análisis de resultados. Esta combinación permite auditar el proceso sin depender solo del historial de commits ni de capturas manuales del editor.
+
+\Needspace{18\baselineskip}
+\section{Versiones y dependencias documentadas}
+
+La tabla~\ref{tab:versiones-herramientas} diferencia entre versiones constatadas en las fuentes del proyecto y herramientas utilizadas sin versión fijada. Esta separación evita atribuir al trabajo una reproducibilidad de entorno que no está completamente documentada.
+
+{\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{0.92}
+\begin{longtable}{L{2.75cm}L{2.7cm}>{\raggedright\arraybackslash}p{8.3cm}}
+\caption{Versiones y dependencias documentadas en el proyecto.}%
+\label{tab:versiones-herramientas}\\
+\toprule
+\textbf{Herramienta} & \textbf{Versión o estado} & \textbf{Evidencia revisada}\\
+\midrule
+\endfirsthead
+\caption[]{Versiones y dependencias documentadas en el proyecto (continuación).}\\
+\toprule
+\textbf{Herramienta} & \textbf{Versión o estado} & \textbf{Evidencia revisada}\\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\bottomrule
+\endlastfoot
+Unreal Engine & 5.5.4 & Versión indicada en la documentación técnica y en las fuentes del proyecto.\\
+Blueprints & Integrado en Unreal Engine & Tecnología principal de implementación; integrada en el motor.\\
+Chaos Vehicles & Integrado en Unreal Engine & Sistema de físicas empleado por el vehículo; depende de la versión de Unreal.\\
+Python & Sin versión fijada en repositorio & Scripts de análisis y limpieza en \texttt{INFO/ANALISIS\_DATOS}; sin \texttt{requirements.txt}.\\
+NumPy & Sin versión fijada en repositorio & Importado por los scripts de análisis.\\
+Matplotlib & Sin versión fijada en repositorio & Generación de gráficas exportadas desde CSV.\\
+Seaborn & Dependencia opcional & Visualizaciones complementarias si está disponible; el análisis básico no depende de él.\\
+pandas & No consta como dependencia directa & No aparece importado en los scripts revisados.\\
+Git/GitLab & Sin versión de servidor documentada & Uso acreditado por issues, milestones y trazabilidad de tareas.\\
+LaTeX/MiKTeX & Entorno de documentación & Compilación de la memoria; versiones exactas fuera del experimento técnico~\cite{latex,miktex}.\\
+Equipo de desarrollo y pruebas & OMEN 45L GT22-0021ns & Intel Core i9-12900K, 32 GB RAM, SSD 2 TB y NVIDIA GeForce RTX 3080 Ti; usado para UE5, entrenamiento y análisis CSV.\\
+\end{longtable}
+\begin{center}
+\textit{\textbf{Fuente.} Elaboración propia a partir de scripts, memoria, anexos y carpetas \texttt{INFO}.}
+\end{center}
+}
