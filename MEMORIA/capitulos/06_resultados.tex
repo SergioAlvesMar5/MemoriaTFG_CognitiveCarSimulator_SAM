@@ -3,9 +3,13 @@
 
 \section{Datos analizados}
 
-La evaluación principal se toma de la configuración estable del 18 de junio de 2026. El entrenamiento \texttt{train\_2026-06-18\_11-21} contiene 548 generaciones completas en \texttt{Training\_Summary.csv} y 16432 registros en \texttt{Fitness\_Debug.csv}. La columna \texttt{N} declara 16440 vehículos, por lo que la cobertura del fichero de detalle es del 99.95\%. El informe automático no detecta alertas fuertes de desalineación, pero esta diferencia de ocho filas se conserva como limitación del conjunto.
+Antes de fijar el bloque de referencia se revisó toda la carpeta de análisis de datos del proyecto. El inventario independiente resultante reúne 274 sesiones: 176 carpetas de test, 79 de entrenamiento, 16 mixtas \textit{train/test} y tres diagnósticos \texttt{FreeRun}, clasificadas por contenido efectivo de los CSV y no solo por el prefijo de la carpeta. Esta revisión evita seleccionar una sesión solo por ser la más reciente o por tener el porcentaje más alto. Las métricas ausentes en sesiones antiguas se interpretan como no instrumentadas en esa fecha, no como valores nulos ni como fallos del experimento.
 
-La evaluación de test agrega las cuatro carpetas del 18 de junio: \texttt{12-41}, \texttt{14-03}, \texttt{14-39} y \texttt{14-51}. En conjunto reúnen 21 ejecuciones completas y 1134 vehículos, con 21 observaciones para cada uno de los 54 puntos de aparición. Los cuatro informes presentan cobertura del 100\%, no descartan filas y clasifican todos los registros como test. La hora identifica cada carpeta archivada; no se interpreta como una variable experimental.
+La comparación entre bloques se apoya, por tanto, en las métricas comunes y en el estado real de la instrumentación de cada fecha. Los registros básicos aparecen desde marzo; las familias de stop y ceda, desde abril; la navegación fuera de zona, desde mayo; las métricas de rotonda, desde el 15 de junio; los solapes entre vehículos, desde el 26 de junio; el bloqueo en cruce, desde el 30 de junio, y los \textit{hotspots} por trigger, desde el 3 de julio. Por ello, la ausencia de una columna en un bloque antiguo no se interpreta como ausencia del fenómeno, sino como ausencia de instrumentación en esa fecha.
+
+Dentro de ese inventario, la referencia histórica se toma de la configuración estable del 18 de junio de 2026. El entrenamiento \texttt{train\_2026-06-18\_11-21} contiene 548 generaciones completas en \texttt{Training\_Summary.csv} y 16432 registros en \texttt{Fitness\_Debug.csv}. La columna \texttt{N} declara 16440 vehículos, por lo que la cobertura del fichero de detalle es del 99.95\%. El informe automático no detecta alertas fuertes de desalineación, pero esta diferencia de ocho filas se conserva como limitación del conjunto.
+
+La evaluación de test agrega las cuatro carpetas del 18 de junio: \texttt{12-41}, \texttt{14-03}, \texttt{14-39} y \texttt{14-51}. En conjunto reúnen 21 ejecuciones completas y 1134 vehículos, con 21 observaciones para cada uno de los 54 puntos de aparición. Los cuatro informes presentan cobertura del 100\%, no descartan filas y clasifican todos los registros como test. La hora identifica cada carpeta archivada; no se interpreta como una variable experimental. Para la trazabilidad de los tests se utiliza el \texttt{SuperCarModel} registrado en el informe de cada sesión, ya que es el modelo cargado para la evaluación. En este bloque, tres sesiones usan el modelo del 17 de junio a las 18:52:21 y la sesión de las 14:51 usa el del 16 de junio a las 17:47:17; por ello, el agregado se interpreta como referencia histórica multi-sesión, no como repetición estricta de un único modelo.
 
 Los tamaños efectivos se obtienen de los CSV\@: 30 vehículos por generación de entrenamiento y 54 por ejecución de test. Esta comprobación es necesaria porque \texttt{PopulationSize} es editable en la instancia del mapa y su valor por defecto no describe necesariamente la sesión archivada. También se detectó que las carpetas de test \texttt{2026-06-11\_11-55} y \texttt{2026-06-11\_13-08} contienen un \texttt{Fitness\_Debug.csv} idéntico; en las comparaciones se cuenta una sola vez. La Tabla~\ref{tab:configuracion-experimental} fija la configuración experimental del bloque de referencia utilizado en el resto del capítulo.
 
@@ -19,7 +23,7 @@ Los tamaños efectivos se obtienen de los CSV\@: 30 vehículos por generación d
 \midrule
 Entrenamiento de referencia & \texttt{train\_2026-06-18\_11-21}, 548 generaciones completas, 30 vehículos efectivos por generación y 30 puntos de aparición únicos en los CSV.\\
 Test agregado & Cuatro sesiones del 18 de junio, 21 ejecuciones completas, 54 puntos de aparición y 1134 evaluaciones.\\
-Modelo en test & Pesos cargados sin mutación durante la evaluación; el test mide comportamiento de un modelo fijo, no aprendizaje en línea.\\
+Modelo en test & En cada sesión se evalúa el \texttt{SuperCarModel} indicado en \texttt{informe.txt}, con pesos cargados sin mutación durante la evaluación; el test mide comportamiento de un modelo fijo por sesión, no aprendizaje en línea.\\
 Criterio de acierto & Causa terminal no incluida entre fallos y al menos 60 segundos de vida. \texttt{TestMinFitness} figura como 25000, pero \texttt{TestUseFitness} está desactivado para este criterio.\\
 Aleatoriedad & No consta una semilla global documentada para reproducir bit a bit mutaciones o elecciones de trayectoria; la trazabilidad se conserva mediante carpetas, modelos, CSV e informes.\\
 Duración de episodio & En \texttt{FITNESS 18-06-2026}, \texttt{MaxTimeAlived} es 100 para test y el límite de entrenamiento es 120 segundos; el análisis usa tiempo de vida y causa terminal, no solo supervivencia.\\
@@ -30,13 +34,33 @@ Mutación registrada & El test se ejecuta sin mutación. En entrenamiento, los C
 \end{table}
 
 \Needspace{8\baselineskip}
-Los bloques posteriores de final de junio y comienzo de julio se emplean como pruebas de regresión y diagnóstico, no como nueva referencia principal. En esa serie aparecen recuperaciones parciales, caídas por \texttt{STOP\_VIOLATION}, sesiones demasiado cortas y nuevos indicadores sobre cedas, solapes y bloqueo en cruces. El 2 de julio alcanza 193 aciertos sobre 354 evaluaciones, un 54.52\%, pero procede de un único bloque más pequeño que la referencia del día 18. El 3 de julio cambia además el modo experimental: se activa \texttt{FreeRun}, con coches vivos censurados y respawn por spawnpoint. Se revisan dos sesiones de ese tipo, una dominada por \texttt{LAZY} y otra por \texttt{NAV\_VIOLATION}; ambas deben interpretarse como simulación libre de tráfico y no como test estadístico generacional. Por ello, los resultados principales del capítulo se apoyan en la configuración de referencia evaluada el 18 de junio y las sesiones posteriores se interpretan como evidencia para decidir las siguientes correcciones.
+Los bloques posteriores de final de junio y comienzo de julio se emplean como pruebas de regresión y diagnóstico, no como nueva referencia principal. En esa serie aparecen recuperaciones parciales, caídas por \texttt{STOP\_VIOLATION}, sesiones demasiado cortas y nuevos indicadores sobre cedas, solapes y bloqueo en cruces. El bloque \texttt{test\_2026-06-26\_16-39} evalúa el \texttt{SuperCarModel} del 22 de junio a las 16:16:24 y alcanza una tasa alta, 147 aciertos sobre 177 evaluaciones, un 83.05\%, pero solo contiene tres generaciones de test y no ofrece una cadena de entrenamiento suficientemente documentada. El 2 de julio alcanza 193 aciertos sobre 354 evaluaciones, un 54.52\%, pero procede de un único bloque más pequeño que la referencia del día 18. El 3 de julio cambia además el modo experimental: se activa \texttt{FreeRun}, con coches vivos censurados y respawn por spawnpoint. Se revisan dos sesiones de ese tipo, una dominada por \texttt{LAZY} y otra por \texttt{NAV\_VIOLATION}; ambas deben interpretarse como simulación libre de tráfico y no como test estadístico generacional. Por ello, los resultados principales del capítulo se apoyan en la configuración de referencia evaluada el 18 de junio y las sesiones posteriores se interpretan como evidencia para decidir las siguientes correcciones.
 
-Tras incorporar las carpetas nuevas de julio se revisaron también los entrenamientos \texttt{train\_2026-07-06\_02-22} y \texttt{train\_2026-07-06\_11-47}, el diagnóstico \texttt{FreeRun} del 6 de julio y cinco bloques de test del 7 de julio. El bloque \texttt{test\_2026-07-07\_16-45}, con 50 generaciones y 2950 evaluaciones declaradas, se analiza de forma separada en la Sección~\ref{sec:validacion-posterior}. Su interés es comprobar la versión final instrumentada del programa, no reescribir automáticamente la referencia histórica del 18 de junio.
+Tras incorporar las carpetas nuevas de julio se revisaron también los dos entrenamientos del 6 de julio, el diagnóstico \texttt{FreeRun} de ese mismo día y cinco bloques de test del 7 de julio. El bloque \texttt{test\_2026-07-07\_16-45}, con 50 generaciones, 2950 evaluaciones declaradas y \texttt{SuperCarModel} del 5 de julio a las 18:30:36, se analiza de forma separada en la Sección~\ref{sec:validacion-posterior}. La Tabla~\ref{tab:papel-bloques-resultados} resume el papel experimental asignado a cada bloque y evita mezclar referencia histórica, pruebas de regresión, validación posterior y diagnóstico \texttt{FreeRun}.
 
+\begin{table}[H]
+\centering
+\caption{Papel experimental de los bloques principales de resultados.}%
+\label{tab:papel-bloques-resultados}
+\footnotesize
+\begin{tabularx}{0.98\textwidth}{L{2.6cm}L{3.0cm}>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{Bloque} & \textbf{Papel en la memoria} & \textbf{Motivo de inclusión} & \textbf{Limitación principal}\\
+\midrule
+18 de junio agregado & Referencia histórica principal & Combina un entrenamiento representativo de la etapa y cuatro tests completos; cubre 54 spawns y ofrece un criterio de acierto estable. & Las sesiones de test cargan \texttt{SuperCarModel} consolidados los días 16--17 de junio; no constituyen una genealogía directa desde el entrenamiento del 18.\\
+22 de junio--2 de julio & Regresión y diagnóstico & Muestra cómo los cambios de fitness, stop, ceda y rotondas afectan al comportamiento posterior. & Cambian reglas e instrumentación, por lo que no forma una comparación controlada.\\
+3 y 6 de julio & Diagnóstico \texttt{FreeRun} & Observa tráfico continuo, coches vivos censurados, respawn, solapes y bloqueo. & No es test generacional y no debe mezclarse con tasas de acierto de \texttt{Test\_Summary.csv}.\\
+7 de julio, bloque largo & Validación posterior final & Evalúa el \texttt{SuperCarModel} del 5 de julio a las 18:30:36 con la versión final instrumentada, 59 spawns y 2950 evaluaciones declaradas. & Usa una configuración más rica que la referencia y no debe mezclarse con tests de otros \texttt{SuperCarModel}.\\
+7 de julio, bloques cortos & Contraste posterior corto & Evalúan cuatro \texttt{SuperCarModel} distintos del 6 de julio en ejecuciones adicionales de cinco generaciones. & No son repeticiones estrictas del modelo largo y muestran variabilidad apreciable entre sesiones.\\
+\bottomrule
+\end{tabularx}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir del inventario completo de \texttt{INFO/ANALISIS\_DATOS/Analisis}, CSV e informes automáticos.}}
+\end{table}
+
+\clearpage
 \section{Resumen cuantitativo}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{Resultados principales del entrenamiento y del bloque de test del 18 de junio de 2026.}%
 \label{tab:resultados-principales}
@@ -60,22 +84,24 @@ Tasa de acierto operativo & \multicolumn{1}{c}{No aplica} & 57.50\%\\
 \caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de los CSV del proyecto.}}
 \end{table}
 
-El test no mejora el modelo durante la ejecución: carga pesos fijos y desactiva la mutación. Su mayor \textit{MeanFit} responde a que cambia la distribución de puntos y trayectorias y a que cada ejecución cubre los 54 spawns de test. Por ello, la tabla~\ref{tab:resultados-principales} describe cada modo, pero no permite atribuir la diferencia de fitness únicamente a la calidad de la política.
+El test no mejora el modelo durante la ejecución: carga pesos fijos y desactiva la mutación. Su mayor \textit{MeanFit} responde a que cambia la distribución de puntos y trayectorias y a que cada ejecución cubre los 54 spawns de test. Por ello, la tabla~\ref{tab:resultados-principales} describe cada modo, pero no permite atribuir la diferencia de fitness únicamente a la calidad de la política. Las columnas representan el mismo estado experimental de junio, no una genealogía directa desde el entrenamiento del día 18 hasta los \texttt{SuperCarModel} evaluados en test.
 
 \clearpage
 \section{Evolución del entrenamiento}
 
-El mejor fitness se alcanza en la generación 56, con 134959.45, y el fitness medio máximo en la generación 33, con 44373.00. Ninguna de las 548 generaciones presenta \textit{MeanFit} negativo.
+La elección de esta sesión como referencia se apoya en una revisión independiente de 97 carpetas con contenido de entrenamiento: 79 sesiones \textit{train} y 18 mixtas \textit{train/test}. El criterio no fue el mayor \textit{BestFit}. Existen entrenamientos con máximos puntuales superiores, pero pertenecen a etapas anteriores o posteriores con reglas, métricas y configuraciones distintas, o no tienen una relación directa documentada con un \texttt{SuperCarModel} evaluado después. El entrenamiento del 18 de junio ofrece un bloque compacto, auditable y coherente con la referencia histórica de test, aunque no representa una convergencia evolutiva perfecta.
+
+En esta sesión, el mejor fitness se alcanza en la generación 56, con 134959.45, y el fitness medio máximo en la generación 33, con 44373.00. Ninguna de las 548 generaciones presenta \textit{MeanFit} negativo, pero el máximo aparece pronto y no vuelve a superarse durante las 492 generaciones restantes.
 
 \begin{figure}[H]
 \centering
-\caption[Tendencia del fitness en el entrenamiento del 18 de junio de 2026.]{Tendencia del fitness en el entrenamiento del 18 de junio de 2026. La gráfica combina valores por generación con medias móviles de 30 generaciones generadas por el script de análisis.}%
+\caption[Tendencia del fitness en el entrenamiento del 18 de junio de 2026.]{Tendencia del fitness en el entrenamiento del 18 de junio de 2026. La gráfica combina valores por generación con medias móviles de 30 generaciones y marca el máximo puntual, 134959.45 en la generación 56.}%
 \label{fig:tendencia-entrenamiento}
 \includegraphics[width=0.92\textwidth]{assets/tendencia_entrenamiento_2026-06-18.pdf}
 \caption*{\textit{\textbf{Fuente.} Análisis generado a partir de \texttt{Training\_Summary.csv}.}}
 \end{figure}
 
-La figura~\ref{fig:tendencia-entrenamiento} muestra variabilidad persistente y obliga a separar supervivencia de aptitud. Entre las primeras y las últimas 50 generaciones, el \textit{MeanFit} desciende un 17.5\%, de 33263.23 a 27433.45, mientras el tiempo medio aumenta un 43.1\%, de 54.83 a 78.46 segundos. El informe no identifica convergencia clara y registra 492 generaciones desde el último máximo. El modelo aprende a permanecer activo durante más tiempo, pero esa supervivencia no se traduce en una mejora monotónica del objetivo; por tanto, el entrenamiento debería interpretarse como una búsqueda todavía abierta, no como una convergencia cerrada.
+La figura~\ref{fig:tendencia-entrenamiento} muestra variabilidad persistente y obliga a separar supervivencia de aptitud. Entre las primeras y las últimas 50 generaciones, el \textit{MeanFit} desciende un 17.5\%, de 33263.23 a 27433.45, mientras el tiempo medio aumenta un 43.1\%, de 54.83 a 78.46 segundos. El modelo aprende a permanecer activo durante más tiempo, pero esa supervivencia no se traduce en una mejora monotónica del objetivo. La lectura más prudente es que el algoritmo conserva individuos útiles y explora alrededor de ellos, pero la población no converge hacia una política progresivamente mejor. Por tanto, este bloque debe interpretarse como entrenamiento de referencia estable y trazable, no como prueba de aprendizaje cerrado.
 
 La tabla~\ref{tab:evolucion-red-fitness} sitúa este resultado dentro de la evolución técnica de la red y del fitness durante el proyecto.
 
@@ -104,7 +130,7 @@ La sesión registra además 5365 entradas en rotonda, 1075 completaciones confir
 \Needspace{10\baselineskip}
 \section{Evaluación de test}
 
-El criterio implementado considera fallo cualquier colisión, infracción, estancamiento, corrección o marcha atrás incorrecta, vuelco, red inválida o navegación fuera de zona; también exige al menos 60 segundos de vida. El umbral de fitness de 25000 está configurado, pero desactivado mediante \texttt{TestUseFitness}. En esta memoria se denomina acierto operativo a una evaluación que supera ese criterio de test: no termina por una causa de fallo y alcanza el tiempo mínimo exigido. No equivale a una validación clínica ni garantiza que el vehículo resuelva todos los escenarios urbanos de forma robusta. Con estas reglas, el bloque del 18 de junio obtiene 652 aciertos de 1134 evaluaciones, un 57.50\%. El intervalo de confianza de Wilson al 95\% se sitúa entre el 54.60\% y el 60.34\%~\cite{wilson}. Este intervalo cuantifica la incertidumbre de una proporción binomial dentro del bloque agregado; no mide la variabilidad entre entrenamientos independientes ni sustituye a una repetición completa con semillas controladas. Las cuatro sesiones oscilan entre el 53.70\% y el 61.42\%, con una mediana del 57.04\%.
+El criterio implementado considera fallo cualquier colisión, infracción, estancamiento, corrección o marcha atrás incorrecta, vuelco, red inválida o navegación fuera de zona; también exige al menos 60 segundos de vida. El umbral de fitness de 25000 está configurado, pero desactivado mediante \texttt{TestUseFitness}. En esta memoria se denomina acierto operativo a una evaluación que supera ese criterio de test: no termina por una causa de fallo y alcanza el tiempo mínimo exigido. No equivale a una validación clínica ni garantiza que el vehículo resuelva todos los escenarios urbanos de forma robusta. El umbral temporal funciona como salvaguarda de análisis: en bloques cerrados por \texttt{TIMEFINISHED} no altera la tasa agregada, pero evita clasificar como acierto una terminación no fallida demasiado corta. Cuando \texttt{Test\_Summary.csv} y \texttt{Fitness\_Debug.csv} difieren ligeramente, se usa el resumen para tasas y el detalle para causas terminales y contexto. Con estas reglas, el bloque del 18 de junio obtiene 652 aciertos de 1134 evaluaciones, un 57.50\%. El intervalo de confianza de Wilson al 95\% se sitúa entre el 54.60\% y el 60.34\%~\cite{wilson}. Este intervalo cuantifica la incertidumbre de una proporción binomial dentro del bloque agregado; no mide la variabilidad entre entrenamientos independientes ni sustituye a una repetición completa con semillas controladas. Las cuatro sesiones oscilan entre el 53.70\% y el 61.42\%, con una mediana del 57.04\%.
 
 Para evitar una interpretación excesiva de esa cifra, la tabla~\ref{tab:limitaciones-experimentales} resume las principales restricciones del bloque de referencia. Todas ellas se mantienen en la lectura de conclusiones y líneas futuras.
 
@@ -120,7 +146,7 @@ Alcance del acierto & El 57.50\% mide acierto operativo bajo el criterio de test
 Mapa y cobertura & Las 1134 evaluaciones cubren 54 puntos de aparición del mapa actual, pero no prueban generalización a otros escenarios urbanos.\\
 Aleatoriedad & No consta en las fuentes revisadas una semilla aleatoria global fijada para reproducir bit a bit mutaciones o elecciones de salida. La trazabilidad se apoya en modelos, CSV y carpetas archivadas.\\
 Convergencia & El entrenamiento del 18 de junio no muestra convergencia clara: mejora la supervivencia, pero el fitness medio desciende entre el inicio y el final.\\
-Regresiones posteriores & Las pruebas de final de junio y julio introducen cambios de fitness, señalización y tráfico; sirven como diagnóstico, no como sustitución automática de la referencia.\\
+Regresiones posteriores & Las pruebas de final de junio y julio introducen cambios de fitness, señalización y tráfico; sirven como diagnóstico y validación posterior, con alcance propio frente a la referencia.\\
 Línea base externa & No se compara contra un controlador reglado, una política supervisada ni otro simulador; las mejoras se interpretan respecto a bloques previos del propio proyecto.\\
 \bottomrule
 \end{tabularx}
@@ -169,7 +195,7 @@ La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archi
 
 Frente al 8 de junio, el bloque del día 18 sube 32.31 puntos de acierto operativo, un 42.6\% el fitness final medio y un 46.6\% la vida media. Como la serie cae el día 15 y en varias sesiones del 16, las mejoras se aceptan solo tras repeticiones.
 
-Los bloques posteriores muestran por qué no basta con seguir la fecha más reciente. La serie pasa por una fase próxima a la referencia, una degradación normativa fuerte, una recuperación desigual y una mejora parcial en los dos tests del 30 de junio. Este último bloque reúne solo 236 evaluaciones válidas, por lo que no tiene el peso estadístico del día 18, pero sí confirma que el comportamiento debe valorarse por familias de fallo y no por una única cifra agregada. Ese contraste convierte las sesiones posteriores en material de diagnóstico, no en sustitución directa del bloque de referencia.
+Los bloques posteriores muestran por qué no basta con seguir la fecha más reciente. La serie pasa por una fase próxima a la referencia, una degradación normativa fuerte, una recuperación desigual y una mejora parcial en los dos tests del 30 de junio. Este último bloque reúne solo 236 evaluaciones válidas, por lo que no tiene el peso estadístico del día 18, pero sí confirma que el comportamiento debe valorarse por familias de fallo y no por una única cifra agregada. Ese contraste sitúa las sesiones posteriores como material de diagnóstico con alcance propio dentro de la evolución del sistema.
 
 \newpage
 \section{Razones de finalización}
@@ -221,7 +247,7 @@ Marcha atrás & 2 & \rule{0.02cm}{0.18cm}\;0.18\%\\
 \caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de \texttt{Test\_Summary.csv} y \texttt{Fitness\_Debug.csv}.}}
 \end{figure}
 
-El actor con más colisiones es \texttt{BP\_IntersectionBorder221}, con 94 casos. Le siguen \texttt{NavModifierVolume43}, con 64, y \texttt{NavModifierVolume35}, con 63. Los tres reúnen 221 fallos, el 48.7\% de todas las colisiones del bloque. La concentración mantiene como prioridad la revisión geométrica de esos elementos y de los recorridos que conducen hasta ellos.
+Los CSV permiten identificar el actor asociado a cada colisión y si el coche estaba en contexto de rotonda, pero no codifican de forma inequívoca el tipo físico del impacto, por ejemplo lateral, frontal, contra borde o contra vehículo. En este bloque, 149 de las 454 colisiones aparecen marcadas dentro de rotonda. El actor con más casos es \texttt{BP\_IntersectionBorder221}, con 94; le siguen \texttt{NavModifierVolume43}, con 64, y \texttt{NavModifierVolume35}, con 63. Los tres reúnen 221 fallos, el 48.7\% de todas las colisiones del bloque, lo que mantiene como prioridad revisar la geometría y los recorridos que conducen hasta esas zonas.
 
 \section{Comportamiento ante señalización}
 
@@ -243,7 +269,40 @@ La diferencia entre el mejor y el peor fitness medio supera los 58000 puntos. Co
 
 \section{Pruebas de regresión y diagnóstico}
 
-Tras el bloque de referencia se realizaron nuevas iteraciones sobre fitness, stops, cedas, rotondas e instrumentación. No forman un experimento controlado con una única variable modificada, por lo que su valor está en detectar qué problemas reaparecen y qué métricas permiten explicarlos. La primera fase conserva parte del comportamiento del 18 de junio, pero los entrenamientos asociados elevan los fallos legales por encima del 50\%, casi siempre por \texttt{STOP\_VIOLATION}.
+Tras el bloque de referencia se realizaron nuevas iteraciones sobre fitness, stops, cedas, rotondas e instrumentación. No forman un experimento controlado con una única variable modificada, por lo que su valor está en detectar qué problemas reaparecen y qué métricas permiten explicarlos. Los bloques posteriores aparecen con más puntos de aparición, hasta 59 frente a los 54 de la referencia. Las fuentes revisadas no permiten aislar una única modificación responsable, de modo que esa diferencia se trata como cambio de protocolo y no como repetición estricta de la misma muestra de test. La primera fase conserva parte del comportamiento del 18 de junio, pero los entrenamientos asociados elevan los fallos legales por encima del 50\%, casi siempre por \texttt{STOP\_VIOLATION}. La Tabla~\ref{tab:cambios-tecnicos-resultados} relaciona los principales bloques posteriores con los cambios técnicos e instrumentales activos en cada momento.
+
+\Needspace{18\baselineskip}
+{\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{L{2.05cm}L{3.15cm}L{2.75cm}L{2.35cm}L{3.7cm}}
+\caption{Cambios técnicos e instrumentales asociados a los bloques posteriores de test.}\label{tab:cambios-tecnicos-resultados}\\
+\toprule
+\textbf{Bloque} & \textbf{Cambio técnico o instrumental relevante} & \textbf{Métricas disponibles} & \textbf{Resultado observado} & \textbf{Interpretación}\\
+\midrule
+\endfirsthead%
+\caption[]{Cambios técnicos e instrumentales asociados a los bloques posteriores de test (continuación).}\\
+\toprule
+\textbf{Bloque} & \textbf{Cambio técnico o instrumental relevante} & \textbf{Métricas disponibles} & \textbf{Resultado observado} & \textbf{Interpretación}\\
+\midrule
+\endhead%
+\bottomrule
+\endfoot%
+\bottomrule
+\multicolumn{5}{>{\centering\arraybackslash}p{0.92\textwidth}}{\textit{\textbf{Fuente.} Elaboración propia a partir de los informes independientes, CSV y descripciones fechadas de Blueprints.}}\\
+\endlastfoot%
+18-jun referencia & Bloque histórico multi-sesión con 54 spawns y criterio de acierto estable. & Fitness, causas terminales, señalización y rotondas ya instrumentadas. & 652/1134, 57.50\%. & Referencia comparable para entrenamiento y test; mantiene limitaciones en colisiones, stop y rotondas.\\
+22-jun & Cambios posteriores de fitness, señalización y conjunto de spawns. & Métricas comunes de test y causas terminales. & Rendimiento próximo pero inferior a la referencia. & Compatible con una fase de regresión suave; no permite aislar una causa única.\\
+23-jun & Ajustes de stop/fitness en una etapa todavía inestable. & Causas legales y colisiones. & 16.27\%. & La caída coincide con regresiones legales, especialmente \texttt{STOP\_VIOLATION}.\\
+26-jun alto & Test corto con \texttt{SuperCarModel} del 22 de junio y protocolo posterior. & Métricas comunes y primeros solapes desde esta fecha. & 147/177, 83.05\%. & Resultado alto, pero con cobertura reducida y sin trazabilidad directa de entrenamiento suficiente.\\
+29--30-jun & Instrumentación más rica: solapes ya presentes y bloqueo en cruce desde el 30 de junio. & Stop refinado, cedas, solapes, bloqueo y velocidad en ceda. & 30.42\% el 29; 46.61\% el 30. & Algunas métricas hacen visibles fallos antes no medidos; la comparación con el 18 de junio es solo parcial.\\
+1-jul & Persisten cambios de stop, ceda y navegación con varios bloques pequeños. & \shortstack[l]{\texttt{STOP\_VIOLATION}\\\texttt{\_TIMEOUT}}, ceda, navegación y colisiones. & 27.38\%. & Diagnóstico de fallos introducidos o visibilizados por reglas más estrictas.\\
+2-jul & Recuperación parcial tras ajustes de señalización. & Causas terminales comunes y \shortstack[l]{\texttt{STOP\_VIOLATION}\\\texttt{\_EXIT}}. & 193/354, 54.52\%. & Mejora respecto al 1 de julio, pero bloque único y menor que la referencia histórica.\\
+3-jul \texttt{FreeRun} & Cambio de protocolo: tráfico continuo, respawn y coches vivos censurados. & Solapes, bloqueo, navegación, triggers y eventos terminales. & Sin tasa generacional comparable. & Diagnóstico de convivencia; no debe mezclarse con tests de \texttt{Test\_Summary.csv}.\\
+6-jul & Corrección de stop con posición legal, espera mínima aprendida y timeout. & Separación de subtipos de stop y métricas finales. & Puente técnico hacia los tests del 7 de julio. & Actualiza la lectura de stop, pero no recalcula bloques antiguos.\\
+7-jul largo & Versión final instrumentada; \texttt{SuperCarModel} del 5 de julio a las 18:30:36; 59 spawns. & \texttt{STOP\_TIMEOUT}, ceda, \texttt{NAV}, solapes, bloqueo y triggers. & 2497/2950, 84.64\%. & Validación posterior final; no agregable directamente al 18 de junio por protocolo, modelo e instrumentación.\\
+7-jul cortos & Cuatro \texttt{SuperCarModel} distintos del 6 de julio en bloques de cinco generaciones. & Mismas familias finales en menor cobertura. & 852/1180, 72.20\%. & Contraste de variabilidad entre modelos de la misma etapa final.\\
+\end{longtable}
+}
 
 La regresión queda clara cuando el bloque del 23 de junio cae al 16.27\% de acierto y concentra casi la mitad de sus fallos en causas legales. Después aparecen ejecuciones muy dispares: una sesión corta no aporta suficiente detalle, otra alcanza un resultado favorable aislado y un bloque más amplio vuelve a bajar al 30.42\%. Esta variabilidad impide sustituir la referencia estable por una sesión posterior, aunque alguna cifra puntual parezca prometedora.
 
@@ -263,27 +322,29 @@ Las descripciones técnicas del 6 de julio corrigen la validación de stop separ
 \section{Validación posterior con la versión final}
 \label{sec:validacion-posterior}
 
-El bloque \texttt{test\_2026-07-07\_16-45} evalúa el modelo cargado con la versión final instrumentada del programa. Contiene 50 generaciones de test, 59 spawns y 2950 evaluaciones declaradas en \texttt{Test\_Summary.csv}. El fichero \texttt{Fitness\_Debug.csv} conserva 2946 registros individuales, una cobertura del 99.9\%; la generación 38 tiene cuatro filas menos que las esperadas, por lo que se usa \texttt{Test\_Summary.csv} para la tasa de acierto y \texttt{Fitness\_Debug.csv} para analizar causas y contexto. La Tabla~\ref{tab:validacion-posterior} resume la comparación con la referencia histórica y con las repeticiones cortas posteriores.
+El bloque \texttt{test\_2026-07-07\_16-45} evalúa el \texttt{SuperCarModel} del 5 de julio a las 18:30:36 con la versión final instrumentada del programa. Contiene 50 generaciones de test, 59 spawns y 2950 evaluaciones declaradas en \texttt{Test\_Summary.csv}. El fichero \texttt{Fitness\_Debug.csv} conserva 2946 registros individuales, una cobertura del 99.9\%; la generación 38 tiene cuatro filas menos que las esperadas, por lo que se usa \texttt{Test\_Summary.csv} para la tasa de acierto y \texttt{Fitness\_Debug.csv} para analizar causas y contexto. El entrenamiento concreto que consolidó este \texttt{SuperCarModel} no queda identificado de forma inequívoca en las fuentes revisadas; por ello, el bloque valida el modelo persistido y la versión final instrumentada, no el cierre trazado de una sesión de entrenamiento concreta. La Tabla~\ref{tab:validacion-posterior} resume la comparación con la referencia histórica y con los contrastes cortos posteriores.
 
 \begin{table}[H]
 \centering
 \caption{Comparación entre la referencia del 18 de junio y la validación posterior del 7 de julio.}%
 \label{tab:validacion-posterior}
 \footnotesize
-\begin{tabularx}{0.98\textwidth}{L{2.2cm}rrrL{1.25cm}L{2.25cm}X}
+\begin{tabularx}{0.98\textwidth}{L{2.2cm}rrrL{1.25cm}L{2.25cm}>{\raggedright\arraybackslash}X}
 \toprule
 \textbf{Bloque} & \textbf{Eval.} & \textbf{Spawns} & \textbf{Aciertos} & \textbf{Acierto} & \textbf{IC95} & \textbf{Lectura}\\
 \midrule
-18-jun referencia & 1134 & 54 & 652 & 57.50\% & 54.60--60.34\% & Referencia histórica: modelo estable, test agregado de cuatro sesiones y 21 ejecuciones completas.\\
-7-jul final, bloque largo & 2950 & 59 & 2497 & 84.64\% & 83.30--85.90\% & Validación posterior de la versión final instrumentada; reduce colisiones, separa el timeout de stop y mide solapes y bloqueo en cruce.\\
-7-jul repeticiones cortas & 1180 & 59 & 852 & 72.20\% & 69.58--74.68\% & Cuatro bloques de cinco generaciones; confirman mejora sobre la referencia, pero muestran variabilidad entre sesiones.\\
+18-jun referencia & 1134 & 54 & 652 & 57.50\% & 54.60--60.34\% & Referencia histórica: test agregado de cuatro sesiones y 21 ejecuciones completas; tres sesiones comparten \texttt{SuperCarModel} y una usa otro modelo cercano.\\
+7-jul final, bloque largo & 2950 & 59 & 2497 & 84.64\% & 83.30--85.90\% & Validación posterior del \texttt{SuperCarModel} del 5 de julio a las 18:30:36; reduce colisiones, separa el timeout de stop y mide solapes y bloqueo en cruce.\\
+7-jul contrastes cortos & 1180 & 59 & 852 & 72.20\% & 69.58--74.68\% & Cuatro bloques de cinco generaciones con \texttt{SuperCarModel} distintos del 6 de julio; superan la referencia, pero muestran variabilidad entre modelos.\\
 \bottomrule
 \end{tabularx}
 \caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de \texttt{Test\_Summary.csv}, \texttt{Fitness\_Debug.csv} e informes de \texttt{analyse\_current.py}.}}
 \end{table}
 
-El resultado del bloque largo es claramente superior al de la referencia: 2497 aciertos sobre 2950 evaluaciones, un 84.64\%, con intervalo de Wilson entre el 83.30\% y el 85.90\%. Las causas terminales de detalle quedan dominadas por \texttt{TIMEFINISHED} (2491 registros), seguidas de 134 colisiones, 128 \texttt{STOP\_VIOLATION\_TIMEOUT}, 95 \texttt{YIELD\_VIOLATION\_EXIT}, 84 \texttt{NAV\_VIOLATION}, cinco \texttt{LAZY}, cinco \texttt{TRAFFIC\_VIOLATION}, dos \texttt{OVERLAP\_TIMEOUT} y dos \texttt{REVERSE}. El analizador detecta también 20 candidatos fuertes de atasco en stop y ocho en ceda dentro de las 2491 finalizaciones por tiempo registradas en el detalle, equivalentes al 0.80\% y 0.32\% respectivamente.
+El bloque largo alcanza una tasa más alta que la referencia: 2497 aciertos sobre 2950 evaluaciones, un 84.64\%, con intervalo de Wilson entre el 83.30\% y el 85.90\%. Las causas terminales de detalle quedan dominadas por \texttt{TIMEFINISHED} (2491 registros), seguidas de 134 colisiones, 128 \texttt{STOP\_VIOLATION\_TIMEOUT}, 95 \texttt{YIELD\_VIOLATION\_EXIT}, 84 \texttt{NAV\_VIOLATION}, cinco \texttt{LAZY}, cinco \texttt{TRAFFIC\_VIOLATION}, dos \texttt{OVERLAP\_TIMEOUT} y dos \texttt{REVERSE}. El analizador detecta también 20 candidatos fuertes de atasco en stop y ocho en ceda dentro de las 2491 finalizaciones por tiempo registradas en el detalle, equivalentes al 0.80\% y 0.32\% respectivamente.
 
-La mejora no debe interpretarse como una simple prolongación del experimento del 18 de junio. El bloque de julio usa 59 spawns, añade coches no fantasma mejor instrumentados, penalización real por solapes, bloqueo en cruce, colas de ceda y la lógica revisada de stop. Por ello, se incorpora como validación posterior de la versión final y no sustituye las cifras principales del resumen, que describen el bloque histórico empleado para analizar la evolución del entrenamiento. La lectura conjunta es positiva: la corrección de STOP y la instrumentación final mejoran el comportamiento operativo medido, pero todavía quedan 453 fallos declarados en \texttt{Test\_Summary.csv}, con peso relevante de colisiones, timeout en stop, salida indebida en ceda y navegación fuera de zona.
+Por tamaño y por riqueza de columnas, este bloque es la validación posterior más informativa del estado final instrumentado. El salto respecto al bloque histórico debe leerse junto con los cambios acumulados de programa: separación de timeout en stop, métricas de ceda, penalización real de solapes, diagnóstico de bloqueo en cruce, 59 spawns y uso de otro \texttt{SuperCarModel}. Por ello, se incorpora como validación posterior de la versión final y no se agrega a la misma serie estadística que la referencia histórica. La lectura conjunta es positiva: estos cambios coinciden con una mejora del comportamiento operativo medido, pero todavía quedan 453 fallos declarados en \texttt{Test\_Summary.csv}, con peso relevante de colisiones, timeout en stop, salida indebida en ceda y navegación fuera de zona.
+
+El incremento de acierto no implica una mejora uniforme en todas las familias de fallo. Las colisiones bajan a 134 de 2946 registros de detalle, aproximadamente un 4.5\%, mientras que los fallos normativos y de navegación aparecen con más granularidad: 128 \texttt{STOP\_VIOLATION\_TIMEOUT}, 95 \texttt{YIELD\_VIOLATION\_EXIT}, 84 \texttt{NAV\_VIOLATION} y cinco \texttt{TRAFFIC\_VIOLATION}. Esta distribución es compatible tanto con reglas más estrictas y desagregadas tras la instrumentación final como con una dificultad normativa real pendiente de aislar mediante repeticiones comparables. Además, al sobrevivir con más frecuencia hasta \texttt{TIMEFINISHED}, los vehículos quedan expuestos durante más tiempo a intersecciones reguladas, por lo que el cumplimiento de señales debe seguir tratándose como una línea prioritaria de mejora. Por tanto, el 84.64\% se lee como mejora operativa global bajo instrumentación más completa, no como cierre definitivo del comportamiento normativo.
 
 La conclusión experimental queda, por tanto, en dos niveles. El bloque del 18 de junio sigue siendo la referencia histórica de entrenamiento y test de esta memoria: mejora la tasa de acierto operativo, reduce colisiones respecto a etapas previas y amplía la evaluación a 54 spawns. El bloque largo del 7 de julio muestra que la versión final instrumentada del programa alcanza una tasa de acierto mayor y reduce síntomas como \texttt{LAZY}, pero introduce una configuración más rica y no debe mezclarse en la misma serie estadística. Para cerrar el sistema sería necesario repetir la validación final con varios entrenamientos independientes, semillas documentadas y pruebas dirigidas sobre los spawns y cruces que siguen concentrando fallos.

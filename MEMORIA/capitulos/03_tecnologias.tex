@@ -38,6 +38,16 @@ r_m=\operatorname{clamp}\left(\frac{g_{\text{sin mejora}}}{W_{\text{total}}},\fr
 
 donde \(W_{\text{total}}\) es la suma de pesos de entrada-oculta y oculta-salida, \(W_{\text{HO}}\) es el número de pesos de la capa oculta a salida, y \(g_{\text{sin mejora}}\) corresponde a las generaciones acumuladas sin superar el mejor histórico. Para la rama exploratoria final, el Blueprint eleva el valor con \(\max(g_{\text{sin mejora}},1)+W_{\text{HO}}\) y lo acota hasta \(2W_{\text{HO}}/W_{\text{total}}\). De esta manera, la presión exploratoria aumenta cuando el sistema deja de mejorar, sin reinicializar aleatoriamente la población después de la primera generación. Los tamaños de población son parámetros editables del mapa; por ello, los valores efectivos se obtienen de la columna \texttt{N} de cada ejecución y no del valor por defecto del Blueprint.
 
+De forma equivalente, esa rama exploratoria puede expresarse como:
+\[
+r_{\text{expl}}=\operatorname{clamp}\left(
+\frac{\max(g_{\text{sin mejora}},1)+W_{\text{HO}}}{W_{\text{total}}},
+r_m,
+\frac{2W_{\text{HO}}}{W_{\text{total}}}
+\right).
+\]
+Con la arquitectura documentada, \(W_{\text{total}}=352\) y \(W_{\text{HO}}=32\), por lo que la rama ordinaria queda acotada por \(32/352\) y la exploratoria por \(64/352\). La fórmula resume la lógica operacional descrita en \texttt{EVOLUTIONMANAGER}; no introduce una política de mutación distinta a la implementada.
+
 \Needspace{15\baselineskip}
 \section{Análisis de datos}
 
@@ -84,12 +94,12 @@ La tabla~\ref{tab:versiones-herramientas} diferencia entre versiones constatadas
 Unreal Engine & 5.5.4 & Versión indicada en la documentación técnica y en las fuentes del proyecto.\\
 Blueprints & Integrado en Unreal Engine & Tecnología principal de implementación; integrada en el motor.\\
 Chaos Vehicles & Integrado en Unreal Engine & Sistema de físicas empleado por el vehículo; depende de la versión de Unreal.\\
-Python & Sin versión fijada en repositorio & Scripts de análisis y limpieza en \texttt{INFO/ANALISIS\_DATOS}; sin \texttt{requirements.txt}.\\
-NumPy & Sin versión fijada en repositorio & Importado por los scripts de análisis.\\
-Matplotlib & Sin versión fijada en repositorio & Generación de gráficas exportadas desde CSV.\\
-Seaborn & Dependencia opcional & Visualizaciones complementarias si está disponible; el análisis básico no depende de él.\\
-pandas & No consta como dependencia directa & No aparece importado en los scripts revisados.\\
-Git/GitLab & Sin versión de servidor documentada & Uso acreditado por issues, milestones y trazabilidad de tareas.\\
+Python & Instalación actualizada; versión no fijada & Scripts de análisis y limpieza en \texttt{INFO/ANALISIS\_DATOS}; el repositorio no conserva \texttt{requirements.txt} ni bloqueo de intérprete.\\
+NumPy & Instalación actualizada; versión no fijada & Importado por \texttt{analyse\_current.py}, \texttt{analyse\_utils.py} y utilidades de test; sin versión bloqueada en repositorio.\\
+Matplotlib & Instalación actualizada; versión no fijada & Usado para generar gráficas desde CSV cuando el entorno de análisis dispone de la librería.\\
+Seaborn & Uso auxiliar opcional; versión no fijada & Importación opcional en \texttt{analyse\_current.py}; el script continúa con visualizaciones básicas si no está disponible.\\
+pandas & Uso auxiliar no fijado en repositorio & No aparece como import directo en los scripts versionados revisados; se conserva como herramienta posible de análisis auxiliar, sin considerarla dependencia obligatoria.\\
+Git/GitLab & Cliente Git actualizado; servidor no documentado & Uso acreditado por issues, milestones y trazabilidad de tareas; no se fija versión de servidor GitLab en las fuentes revisadas.\\
 LaTeX/MiKTeX & Entorno de documentación & Compilación de la memoria; versiones exactas fuera del experimento técnico~\cite{latex,miktex}.\\
 Equipo de desarrollo y pruebas & OMEN 45L GT22-0021ns & Intel Core i9-12900K, 32 GB RAM, SSD 2 TB y NVIDIA GeForce RTX 3080 Ti; usado para UE5, entrenamiento y análisis CSV.\\
 \end{longtable}

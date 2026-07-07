@@ -14,35 +14,35 @@ La Figura~\ref{fig:arquitectura-sistema} resume esa arquitectura y muestra la re
 \label{fig:arquitectura-sistema}
 \small
 \begin{tikzpicture}[
-  block/.style={draw, rounded corners=2pt, align=center, minimum height=0.95cm, text width=2.55cm, inner sep=3pt},
+  block/.style={draw, rounded corners=2pt, align=center, minimum height=1.0cm, text width=2.55cm, inner sep=3pt},
   wide/.style={block, text width=2.75cm},
   arrow/.style={-{Latex[length=2.1mm]}, line width=0.45pt},
   feedback/.style={arrow,dashed}
 ]
-\node[wide]  (ue)       at (0,0)       {Unreal Engine 5\\escenario urbano};
-\node[wide]  (vehicle)  at (3.15,0)    {Vehículo autónomo\\Chaos Vehicle};
-\node[block] (sensors)  at (6.30,0)    {Sensores\\raycasting};
-\node[wide]  (ctrl)     at (9.45,0)    {Controlador neuronal\\20 entradas, 16 ocultas, 2 salidas};
-\node[wide]  (action)   at (12.50,0)   {Acción física\\dirección\\acelerador/freno};
+\node[wide]  (ue)       at (0,0)        {Unreal Engine 5\\escenario urbano};
+\node[wide]  (vehicle)  at (3.10,0)     {Vehículo autónomo\\Chaos Vehicle};
+\node[block] (sensors)  at (6.25,0)     {Sensores\\raycasting};
+\node[wide]  (ctrl)     at (9.45,0)     {Controlador neuronal\\20 entradas, 16 ocultas, 2 salidas};
+\node[wide]  (action)   at (12.55,0)    {Acción física\\dirección\\acelerador/freno};
 
-\node[wide]  (traffic)  at (6.30,2.05) {Semáforos, STOP, ceda\\rotondas e intersecciones};
-\node[wide]  (fitness)  at (3.15,-2.65){Fitness\\métricas y causas de fallo};
-\node[wide]  (evo)      at (6.30,-2.65){Gestor evolutivo\\selección y mutación};
-\node[wide]  (models)   at (9.45,-2.65){Persistencia\\modelos guardados};
-\node[wide]  (csv)      at (3.15,-4.75){Exportación CSV\\train, test y depuración};
-\node[wide]  (analysis) at (6.30,-4.75){Scripts Python\\análisis de datos};
+\node[wide]  (traffic)  at (6.25,2.25)  {Semáforos, STOP, ceda,\\rotondas e intersecciones};
+\node[wide]  (fitness)  at (3.10,-3.05) {Fitness\\métricas y causas de fallo};
+\node[wide]  (evo)      at (6.25,-3.05) {Gestor evolutivo\\selección y mutación};
+\node[wide]  (models)   at (9.45,-3.05) {Persistencia\\modelos guardados};
+\node[wide]  (csv)      at (3.10,-5.35) {Exportación CSV\\train, test y depuración};
+\node[wide]  (analysis) at (6.25,-5.35) {Scripts Python\\análisis de datos};
 
-\draw[arrow] (ue) -- (vehicle);
-\draw[arrow] (vehicle) -- (sensors);
-\draw[arrow] (traffic) -- (sensors);
-\draw[arrow] (sensors) -- (ctrl);
-\draw[arrow] (ctrl) -- (action);
-\draw[arrow] (vehicle) -- (fitness);
-\draw[arrow] (fitness) -- (evo);
-\draw[arrow] (evo) -- (models);
+\draw[arrow] (ue.east) -- (vehicle.west);
+\draw[arrow] (vehicle.east) -- (sensors.west);
+\draw[arrow] (traffic.south) -- (sensors.north);
+\draw[arrow] (sensors.east) -- (ctrl.west);
+\draw[arrow] (ctrl.east) -- (action.west);
+\draw[arrow] (vehicle.south) -- (fitness.north);
+\draw[arrow] (fitness.east) -- (evo.west);
+\draw[arrow] (evo.east) -- (models.west);
 \draw[arrow] (models.north) -- (ctrl.south);
-\draw[arrow] (fitness) -- (csv);
-\draw[arrow] (csv) -- (analysis);
+\draw[arrow] (fitness.south) -- (csv.north);
+\draw[arrow] (csv.east) -- (analysis.west);
 \draw[feedback] (analysis.north) -- (evo.south);
 \end{tikzpicture}
 \caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de Blueprints, descripciones del programa y CSV exportados.}}
@@ -125,14 +125,36 @@ El controlador lanza once trazas en abanico sobre 180 grados. Cada sensor devuel
 
 La decisión se modela mediante la enumeración \texttt{E\_DirectionIntent}, con tres alternativas: primera, segunda y tercera salida. Al entrar en el trigger correspondiente, el vehículo selecciona aleatoriamente una de las opciones habilitadas para el modo de entrenamiento o de test. El controlador conserva tanto la dirección elegida como el trigger que la originó. Cada borde de intersección declara una o varias parejas formadas por dirección y trigger, y admite, cuando procede, cualquier trigger o cualquier dirección. De este modo, los rayos perciben únicamente los límites que delimitan la trayectoria seleccionada sin duplicar actores para los casos compartidos.
 
-Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos. La Figura~\ref{fig:blueprint-sensores} muestra un fragmento representativo de esa lectura sensorial en Blueprint; su valor es apoyar la trazabilidad visual, mientras que el flujo lógico se resume a continuación en texto.
+Las entradas sensoriales se combinan con información de tráfico. Si el vehículo entra en la zona de un semáforo, stop o ceda, el actor correspondiente comunica al controlador el tipo de control, la línea de parada y la distancia de entrada. Esta mezcla de percepción geométrica y contexto normativo permite que la red no dependa únicamente de distancia a obstáculos. La Figura~\ref{fig:blueprint-sensores} resume el flujo funcional de esa lectura sensorial y sintetiza la lógica implementada en Blueprint.
 
 \begin{figure}[H]
 \centering
-\caption[Lectura sensorial en Blueprint.]{Fragmento de \texttt{GetSensorsData} en el controlador de IA. El bloque muestra la traza física, el recorrido de impactos y el filtrado de bordes de intersección mediante \texttt{CheckMatch}.}%
+\caption[Flujo funcional de lectura sensorial.]{Flujo funcional de \texttt{GetSensorsData} en el controlador de IA. El esquema resume la generación de trazas, el recorrido de impactos, el filtrado de bordes de intersección y la normalización de distancias usada por el vector de entrada.}%
 \label{fig:blueprint-sensores}
-\includegraphics[width=0.98\textwidth]{assets/bp_get_sensors_data_core.png}
-\caption*{\textit{\textbf{Fuente.} Captura propia del proyecto en Unreal Engine a partir de \texttt{BP\_ControllerAI}.}}
+\small
+\begin{tikzpicture}[
+  sensorstep/.style={draw, rounded corners=2pt, align=center, minimum height=0.9cm, text width=2.35cm, inner sep=3pt},
+  note/.style={draw, rounded corners=2pt, dashed, align=center, text width=2.55cm, inner sep=2.5pt, font=\scriptsize},
+  arrow/.style={-{Latex[length=2mm]}, line width=0.45pt},
+  link/.style={dashed, line width=0.4pt}
+]
+\node[sensorstep] (rays) at (0,0) {Once trazas\\en abanico};
+\node[sensorstep] (trace) at (3.00,0) {\textit{Multi Sphere Trace}\\por sensor};
+\node[sensorstep] (hits) at (6.00,0) {Recorrido de\\impactos};
+\node[sensorstep] (classify) at (9.00,0) {Filtro de actor\\y trayectoria};
+\node[sensorstep] (input) at (12.00,0) {Normalización\\y vector de entrada};
+
+\node[note] (border) at (7.25,-2.25) {Borde de intersección:\\trigger y maniobra};
+\node[note] (vehicle) at (10.65,-2.25) {Vehículo visible:\\coche más cercano};
+
+\draw[arrow] (rays.east) -- (trace.west);
+\draw[arrow] (trace.east) -- (hits.west);
+\draw[arrow] (hits.east) -- (classify.west);
+\draw[arrow] (classify.east) -- (input.west);
+\draw[link] (classify.south) -- (border.north);
+\draw[link] (classify.south) -- (vehicle.north);
+\end{tikzpicture}
+\caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de la función \texttt{GetSensorsData} de \texttt{BP\_ControllerAI}.}}
 \end{figure}
 
 De forma sintética, \texttt{GetSensorsData} realiza cuatro pasos: lanza once trazas en abanico, selecciona el impacto relevante más cercano, filtra bordes de intersección según la maniobra elegida y devuelve distancias normalizadas para construir el vector de entrada.
@@ -150,36 +172,43 @@ Aunque el cálculo real se reparte en varios bloques de Blueprint, puede resumir
 \label{eq:fitness-resumen}
 \begin{aligned}
 F = \sum_t (&R_{\text{avance}} + R_{\text{progreso}} + R_{\text{espera}} + R_{\text{señal}} + R_{\text{rotonda}} \\
-&- P_{\text{velocidad}} - P_{\text{corrección}} - P_{\text{normativa}} - P_{\text{retroceso}} - P_{\text{navegación}} - P_{\text{bloqueo}}) - P_{\text{terminal}}.
+&- P_{\text{velocidad}} - P_{\text{corr.lat.}} - P_{\text{normativa}} - P_{\text{retroceso}} - P_{\text{navegación}} - P_{\text{bloqueo}}) - P_{\text{terminal}}.
 \end{aligned}
 \end{equation}
 
-La ecuación~\ref{eq:fitness-resumen} no sustituye al Blueprint ni introduce pesos nuevos: resume las familias de términos exportadas después a CSV\@. Algunos componentes documentados tienen forma explícita, por ejemplo \(P_{\text{velocidad}}=\max(0,v_n-d_f)^2\,v_{\max}\,\Delta t\), donde \(v_n\) es la velocidad normalizada y \(d_f\) la distancia frontal normalizada. Para la corrección lateral se usa \(\delta=d_{\text{der}}-d_{\text{izq}}\), siendo \(d_{\text{der}}\) y \(d_{\text{izq}}\) las lecturas laterales normalizadas, \(s\in[-1,1]\) la salida de dirección de la red, con \(s>0\) como giro hacia la derecha, y \(D_{\max}\) el alcance máximo de visión del sensor. La penalización conceptual queda:
-\[
-P_{\text{corrección}} =
+La ecuación~\ref{eq:fitness-resumen} no sustituye al Blueprint ni introduce pesos nuevos: resume las familias de términos exportadas después a CSV\@. La lectura práctica del fitness se apoya en la Tabla~\ref{tab:componentes-fitness}, que separa recompensas, penalizaciones continuas, criterios normativos y causas terminales. Algunos componentes documentados tienen forma explícita, por ejemplo \(P_{\text{velocidad}}=\max(0,v_n-d_f)^2\,v_{\max}\,\Delta t\), donde \(v_n\) es la velocidad normalizada y \(d_f\) la distancia frontal normalizada.
+
+La penalización por corrección lateral incorrecta se mantiene como término propio porque es una de las ramas donde el signo de la acción importa. Se usa \(\delta=d_{\text{der}}-d_{\text{izq}}\), siendo \(d_{\text{der}}\) y \(d_{\text{izq}}\) las lecturas laterales normalizadas; \(s\in[-1,1]\) es la salida de dirección de la red, con \(s>0\) como giro hacia la derecha; \(D_{\max}\) es el alcance máximo de visión del sensor; y \(\Delta t\) el paso temporal acumulado por la simulación. Con ese convenio, \(\delta>0\) indica más espacio libre a la derecha, de modo que \(s\delta<0\) representa un giro hacia el lado contrario a la corrección esperable. La regla conceptual queda:
+\begin{equation}
+\label{eq:penalizacion-correccion-lateral}
+P_{\text{corr.lat.}} =
 \begin{cases}
-D_{\max}|s|\,|\delta|\,\Delta t, & d_f \ge 0.99,\ |\delta|>0.075,\ s\delta<0,\\
+D_{\max}|s|\,|\delta|\,\Delta t, & d_f \ge 0\mathord{.}99,\ |\delta|>0\mathord{.}075,\ s\delta<0,\\
 0, & \text{en otro caso.}
 \end{cases}
-\]
-Esta condición reproduce la rama documentada del Blueprint: solo se penaliza cuando el giro va hacia el lado contrario a la corrección lateral necesaria. En las colisiones, el término terminal concreto se resume como \(P_{\text{terminal,colisión}}=(v^2/v_{\max})(1-d_f)\). Las constantes concretas y otras ramas condicionales permanecen en los Blueprints, pero esta formulación aclara qué signo tiene cada familia de cálculo.
+\end{equation}
+La ecuación~\ref{eq:penalizacion-correccion-lateral} reproduce la rama documentada del Blueprint: solo se activa si el sensor frontal no detecta obstáculo relevante, la asimetría lateral supera una zona muerta y la dirección aplicada empeora esa asimetría. Los valores \texttt{0.99} y \texttt{0.075} actúan como umbrales empíricos de activación y zona muerta; se mantienen como parámetros de calibración del Blueprint, no como constantes aprendidas por la red. En las colisiones, el término terminal concreto se resume como \(P_{\text{terminal,colisión}}=(v^2/v_{\max})(1-d_f)\). Las demás constantes y ramas condicionales permanecen en los Blueprints, mientras que esta formulación aclara el signo y la condición de los componentes principales.
 
-La Tabla~\ref{tab:componentes-fitness} resume la lectura práctica de esos términos y explica por qué cada componente se incorporó al aprendizaje.
+La Tabla~\ref{tab:componentes-fitness} resume la lectura operativa de esos términos y diferencia qué suma, qué resta, qué termina el episodio y qué se exporta principalmente como diagnóstico.
 
 \begin{table}[H]
 \centering
-\caption{Lectura práctica de los cálculos principales del fitness.}%
+\caption{Lectura operativa de los componentes principales del fitness.}%
 \label{tab:componentes-fitness}
-\begin{tabularx}{0.98\textwidth}{L{2.7cm}L{4.1cm}X}
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabularx}{0.99\textwidth}{L{1.55cm}L{1.85cm}L{1.2cm}X L{2.2cm}L{2.55cm}}
 \toprule
-\textbf{Cálculo} & \textbf{Qué observa} & \textbf{Por qué importa}\\
+\textbf{Familia} & \textbf{Componente} & \textbf{Tipo} & \textbf{Qué mide} & \textbf{Efecto sobre el fitness} & \textbf{Fuente o métrica}\\
 \midrule
-Avance útil & Velocidad hacia delante, aceleración aplicada y espacio disponible. & Selecciona coches que progresan de verdad y evita premiar supervivencia pasiva.\\
-Prudencia frontal & Distancia al obstáculo más cercano, incluido otro vehículo cuando existe. & Reduce la tendencia a acelerar contra bordes, cruces o coches próximos.\\
-Centrado y corrección & Diferencia entre sensores laterales y sentido de giro aplicado. & Premia correcciones coherentes y penaliza girar hacia el lado que aumenta la desviación.\\
-Señalización & Contexto de semáforo, stop o ceda, distancia a la línea y estado del cruce. & Hace que frenar, esperar y reanudar la marcha formen parte del aprendizaje.\\
-Seguridad física & Marcha atrás, colisión, salida de calzada, estancamiento y solapes. & Evita que el algoritmo conserve individuos peligrosos solo porque acumularon puntos antes del fallo.\\
-Rotondas y tráfico & Entrada, salida, velocidad, acelerador, espera en cola y bloqueo en cruce. & Permite diagnosticar maniobras urbanas complejas sin esconderlas dentro del fitness final.\\
+Conducción útil & Avance y progreso & Positiva & Velocidad hacia delante, aceleración aplicada y espacio disponible. & Aumenta la puntuación cuando el coche progresa sin depender solo de supervivencia pasiva. & \shortstack[l]{\texttt{Acum\_A}, \texttt{Acum\_F}\\\texttt{Acum\_NetNormal}}\\
+Conducción segura & Prudencia frontal & Continua & Relación entre velocidad y distancia al obstáculo más cercano, incluido otro vehículo. & Resta antes de la colisión si el coche circula demasiado rápido para el espacio disponible. & \shortstack[l]{\texttt{Acum\_Penalty}\\\texttt{Velocidad}}\\
+Control lateral & Corrección lateral incorrecta & Continua & Asimetría entre sensores laterales y sentido de giro aplicado. & Penaliza girar hacia el lado que aumenta la desviación, según la ecuación~\ref{eq:penalizacion-correccion-lateral}. & \shortstack[l]{\texttt{Acum\_Penalty}\\\texttt{CorrectingWrong}}\\
+Señalización & Stop, ceda y semáforo & Mixta & Distancia a línea, espera, liberación del cruce y estado del control activo. & Premia maniobras válidas y registra infracciones o timeouts como fallos normativos. & \shortstack[l]{bonus stop/ceda\\razones \texttt{STOP}/\texttt{YIELD}}\\
+Seguridad física & Colisión, vuelco, marcha atrás y solape & Terminal & Impactos, pérdida de estabilidad, retroceso no válido y convivencia física entre coches. & Termina o degrada la ejecución para no conservar individuos peligrosos por puntos acumulados antes del fallo. & \shortstack[l]{\texttt{Razon\_Muerte}\\solapes}\\
+Navegación & Salida de zona, estancamiento y bloqueo & Mixta & Permanencia fuera de calzada, falta de avance sin causa de tráfico y esperas bloqueadas en cruce. & Evita que el modelo sobreviva sin desplazamiento útil o fuera de la zona esperada. & \shortstack[l]{\texttt{Acum\_NavPenalty}\\\texttt{LAZY}/\texttt{NAV}}\\
+Rotondas & Entrada, velocidad y salida prevista & Mixta & Entrada, tiempo dentro, aceleración y completación instrumentada. & Permite ajustar una maniobra compleja sin ocultarla dentro del fitness final. & \shortstack[l]{\texttt{NumRoundabouts}\\\texttt{Entered}, \texttt{R\_*}}\\
 \bottomrule
 \end{tabularx}
 \caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de \texttt{BP\_VehicleAI2}, \texttt{BP\_Sign\_Stop}, \texttt{BP\_Sign\_Yield} y \texttt{BP\_IntersectionTrigger}.}}
