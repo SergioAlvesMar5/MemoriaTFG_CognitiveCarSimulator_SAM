@@ -153,7 +153,7 @@ Línea base externa & No se compara contra un controlador reglado, una política
 \caption*{\textit{\textbf{Fuente.} Elaboración propia a partir de los CSV, informes de análisis y descripciones fechadas del proyecto.}}
 \end{table}
 
-La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archivadas. No constituye un experimento controlado entre fechas, porque durante junio cambian el fitness, las intersecciones, el número de spawns y los modelos. Se utiliza para mostrar la evolución observada, no para atribuir causalidad a una modificación aislada. En esta tabla, el fitness medio se calcula directamente sobre \texttt{Fitness\_Final}; por ello puede diferir ligeramente del promedio de \textit{MeanFit} de la tabla~\ref{tab:resultados-principales}. El duplicado exacto del 11 de junio se excluye. Cuando el resumen declara más evaluaciones que registros completos de detalle, se conserva la cifra de detalle para el fitness y la vida media, y la tasa de acierto procede de \texttt{Test\_Summary.csv}.
+La tabla~\ref{tab:comparacion-bloques-test} resume la secuencia de pruebas archivadas. No constituye un experimento controlado entre fechas, porque durante junio cambian el fitness, las intersecciones, el número de spawns y los modelos. Se utiliza para mostrar la evolución observada, no para atribuir causalidad a una modificación aislada. Sus filas agregan las sesiones de test archivadas por día; por ello, el 26 de junio combina varios bloques, mientras que el bloque alto de 177 evaluaciones, con 147 aciertos, se analiza de forma separada como contraste en la Tabla~\ref{tab:cambios-tecnicos-resultados}. En esta tabla, el fitness medio se calcula directamente sobre \texttt{Fitness\_Final}; por ello puede diferir ligeramente del promedio de \textit{MeanFit} de la tabla~\ref{tab:resultados-principales}. El duplicado exacto del 11 de junio se excluye. Cuando existen pequeños descuadres entre \texttt{Test\_Summary.csv} y \texttt{Fitness\_Debug.csv}, la tasa se calcula a partir de las evaluaciones declaradas en el resumen de test, mientras que la columna de evaluaciones puede reflejar los registros de detalle disponibles.
 
 \Needspace{20\baselineskip}
 {\small
@@ -215,13 +215,14 @@ Las 652 finalizaciones por tiempo coinciden con los aciertos declarados en el re
 \texttt{COLLISION\_WITH\_*} & Colisión contra borde de intersección, volumen de navegación, vehículo u otro actor relevante. & Fallo.\\
 \texttt{STOP\_VIOLATION} & Incumplimiento genérico de stop en versiones previas. & Fallo legal.\\
 \texttt{STOP\_VIOLATION\_EXIT} & Salida de la zona de stop sin validación correcta. & Fallo legal.\\
-\shortstack[l]{\texttt{STOP\_VIOLATION}\\\texttt{\_TIMEOUT}} & Agotamiento del tiempo de validación de stop en la lógica posterior. & Fallo legal.\\
-\shortstack[l]{\texttt{YIELD\_VIOLATION}\\\texttt{\_EXIT}/\texttt{\_TIMEOUT}} & Salida indebida o espera agotada en ceda el paso. & Fallo legal.\\
+\mbox{\scriptsize\texttt{STOP\_VIOLATION\_TIMEOUT}} & Agotamiento del tiempo de validación de stop en la lógica posterior. & Fallo legal.\\
+\shortstack[l]{\scriptsize\texttt{YIELD\_VIOLATION\_EXIT}\\\scriptsize\texttt{YIELD\_VIOLATION\_TIMEOUT}} & Salida indebida o espera agotada en ceda el paso. & Fallo legal.\\
 \texttt{NAV\_VIOLATION} & Salida de zona válida o conflicto con la navegación instrumentada. & Fallo.\\
 \texttt{TRAFFIC\_VIOLATION} & Incumplimiento de señalización o norma de tráfico no desagregado en un subtipo más específico en esa versión. & Fallo legal.\\
 \texttt{LAZY} & Estancamiento sin justificación de tráfico suficiente. & Fallo.\\
 \texttt{REVERSE}/\texttt{BACKWARDS} & Marcha atrás o riesgo de retroceso incorrecto. & Fallo.\\
-\shortstack[l]{\texttt{FLIPPED}\\\texttt{INVALID\_BRAIN}} & Vuelco físico o red incompatible tras guardas de inferencia. & Fallo.\\
+\texttt{FLIPPED} & Vuelco físico del vehículo. & Fallo.\\
+\texttt{INVALID\_BRAIN} & Modelo, red o pesos incompatibles tras las guardas de inferencia. & Fallo.\\
 \texttt{OVERLAP\_TIMEOUT} & Solape prolongado entre vehículos en versiones con coches no fantasma. & Diagnóstico; no altera la tasa si el resumen no lo declara fallo.\\
 \bottomrule
 \end{tabularx}
@@ -323,7 +324,7 @@ Las descripciones técnicas del 6 de julio corrigen la validación de stop separ
 \section{Validación posterior con la versión final}
 \label{sec:validacion-posterior}
 
-El bloque \texttt{test\_2026-07-07\_16-45} evalúa el modelo persistido del 5 de julio con la versión final instrumentada del programa. Contiene 50 generaciones de test, 59 spawns y 2950 evaluaciones declaradas en \texttt{Test\_Summary.csv}. El fichero \texttt{Fitness\_Debug.csv} conserva 2946 registros individuales, una cobertura del 99.9\%; la generación 38 tiene cuatro filas menos que las esperadas, por lo que se usa \texttt{Test\_Summary.csv} para la tasa de acierto y \texttt{Fitness\_Debug.csv} para analizar causas y contexto. En este bloque, el resumen agregado declara 2497 aciertos y 453 fallos; los dos registros \texttt{OVERLAP\_TIMEOUT} del fichero de detalle se conservan como diagnóstico de convivencia y no se suman a esos fallos. El entrenamiento concreto que consolidó este \texttt{SuperCarModel} no queda identificado de forma inequívoca en las fuentes revisadas; por ello, el bloque valida el modelo persistido y la versión final instrumentada, no el cierre trazado de una sesión de entrenamiento concreta. La Tabla~\ref{tab:validacion-posterior} resume la comparación con la referencia histórica y con los contrastes cortos posteriores.
+El bloque \texttt{test\_2026-07-07\_16-45} evalúa el modelo persistido del 5 de julio con la versión final instrumentada del programa. Contiene 50 generaciones de test, 59 spawns y 2950 evaluaciones declaradas en \texttt{Test\_Summary.csv}. El fichero \texttt{Fitness\_Debug.csv} conserva 2946 registros individuales, una cobertura del 99.9\%; la generación 38 tiene cuatro filas menos que las esperadas, por lo que se usa \texttt{Test\_Summary.csv} para la tasa de acierto y \texttt{Fitness\_Debug.csv} para analizar causas y contexto. En este bloque, el resumen agregado declara 2497 aciertos y 453 fallos; bajo el criterio configurado, los dos registros \texttt{OVERLAP\_TIMEOUT} y las cuatro filas ausentes del detalle quedan dentro de los aciertos declarados por \texttt{Test\_Summary.csv}, al no clasificarse como causa de fallo agregada. \texttt{Fitness\_Debug.csv} conserva esos registros para diagnóstico de convivencia y revisión contextual. El entrenamiento concreto que consolidó este \texttt{SuperCarModel} no queda identificado de forma inequívoca en las fuentes revisadas; por ello, el bloque valida el modelo persistido y la versión final instrumentada, no el cierre trazado de una sesión de entrenamiento concreta. La Tabla~\ref{tab:validacion-posterior} resume la comparación con la referencia histórica y con los contrastes cortos posteriores.
 
 \begin{table}[H]
 \centering

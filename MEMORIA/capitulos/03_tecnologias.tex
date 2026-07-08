@@ -32,22 +32,22 @@ El entrenamiento se basa en población, selección y mutación. El gestor evolut
 
 Durante el desarrollo se probaron tasas fijas para equilibrar explotación y diversidad, con mutaciones ordinarias y otras más intensas sobre el modelo histórico y el mejor modelo de sesión. En la versión final documentada, el gestor conserva copias sin mutar de ambas semillas y calcula una tasa dinámica a partir del número de generaciones sin mejora y del total de pesos disponibles. La tasa base se documenta como:
 
-\[
+\begin{equation}
 r_m=\operatorname{clamp}\left(\frac{g_{\text{sin mejora}}}{W_{\text{total}}},\frac{1}{W_{\text{total}}},\frac{W_{\text{HO}}}{W_{\text{total}}}\right),
-\]
-
-Se usa \(\operatorname{clamp}(x,\text{mínimo},\text{máximo})\) para representar la acotación de \(x\) dentro del intervalo indicado.
+\end{equation}
 
 donde \(W_{\text{total}}\) es la suma de pesos de entrada-oculta y oculta-salida, \(W_{\text{HO}}\) es el número de pesos de la capa oculta a salida, y \(g_{\text{sin mejora}}\) corresponde a las generaciones acumuladas sin superar el mejor histórico. Para la rama exploratoria final, el Blueprint eleva el valor con \(\max(g_{\text{sin mejora}},1)+W_{\text{HO}}\) y lo acota hasta \(2W_{\text{HO}}/W_{\text{total}}\). De esta manera, la presión exploratoria aumenta cuando el sistema deja de mejorar, sin reinicializar aleatoriamente la población después de la primera generación. Los tamaños de población son parámetros editables del mapa; por ello, los valores efectivos se obtienen de la columna \texttt{N} de cada ejecución y no del valor por defecto del Blueprint.
 
+Se usa \(\operatorname{clamp}(x,\text{mínimo},\text{máximo})\) para representar la acotación de \(x\) dentro del intervalo \([\text{mínimo},\text{máximo}]\).
+
 De forma equivalente, esa rama exploratoria puede expresarse como:
-\[
+\begin{equation}
 r_{\text{expl}}=\operatorname{clamp}\left(
 \frac{\max(g_{\text{sin mejora}},1)+W_{\text{HO}}}{W_{\text{total}}},
 r_m,
 \frac{2W_{\text{HO}}}{W_{\text{total}}}
 \right).
-\]
+\end{equation}
 Con la arquitectura documentada, \(W_{\text{total}}=352\) y \(W_{\text{HO}}=32\), por lo que la rama ordinaria queda acotada por \(32/352\) y la exploratoria por \(64/352\). La fórmula resume la lógica operacional descrita en \texttt{EVOLUTIONMANAGER}; no introduce una política de mutación distinta a la implementada.
 
 \Needspace{15\baselineskip}
